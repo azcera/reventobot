@@ -3,37 +3,6 @@ previews:
   generation: automatic
 
 services:
-  - type: worker
-    runtime: node
-    name: revento-bot
-    repo: https://github.com/azcera/reventobot
-    numInstances: 3
-    region: frankfurt
-    plan: free
-    branch: prod
-    buildCommand: node index.js
-    preDeployCommand: node index.js
-    startCommand: node index.js
-    autoDeployTrigger: 'off'
-    maxShutdownDelaySeconds: 120
-    envVars:
-      - key: API_BASE_URL
-        value: https://api.example.com
-      - key: APP_SECRET
-        generateValue: true
-      - key: STRIPE_API_KEY
-        sync: false
-      - key: DATABASE_URL
-        fromDatabase:
-          name: mydatabase
-          property: connectionString
-      - key: MINIO_PASSWORD
-        fromService:
-          name: minio
-          type: pserv
-          envVarKey: MINIO_ROOT_PASSWORD
-      - fromGroup: my-env-group
-
   - type: pserv
     runtime: node
     name: revento-bot
