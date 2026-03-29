@@ -44,7 +44,9 @@ client.once(Events.ClientReady, (readyClient) => {
 	console.log(`Готово! Вход как ${readyClient.user.tag}`);
 });
 
-client.login(process.env.TOKEN).catch(err => console.error('Login error:', err));
+client.login(process.env.TOKEN)
+  .then(() => console.log('Discord login successful!'))
+  .catch(err => console.error('Discord login error:', err));
 console.log(process.env.AUTO_ROLE)
 
 console.log('TOKEN =', process.env.TOKEN ? 'exists' : 'MISSING');
