@@ -1,7 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, roleMention } = require('discord.js');
 const { splitName } = require('../commands/utility/splitName');
-const { autoRole, messagesChannelID, adminRoles } = require('../config.json')
-
+const { adminRoles } = require('../config.json')
+require('dotenv').config();
 
 module.exports = (client) => {
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
@@ -9,8 +9,8 @@ module.exports = (client) => {
             const guild = newMember.guild;
 
             // Проверяем, была ли роль только что добавлена
-            const hadRoleBefore = oldMember.roles.cache.some(role => role.id === autoRole);
-            const hasRoleNow = newMember.roles.cache.some(role => role.id === autoRole);
+            const hadRoleBefore = oldMember.roles.cache.some(role => role.id === process.env.AUTO_ROLE);
+            const hasRoleNow = newMember.roles.cache.some(role => role.id === process.env.AUTO_ROLE);
 
             if (!hadRoleBefore && hasRoleNow) {
                 // роль была добавлена
@@ -25,7 +25,7 @@ module.exports = (client) => {
                 const existingChannel = channels.find((channel) => channel.name === channelName);
 
                 if (!existingChannel) {
-                    const messagesChannel = guild.channels.cache.get(messagesChannelID);
+                    const messagesChannel = guild.channels.cache.get(process.env.MESSAGES_CHANNEL_ID);
                     const row = new ActionRowBuilder()
                         .addComponents(
                             new ButtonBuilder()

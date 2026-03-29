@@ -1,12 +1,11 @@
 const { REST, Routes, Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
-const { clientId, guildId } = require('./config.json');
 const fs = require('node:fs');
 const path = require('node:path');
+const express = require('express');
+
 require('dotenv').config();
 
-const token = process.env.TOKEN;
-
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages], partials: ["GUILD_MEMBER"] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], partials: ["GUILD_MEMBER"] });
 
 
 // эвенты
@@ -45,7 +44,14 @@ client.once(Events.ClientReady, (readyClient) => {
 	console.log(`Готово! Вход как ${readyClient.user.tag}`);
 });
 
-client.login(token);
+client.login(process.env.TOKEN)
+  .then(() => console.log('Discord login successful!'))
+  .catch(err => console.error('Discord login error:', err));
+console.log(process.env.AUTO_ROLE)
+
+console.log('TOKEN =', process.env.TOKEN ? 'exists' : 'MISSING');
+console.log('CLIENT_ID =', process.env.CLIENT_ID ? 'exists' : 'MISSING');
+console.log('GUILD_ID =', process.env.GUILD_ID ? 'exists' : 'MISSING');
 
 // обработка взаимодействий
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -67,16 +73,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // регистрация команд в Discord
-const rest = new REST({ version: '10' }).setToken(token);
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
 	try {
 		const commandsData = Array.from(client.commands.values()).map(cmd => cmd.data.toJSON()); // только JSON для Discord
 		console.log(`Начало обновления ${commandsData.length} команд (/) приложения.`);
-        // const data = await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commandsData });
-		const data = await rest.put(Routes.applicationCommands(clientId), { body: commandsData });
+        const data = await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
+		// const data = await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
 		console.log(`Успешно обновлено ${data.length} команд (/) приложения.`);
 	} catch (error) {
 		console.error(error);
 	}
 })();
+
+const app = express();
+const port = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Bot is running!'));
+app.listen(port, () => console.log(`Server listening on port ${port}`));

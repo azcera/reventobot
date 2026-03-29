@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, userMention, Guild, channelMention, MessageFlags, roleMention } = require('discord.js');
-const { mentionedRole, navigationButttons } = require('../config.json')
-
+const { navigationButttons } = require('../config.json')
+require('dotenv').config();
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -30,6 +30,6 @@ module.exports = {
                     .addComponents(row)];
             }
             
-            await interaction.reply({content: `||${roleMention(mentionedRole)}||`,allowedMentions: { roles: [mentionedRole] }, components: components})
+            await interaction.reply({content: `||${roleMention(process.env.MENTIONED_ROLE)}||`,allowedMentions: { roles: [process.env.MENTIONED_ROLE] }, components: components})
 	},
 };
