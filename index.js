@@ -44,7 +44,7 @@ client.once(Events.ClientReady, (readyClient) => {
 	console.log(`Готово! Вход как ${readyClient.user.tag}`);
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN).catch(err => console.error('Login error:', err));
 
 // обработка взаимодействий
 client.on(Events.InteractionCreate, async (interaction) => {
