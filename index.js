@@ -1,10 +1,9 @@
 const { REST, Routes, Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
-const { clientId, guildId } = require('./config.json');
 const fs = require('node:fs');
 const path = require('node:path');
-require('dotenv').config();
+const express = require('express');
 
-const token = process.env.TOKEN;
+require('dotenv').config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages], partials: ["GUILD_MEMBER"] });
 
@@ -45,7 +44,7 @@ client.once(Events.ClientReady, (readyClient) => {
 	console.log(`Готово! Вход как ${readyClient.user.tag}`);
 });
 
-client.login(token);
+client.login(process.env.TOKEN);
 
 // обработка взаимодействий
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -67,21 +66,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // регистрация команд в Discord
-const rest = new REST({ version: '10' }).setToken(token);
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
 	try {
 		const commandsData = Array.from(client.commands.values()).map(cmd => cmd.data.toJSON()); // только JSON для Discord
 		console.log(`Начало обновления ${commandsData.length} команд (/) приложения.`);
-        // const data = await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commandsData });
-		const data = await rest.put(Routes.applicationCommands(clientId), { body: commandsData });
+        // const data = await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
+		const data = await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
 		console.log(`Успешно обновлено ${data.length} команд (/) приложения.`);
 	} catch (error) {
 		console.error(error);
 	}
 })();
 
-const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Bot is running!'));
