@@ -5,7 +5,7 @@ const express = require('express');
 
 require('dotenv').config();
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages], partials: ["GUILD_MEMBER"] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], partials: ["GUILD_MEMBER"] });
 
 
 // эвенты
@@ -72,8 +72,8 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 	try {
 		const commandsData = Array.from(client.commands.values()).map(cmd => cmd.data.toJSON()); // только JSON для Discord
 		console.log(`Начало обновления ${commandsData.length} команд (/) приложения.`);
-        // const data = await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
-		const data = await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
+        const data = await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
+		// const data = await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
 		console.log(`Успешно обновлено ${data.length} команд (/) приложения.`);
 	} catch (error) {
 		console.error(error);
