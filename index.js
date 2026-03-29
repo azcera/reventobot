@@ -45,7 +45,7 @@ client.once(Events.ClientReady, (readyClient) => {
 });
 
 client.login(process.env.TOKEN).catch(err => console.error('Login error:', err));
-
+console.log(process.env.AUTO_ROLE)
 // обработка взаимодействий
 client.on(Events.InteractionCreate, async (interaction) => {
 	if (!interaction.isChatInputCommand()) return;
