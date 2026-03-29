@@ -46,6 +46,11 @@ client.once(Events.ClientReady, (readyClient) => {
 
 client.login(process.env.TOKEN).catch(err => console.error('Login error:', err));
 console.log(process.env.AUTO_ROLE)
+
+console.log('TOKEN =', process.env.TOKEN ? 'exists' : 'MISSING');
+console.log('CLIENT_ID =', process.env.CLIENT_ID ? 'exists' : 'MISSING');
+console.log('GUILD_ID =', process.env.GUILD_ID ? 'exists' : 'MISSING');
+
 // обработка взаимодействий
 client.on(Events.InteractionCreate, async (interaction) => {
 	if (!interaction.isChatInputCommand()) return;
