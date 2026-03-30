@@ -98,9 +98,9 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    const commandsData = Array.from(client.commands.values()).map((cmd) =>
-      cmd.data.toJSON(),
-    ); // только JSON для Discord
+    const commandsData = Array.from(client.commands.values())
+      .filter((cmd) => cmd.data)
+      .map((cmd) => cmd.data.toJSON());
     console.log(
       `Начало обновления ${commandsData.length} команд (/) приложения.`,
     );
