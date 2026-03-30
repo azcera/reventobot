@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, userMention, Guild, channelMention, MessageFlags } = require('discord.js');
 const { splitName } = require('./utility/splitName');
 const { createChannel } = require('./utility/createChannel');
+require('dotenv').config();
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -33,7 +34,7 @@ module.exports = {
                         }
                         );
                         if (!existingChannel) {
-                                createChannel(interaction, {channelName, memberID: member.id, guild});
+                                createChannel(interaction, {channelName, memberID: member.id, guild, categoryID: process.env.CATEGORY_ID});
                         }
                         else {
                                 await interaction.reply({content:`Архив уже создан - ${channelID}`, flags: MessageFlags.Ephemeral});
