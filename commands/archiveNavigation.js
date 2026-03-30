@@ -11,9 +11,11 @@ module.exports = {
     const members = await getChannelViewers(message.channel);
     const channelName = message.channel.name;
     const stat = channelName.split("-").at(-1);
-    const member = members.find(
-      (member) => splitName(member.displayName).stat === stat,
-    );
+    const member = members.find((member) => {
+      splittedName = splitName(member.displayName);
+      console.log(member + " + " + splittedName);
+      if (splittedName.stat === stat) return member;
+    });
     await message.channel.send({
       content: `<@${member.id}>, это твой личный канал-архив, куда ты можешь отправлять:
 
