@@ -48,8 +48,13 @@ for (const file of commandFiles) {
   const command = require(filePath);
   if ("data" in command && "execute" in command) {
     client.commands.set(command.data.name, command); // сохраняем полностью
+  } else if ("name" in command && "execute" in command) {
+    // обычная команда через !
+    client.commands.set(command.name, command);
   } else {
-    console.log(`[WARNING] Команда ${file} пропущена: нет data или execute`);
+    console.log(
+      `[WARNING] Команда ${file} пропущена: нет data/name или execute`,
+    );
   }
 }
 

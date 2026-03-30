@@ -3,10 +3,9 @@ const { getComponents } = require("./utility/createButtons");
 require("dotenv").config();
 
 module.exports = {
-  name: "navigation", // имя команды
+  name: "navigation",
   description: "Создает навигацию",
   async execute(message, args) {
-    // теперь принимает message и args
     await message.channel.send({
       content: `||${roleMention(process.env.MENTIONED_ROLE)}||`,
       allowedMentions: { roles: [process.env.MENTIONED_ROLE] },
