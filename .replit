@@ -33,3 +33,8 @@ waitForPort = 3000
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[deployment]
+build = ["sh", "-c", "npm install"]
+run = ["sh", "-c", "node index.js"]
+deploymentTarget = "cloudrun"
