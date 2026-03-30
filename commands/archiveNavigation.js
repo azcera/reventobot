@@ -5,6 +5,10 @@ module.exports = {
   name: "narchive",
   description: "Создает навигацию для конкретного пользователя",
   async execute(message, args) {
+    await message
+      .delete()
+      .catch((err) => console.log("Не удалось удалить сообщение:", err));
+
     const channelName = message.channel.name;
     const stat = channelName.split("-").at(-1);
 
