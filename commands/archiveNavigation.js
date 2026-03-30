@@ -8,7 +8,7 @@ module.exports = {
     await message
       .delete()
       .catch((err) => console.log("Не удалось удалить сообщение:", err));
-
+    console.log(`narchive вызвана пользователем ${message.author.tag}`);
     const channelName = message.channel.name;
     const stat = channelName.split("-").at(-1);
 
