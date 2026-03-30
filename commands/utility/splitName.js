@@ -3,7 +3,7 @@ function splitName(nickname) {
   const splittedName = nickname.split(" | ");
   if (splittedName.length < 2) return null;
 
-  const match = nickname.match(/\]?\s*([^\|]+)/);
+  const match = splittedName[0].match(/[A-Za-z]+/);
 
   return {
     name: match
