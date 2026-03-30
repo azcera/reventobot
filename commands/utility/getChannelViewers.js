@@ -17,20 +17,25 @@ async function getChannelViewers(channel) {
   return data;
 }
 
-findCallback = (m) => {
-  splitName(m).stat === stat;
+const findCallback = (stat) => (m) => {
+  const nickname = m.displayName || m.user.username;
+  if (!nickname || typeof nickname !== "string") return false;
+
+  const parsed = splitName(nickname);
+  if (!parsed) return false;
+
+  return parsed.stat === stat;
 };
 
 async function getMemberByStat(channel, stat) {
   // Сначала ищем в кэше
-  let member = channel.guild.members.cache.find(findCallback);
+  let member = channel.guild.members.cache.find(findCallback(stat));
 
-  // Если не нашли — fetch по кэшу Discord, чтобы получить участника
+  // Если не нашли — fetch
   if (!member) {
     try {
-      // Получаем всех участников с правом доступа к каналу
       const fetchedMembers = await channel.guild.members.fetch();
-      member = fetchedMembers.find(findCallback);
+      member = fetchedMembers.find(findCallback(stat));
     } catch (err) {
       console.error("Ошибка при fetch участников:", err);
       return null;
