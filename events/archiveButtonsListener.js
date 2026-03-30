@@ -21,7 +21,7 @@ module.exports = (client) => {
 
         if (action === 'create_archive') {
             await interaction.message.delete().catch(err => console.log('Не удалось удалить сообщение:', err));
-            createChannel(interaction, {channelName: `archive-${name}-${stat}`, memberID: member.id, guild, categoryID: process.env.CATEGORY_ID });
+            await createChannel(interaction, {channelName: `archive-${name}-${stat}`, memberID: member.id, guild, categoryID: process.env.CATEGORY_ID });
         }
 
 
