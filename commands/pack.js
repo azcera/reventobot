@@ -34,7 +34,7 @@ module.exports = {
                         }
                         );
                         if (!existingChannel) {
-                                createChannel(interaction, {channelName, memberID: member.id, guild, categoryID: process.env.CATEGORY_ID});
+                                await createChannel(interaction, {channelName, memberID: member.id, guild, categoryID: process.env.CATEGORY_ID});
                         }
                         else {
                                 await interaction.reply({content:`Архив уже создан - ${channelID}`, flags: MessageFlags.Ephemeral});
