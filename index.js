@@ -117,3 +117,15 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
     console.error(error);
   }
 })();
+
+// сервер
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Bot is alive!");
+});
+
+app.listen(3000, () => {
+  console.log("Server is running");
+});
