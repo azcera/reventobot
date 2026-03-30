@@ -7,7 +7,7 @@ function splitName(nickname) {
 
   return {
     name: match
-      ? match[1].trim().toLowerCase()
+      ? match[0].trim().toLowerCase()
       : splittedName[0].trim().toLowerCase(),
     stat: splittedName[1].trim(),
   };
