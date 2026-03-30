@@ -1,9 +1,10 @@
 const { MessageFlags } = require('discord.js')
 
-async function createChannel (interaction, {channelName, memberID, guild})  {
+async function createChannel (interaction, {channelName, memberID, guild, categoryID})  {
     const newChannel = await guild.channels.create({
         name: channelName,
         type: 0,
+        parent: categoryID,
         permissionOverwrites: [
                 {
                     id: guild.roles.everyone.id,

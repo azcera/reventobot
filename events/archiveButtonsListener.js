@@ -1,5 +1,6 @@
 const { createChannel } = require('../commands/utility/createChannel');
 const { MessageFlags } = require('discord.js')
+require('dotenv').config();
 
 module.exports = (client) => {
     client.on('interactionCreate', async interaction => {
@@ -20,7 +21,7 @@ module.exports = (client) => {
 
         if (action === 'create_archive') {
             await interaction.message.delete().catch(err => console.log('Не удалось удалить сообщение:', err));
-            createChannel(interaction, {channelName: `archive-${name}-${stat}`, memberID: member.id, guild});
+            createChannel(interaction, {channelName: `archive-${name}-${stat}`, memberID: member.id, guild, categoryID: process.env.CATEGORY_ID });
         }
 
 
