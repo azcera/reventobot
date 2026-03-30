@@ -12,10 +12,17 @@ module.exports = {
     const channelName = message.channel.name;
     const stat = channelName.split("-").at(-1);
     const member = members.find((member) => {
-      splittedName = splitName(member.displayName);
-      console.log(member + " + " + splittedName);
-      if (splittedName.stat === stat) return member;
+      const splittedName = splitName(member.displayName);
+
+      if (!splittedName) return false; // 👈 защита от null
+
+      console.log(member.displayName + " + " + JSON.stringify(splittedName));
+
+      return splittedName.stat === stat;
     });
+    if (!member) {
+      return message.channel.send("Пользователь не найден.");
+    }
     await message.channel.send({
       content: `<@${member.id}>, это твой личный канал-архив, куда ты можешь отправлять:
 
