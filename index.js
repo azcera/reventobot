@@ -1,37 +1,37 @@
 const {
-	REST,
-	Routes,
-	Client,
-	Collection,
-	Events,
-	GatewayIntentBits,
-	MessageFlags,
+  REST,
+  Routes,
+  Client,
+  Collection,
+  Events,
+  GatewayIntentBits,
+  MessageFlags,
 } = require("discord.js");
 const fs = require("node:fs");
 const path = require("node:path");
 require("dotenv").config();
 
 const client = new Client({
-	intents: [
-		GatewayIntentBits.Guilds,
-		GatewayIntentBits.GuildMembers,
-		GatewayIntentBits.GuildMessages,
-		GatewayIntentBits.MessageContent,
-	],
-	partials: ["GUILD_MEMBER"],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+  partials: ["GUILD_MEMBER"],
 });
 
 // эвенты
 
 const eventsPath = path.join(__dirname, "events");
 const eventsFiles = fs
-	.readdirSync(eventsPath)
-	.filter((file) => file.endsWith(".js"));
+  .readdirSync(eventsPath)
+  .filter((file) => file.endsWith(".js"));
 
 for (const file of eventsFiles) {
-	const filePath = path.join(eventsPath, file);
-	require(filePath)(client);
-	console.log(`Эвент ${file} загружен.`);
+  const filePath = path.join(eventsPath, file);
+  require(filePath)(client);
+  console.log(`Эвент ${file} загружен.`);
 }
 
 // коллекция команд
@@ -39,75 +39,75 @@ client.commands = new Collection();
 
 const foldersPath = path.join(__dirname, "commands");
 const commandFiles = fs
-	.readdirSync(foldersPath)
-	.filter((file) => file.endsWith(".js"));
+  .readdirSync(foldersPath)
+  .filter((file) => file.endsWith(".js"));
 
 // загружаем команды
 for (const file of commandFiles) {
-	const filePath = path.join(foldersPath, file);
-	const command = require(filePath);
-	if ("data" in command && "execute" in command) {
-		client.commands.set(command.data.name, command); // сохраняем полностью
-	} else {
-		console.log(`[WARNING] Команда ${file} пропущена: нет data или execute`);
-	}
+  const filePath = path.join(foldersPath, file);
+  const command = require(filePath);
+  if ("data" in command && "execute" in command) {
+    client.commands.set(command.data.name, command); // сохраняем полностью
+  } else {
+    console.log(`[WARNING] Команда ${file} пропущена: нет data или execute`);
+  }
 }
 
 client.once(Events.ClientReady, (readyClient) => {
-	console.log(`Готово! Вход как ${readyClient.user.tag}`);
+  console.log(`Готово! Вход как ${readyClient.user.tag}`);
 });
 
 client
-	.login(process.env.TOKEN)
-	.then(() => console.log("Discord login successful!"))
-	.catch((err) => console.error("Discord login error:", err));
+  .login(process.env.TOKEN)
+  .then(() => console.log("Discord login successful!"))
+  .catch((err) => console.error("Discord login error:", err));
 
 // обработка взаимодействий
 client.on(Events.InteractionCreate, async (interaction) => {
-	if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand()) return;
 
-	const command = client.commands.get(interaction.commandName);
-	if (!command) return;
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
 
-	try {
-		await command.execute(interaction);
-	} catch (error) {
-		console.error(error);
-		if (interaction.replied || interaction.deferred) {
-			await interaction.followUp({
-				content: "Произошла ошибка при запуске команды!",
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await interaction.reply({
-				content: "Произошла ошибка при запуске команды!",
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-	}
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    console.error(error);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({
+        content: "Произошла ошибка при запуске команды!",
+        flags: MessageFlags.Ephemeral,
+      });
+    } else {
+      await interaction.reply({
+        content: "Произошла ошибка при запуске команды!",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  }
 });
 
 // регистрация команд в Discord
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
-	try {
-		const commandsData = Array.from(client.commands.values()).map((cmd) =>
-			cmd.data.toJSON(),
-		); // только JSON для Discord
-		console.log(
-			`Начало обновления ${commandsData.length} команд (/) приложения.`,
-		);
-		const data = await rest.put(
-			Routes.applicationGuildCommands(
-				process.env.CLIENT_ID,
-				process.env.GUILD_ID,
-			),
-			{ body: commandsData },
-		);
-		// const data = await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: [] });
-		console.log(`Успешно обновлено ${data.length} команд (/) приложения.`);
-	} catch (error) {
-		console.error(error);
-	}
+  try {
+    const commandsData = Array.from(client.commands.values()).map((cmd) =>
+      cmd.data.toJSON(),
+    ); // только JSON для Discord
+    console.log(
+      `Начало обновления ${commandsData.length} команд (/) приложения.`,
+    );
+    const data = await rest.put(
+      Routes.applicationGuildCommands(
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID,
+      ),
+      { body: commandsData },
+    );
+    // const data = await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: [] });
+    console.log(`Успешно обновлено ${data.length} команд (/) приложения.`);
+  } catch (error) {
+    console.error(error);
+  }
 })();
