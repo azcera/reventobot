@@ -18,16 +18,16 @@ async function createChannel(
                 id: memberID,
                 allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"],
             },
-            adminRoles.map((roleId) => {
-                return {
+            ...adminRoles
+                .filter((roleId) => guild.roles.cache.has(roleId))
+                .map((roleId) => ({
                     id: roleId,
                     allow: [
                         "ViewChannel",
                         "SendMessages",
                         "ReadMessageHistory",
                     ],
-                };
-            }),
+                })),
         ],
     });
     await interaction.reply({
