@@ -1,15 +1,11 @@
-const { roleMention } = require("discord.js");
-const { getComponents } = require("../commands/utility/createButtons");
+const { sendArchiveMessage } = require("../commands/utility/archiveMessage");
 require("dotenv").config();
 
 module.exports = (client) => {
   client.on("channelCreate", async (channel) => {
     if (channel.isTextBased()) {
-      await channel.send({
-        content: `||${roleMention(process.env.MENTIONED_ROLE)}||`,
-        allowedMentions: { roles: [process.env.MENTIONED_ROLE] },
-        components: getComponents(),
-      });
+      if (channel.parentId !== process.env.CATEGORY_ID) return;
+      sendArchiveMessage(channel);
     }
   });
 };
