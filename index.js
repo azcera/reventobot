@@ -60,6 +60,7 @@ for (const file of commandFiles) {
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Готово! Вход как ${readyClient.user.tag}`);
+  require("./changeMessages")(client);
   // require("./commands/utility/ticketButton")(client);
 });
 
