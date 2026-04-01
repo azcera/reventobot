@@ -1,4 +1,4 @@
-const { navigationButttons, messagesLinks } = require("./config.json");
+const { navigationButttons, messagesLinks } = require("../config.json");
 
 async function editMessageByLink(client, messageLink) {
   try {
