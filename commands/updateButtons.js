@@ -36,6 +36,6 @@ module.exports = {
     await message
       .delete()
       .catch((err) => console.log("Не удалось удалить сообщение:", err));
-    await editAllMessages(client);
+    await editAllMessages(message.client);
   },
 };
