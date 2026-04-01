@@ -18,13 +18,13 @@ async function editMessageByLink(client, messageLink) {
   }
 }
 
-async function editAllMessages(client) {
-  try {
-    messagesLinks.map(async (link) => await editMessageByLink(client, link));
-    console.log("Сообщения успешно обновлено!");
-  } catch {
-    console.error("Ошибка при редактировании:", error.message);
-  }
-}
-
-module.exports = { editAllMessages };
+module.exports = {
+  async function(client) {
+    try {
+      messagesLinks.map(async (link) => await editMessageByLink(client, link));
+      console.log("Сообщения успешно обновлено!");
+    } catch {
+      console.error("Ошибка при редактировании:", error.message);
+    }
+  },
+};
