@@ -20,7 +20,9 @@ async function editMessageByLink(client, messageLink) {
 
 module.exports = async (client) => {
   try {
-    messagesLinks.map(async (link) => await editMessageByLink(client, link));
+    for (const link of messagesLinks) {
+      await editMessageByLink(client, link);
+    }
     console.log("Сообщения успешно обновлено!");
   } catch {
     console.error("Ошибка при редактировании:", error.message);
