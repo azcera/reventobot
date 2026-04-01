@@ -1,4 +1,5 @@
-const { navigationButttons, messagesLinks } = require("../config.json");
+const { messagesLinks } = require("../config.json");
+const { getComponents } = require("./utility/createButtons");
 
 async function editMessageByLink(client, messageLink) {
   try {
@@ -11,7 +12,7 @@ async function editMessageByLink(client, messageLink) {
     const message = await channel.messages.fetch(messageId);
 
     await message.edit({
-      components: navigationButttons,
+      components: getComponents(),
     });
   } catch (error) {
     console.error("Ошибка при редактировании:", error.message);
