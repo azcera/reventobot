@@ -18,7 +18,7 @@ async function editMessageByLink(client, messageLink) {
   }
 }
 
-module.exports = async (client) => {
+async function editAllMessages(client) {
   try {
     for (const link of messagesLinks) {
       await editMessageByLink(client, link);
@@ -27,4 +27,15 @@ module.exports = async (client) => {
   } catch {
     console.error("Ошибка при редактировании:", error.message);
   }
+}
+
+module.exports = {
+  name: "update",
+  description: "Обновляет меню",
+  async execute(message, args) {
+    await message
+      .delete()
+      .catch((err) => console.log("Не удалось удалить сообщение:", err));
+    await editAllMessages(client);
+  },
 };
