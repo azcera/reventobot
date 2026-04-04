@@ -60,7 +60,7 @@ module.exports = (client) => {
       if (newMember.roles.cache.has(adminRoles[0])) {
         newPrefix = "[★] ";
       } else if (
-        newMember.roles.cache.some((id) => adminRoles.slice(1, 3).includes(id))
+        newMember.roles.cache.some((id) => adminRoles.slice(1).includes(id))
       ) {
         newPrefix = "[☆] ";
       }
