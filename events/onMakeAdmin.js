@@ -45,39 +45,40 @@ module.exports = (client) => {
       });
 
       // permission
-      const permissions = [
+      const permission = [
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
         PermissionsBitField.Flags.ReadMessageHistory,
       ];
 
+      const permissions = [
+        {
+          id: guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel],
+        },
+        {
+          id: process.env.TIER_CHECKER_ROLE_ID,
+          allow: permission,
+        },
+        {
+          id: member,
+          allow: permission,
+        },
+        {
+          id: adminRoles[0],
+          allow: permission,
+        },
+      ];
+
       if (!hadRoleBefore && hasRoleNow) {
         if (!existingChannel) {
-          await memberArchive.permissionOverwrites.set([
-            {
-              id: guild.id,
-              deny: [PermissionsBitField.Flags.ViewChannel],
-            },
-            {
-              id: process.env.TIER_CHECKER_ROLE_ID,
-              allow: permissions,
-            },
-          ]);
+          await memberArchive.permissionOverwrites.set(permissions);
         } else {
           const newChannel = await createChannel(interaction, {
             channelName,
             member: newMember,
           });
-          await newChannel.permissionOverwrites.set([
-            {
-              id: guild.id,
-              deny: [PermissionsBitField.Flags.ViewChannel],
-            },
-            {
-              id: process.env.TIER_CHECKER_ROLE_ID,
-              allow: permissions,
-            },
-          ]);
+          await newChannel.permissionOverwrites.set(permissions);
         }
         if (addedRole.id === adminRoles[0])
           newMember.setNickname(`[★] ${memberNickname}`);
