@@ -22,7 +22,7 @@ module.exports = (client) => {
       const currentNickname = newMember.displayName;
       const cleanName = currentNickname.replace(/^\[.*\]\s*/g, "").trim();
 
-      const splittedData = splitName(memberNickname);
+      const splittedData = splitName(cleanName);
       if (!splittedData) return;
 
       const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
