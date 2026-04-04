@@ -37,9 +37,7 @@ module.exports = {
       if (!existingChannel) {
         await createChannel(interaction, {
           channelName,
-          memberID: member.id,
-          guild,
-          categoryID: process.env.CATEGORY_ID,
+          member,
         });
       } else {
         await interaction.reply({
