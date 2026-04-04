@@ -63,10 +63,12 @@ client.once(Events.ClientReady, (readyClient) => {
   // require("./commands/utility/ticketButton")(client);
 });
 
-client
-  .login(process.env.TOKEN)
-  .then(() => console.log("Discord login successful!"))
-  .catch((err) => console.error("Discord login error:", err));
+setTimeout(() => {
+  client
+    .login(process.env.TOKEN)
+    .then(() => console.log("Discord login successful!"))
+    .catch((err) => console.error("Discord login error:", err));
+}, 5000);
 
 // обработка взаимодействий
 client.on(Events.InteractionCreate, async (interaction) => {
