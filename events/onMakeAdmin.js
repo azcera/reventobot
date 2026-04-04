@@ -36,12 +36,9 @@ module.exports = (client) => {
         PermissionsBitField.Flags.ReadMessageHistory,
       ];
 
-      if (!existingChannel) {
-        existingChannel = await createChannel(guild, {
-          channelName,
-          member: newMember,
-        });
-      }
+      if (!existingChannel)
+        return console.log(`Архив для ${newMember} не создан.`);
+
       if (addedRole) {
         await existingChannel.permissionOverwrites.set([
           { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
