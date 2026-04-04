@@ -19,7 +19,9 @@ module.exports = (client) => {
 
       if (!addedRole && !removedRole) return;
 
-      const memberNickname = newMember.displayName;
+      const currentNickname = newMember.displayName;
+      const cleanName = currentNickname.replace(/^\[.*\]\s*/g, "").trim();
+
       const splittedData = splitName(memberNickname);
       if (!splittedData) return;
 
@@ -55,8 +57,6 @@ module.exports = (client) => {
           ...adminRoles.map((id) => ({ id, allow: basePermissions })),
         ]);
       }
-
-      let cleanName = memberNickname.replace(/^\[.*\]\s*/g, "").trim();
 
       let newPrefix = "";
 
