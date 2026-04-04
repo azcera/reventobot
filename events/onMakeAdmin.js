@@ -57,20 +57,16 @@ module.exports = (client) => {
 
       let newPrefix = "";
 
-      if (newMember.roles.cache.has(adminRoles[0])) {
+      if (addedRole.id === adminRoles[0]) {
         newPrefix = "[★] ";
-      } else if (
-        newMember.roles.cache.some((id) => adminRoles.slice(1).includes(id))
-      ) {
+      } else if (adminRoles.slice(1).includes(addedRole.id)) {
         newPrefix = "[☆] ";
       }
 
       const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32);
 
-      if (newMember.displayName !== finalNickname) {
-        await newMember
-          .setNickname(finalNickname)
-          .catch((err) => console.error("Ошибка смены ника:", err));
+      if (currentNickname !== finalNickname) {
+        await newMember.setNickname(finalNickname);
       }
     } catch (err) {
       console.error("Ошибка в onMakeAdmin", err);
