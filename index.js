@@ -126,6 +126,18 @@ app.get("/", (req, res) => {
   res.send("Bot is alive!");
 });
 
-app.listen(3000, () => {
+const server = app.listen(3000, () => {
   console.log("Server is running");
+});
+
+process.on("SIGTERM", () => {
+  console.log("SIGTERM получен — отключаемся от Discord...");
+  client.destroy();
+  server.close(() => process.exit(0));
+});
+
+process.on("SIGINT", () => {
+  console.log("SIGINT получен — отключаемся от Discord...");
+  client.destroy();
+  server.close(() => process.exit(0));
 });
