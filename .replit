@@ -26,13 +26,13 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "node index.js"
 waitForPort = 3000
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [deployment]
 build = ["sh", "-c", "npm install"]
