@@ -17,6 +17,8 @@ module.exports = (client) => {
       const addedRole = newHasAdmin.find((role) => !oldHasAdmin.has(role.id));
       const removedRole = oldHasAdmin.find((role) => !newHasAdmin.has(role.id));
 
+      if (!addedRole && !removedRole) return;
+
       const memberNickname = newMember.displayName;
       const splittedData = splitName(memberNickname);
       if (!splittedData) return;
@@ -32,51 +34,46 @@ module.exports = (client) => {
         PermissionsBitField.Flags.ReadMessageHistory,
       ];
 
+      if (!existingChannel) {
+        existingChannel = await createChannel(guild, {
+          channelName,
+          member: newMember,
+        });
+      }
       if (addedRole) {
-        if (!existingChannel) {
-          existingChannel = await createChannel(guild, {
-            channelName,
-            member: newMember,
-          });
-        }
         await existingChannel.permissionOverwrites.set([
           { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
           { id: newMember.id, allow: basePermissions },
           { id: adminRoles[0], allow: basePermissions },
           { id: process.env.TIER_CHECKER_ROLE_ID, allow: basePermissions },
         ]);
-
-        if (
-          addedRole.id === adminRoles[0] &&
-          !memberNickname.startsWith("[★]")
-        ) {
-          await newMember.setNickname(`[★] ${memberNickname}`).catch(() => {});
-        } else if (
-          adminRoles.slice(1, 3).includes(addedRole.id) &&
-          !memberNickname.startsWith("[☆]")
-        ) {
-          await newMember.setNickname(`[☆] ${memberNickname}`).catch(() => {});
-        }
+      } else if (removedRole) {
+        await existingChannel.permissionOverwrites.set([
+          { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: newMember.id, allow: basePermissions },
+          { id: process.env.TIER_CHECKER_ROLE_ID, allow: basePermissions },
+          ...adminRoles.map((id) => ({ id, allow: basePermissions })),
+        ]);
       }
 
-      if (removedRole) {
-        if (!existingChannel) {
-          existingChannel = await createChannel(guild, {
-            channelName,
-            member: newMember,
-          });
-        } else {
-          await existingChannel.permissionOverwrites.set([
-            { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-            { id: newMember.id, allow: basePermissions },
-            ...adminRoles.map((id) => ({ id, allow: basePermissions })),
-          ]);
-        }
+      let cleanName = memberNickname.replace(/^\[.*\]\s*/g, "").trim();
 
-        if (memberNickname.includes("[") || memberNickname.includes("]")) {
-          const cleanNickname = memberNickname.replace(/\[.*\]/g, "").trim();
-          await newMember.setNickname(cleanNickname).catch(() => {});
-        }
+      let newPrefix = "";
+
+      if (newMember.roles.cache.has(adminRoles[0])) {
+        newPrefix = "[★] ";
+      } else if (
+        newMember.roles.cache.some((id) => adminRoles.slice(1, 3).includes(id))
+      ) {
+        newPrefix = "[☆] ";
+      }
+
+      const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32);
+
+      if (newMember.displayName !== finalNickname) {
+        await newMember
+          .setNickname(finalNickname)
+          .catch((err) => console.error("Ошибка смены ника:", err));
       }
     } catch (err) {
       console.error("Ошибка в onMakeAdmin", err);
