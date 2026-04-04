@@ -10,7 +10,7 @@ module.exports = {
       .delete()
       .catch((err) => console.log("Не удалось удалить сообщение:", err));
 
-    await message.channel.send({
+    return await message.channel.send({
       content: `||${roleMention(process.env.MENTIONED_ROLE)}||`,
       allowedMentions: { roles: [process.env.MENTIONED_ROLE] },
       components: getComponents(),

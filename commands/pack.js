@@ -19,21 +19,16 @@ module.exports = {
 
     const splittedData = splitName(displayName);
     if (splittedData === null) {
-      await interaction.reply(
+      return await interaction.reply(
         `У пользователя <@${member.id}> ник не по форме.`,
       );
     } else {
       const guild = interaction.guild;
-      const channels = guild.channels.cache;
       const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
-      let channelID = null;
-      const existingChannel = channels.find((channel) => {
-        if (channel.name === channelName) {
-          channelID = channel;
-          return true;
-        }
-        return false;
-      });
+      const existingChannel = guild.channels.cache.find(
+        (c) => c.name === channelName,
+      );
+
       if (!existingChannel) {
         await createChannel(interaction, {
           channelName,
@@ -41,10 +36,11 @@ module.exports = {
         });
       } else {
         await interaction.reply({
-          content: `Архив уже создан - ${channelID}`,
+          content: `Архив уже создан - ${existingChannel}`,
           flags: MessageFlags.Ephemeral,
         });
       }
     }
+    return;
   },
 };

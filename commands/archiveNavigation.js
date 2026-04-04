@@ -8,6 +8,6 @@ module.exports = {
       .delete()
       .catch((err) => console.log("Не удалось удалить сообщение:", err));
     console.log(`narchive вызвана пользователем ${message.author.tag}`);
-    await sendArchiveMessage(message.channel);
+    return await sendArchiveMessage(message.channel);
   },
 };

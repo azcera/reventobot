@@ -1,123 +1,85 @@
-const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  roleMention,
-  PermissionsBitField,
-} = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
 const { splitName } = require("../commands/utility/splitName");
 const { adminRoles } = require("../config.json");
 require("dotenv").config();
+const { createChannel } = require("../commands/utility/createChannel");
 
 module.exports = (client) => {
   client.on("guildMemberUpdate", async (oldMember, newMember) => {
     try {
-      let addedRole = null;
-      // Проверяем, была ли роль только что добавлена
-      const hadRoleBefore = oldMember.roles.cache.some((role) => {
-        if (adminRoles.includes(role.id)) {
-          addedRole = role;
-          return true;
-        }
-        return false;
-      });
-      const hasRoleNow = newMember.roles.cache.some((role) => {
-        if (adminRoles.includes(role.id)) {
-          addedRole = role;
-          return true;
-        }
-        return false;
-      });
-      if (!addedRole) return;
+      const guild = newMember.guild;
+      const oldHasAdmin = oldMember.roles.cache.filter((role) =>
+        adminRoles.includes(role.id),
+      );
+      const newHasAdmin = newMember.roles.cache.filter((role) =>
+        adminRoles.includes(role.id),
+      );
+      const addedRole = newHasAdmin.find((role) => !oldHasAdmin.has(role.id));
+      const removedRole = oldHasAdmin.find((role) => !newHasAdmin.has(role.id));
+
       const memberNickname = newMember.displayName;
       const splittedData = splitName(memberNickname);
       if (!splittedData) return;
-      const guild = newMember.guild;
-      const channels = guild.channels.cache;
-      const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
-      let memberArchive;
-      const existingChannel = channels.find((channel) => {
-        if (channel.name === channelName) {
-          memberArchive = channel;
-          return true;
-        }
-        return false;
-      });
 
-      // permission
-      const permission = [
+      const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
+      let existingChannel = guild.channels.cache.find(
+        (c) => c.name === channelName,
+      );
+
+      const basePermissions = [
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
         PermissionsBitField.Flags.ReadMessageHistory,
       ];
 
-      const permissions = [
-        {
-          id: guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel],
-        },
-        {
-          id: process.env.TIER_CHECKER_ROLE_ID,
-          allow: permission,
-        },
-        {
-          id: member,
-          allow: permission,
-        },
-        {
-          id: adminRoles[0],
-          allow: permission,
-        },
-      ];
+      if (addedRole) {
+        if (!existingChannel) {
+          existingChannel = await createChannel(guild, {
+            channelName,
+            member: newMember,
+          });
+        }
+        await existingChannel.permissionOverwrites.set([
+          { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: newMember.id, allow: basePermissions },
+          { id: adminRoles[0], allow: basePermissions },
+          { id: process.env.TIER_CHECKER_ROLE_ID, allow: basePermissions },
+        ]);
 
-      if (!hadRoleBefore && hasRoleNow) {
-        if (!existingChannel) {
-          await memberArchive.permissionOverwrites.set(permissions);
-        } else {
-          const newChannel = await createChannel(interaction, {
-            channelName,
-            member: newMember,
-          });
-          await newChannel.permissionOverwrites.set(permissions);
+        if (
+          addedRole.id === adminRoles[0] &&
+          !memberNickname.startsWith("[★]")
+        ) {
+          await newMember.setNickname(`[★] ${memberNickname}`).catch(() => {});
+        } else if (
+          adminRoles.slice(1, 3).includes(addedRole.id) &&
+          !memberNickname.startsWith("[☆]")
+        ) {
+          await newMember.setNickname(`[☆] ${memberNickname}`).catch(() => {});
         }
-        if (addedRole.id === adminRoles[0])
-          newMember.setNickname(`[★] ${memberNickname}`);
-        if (addedRole.id === adminRoles[1] || addedRole.id === adminRoles[2])
-          newMember.setNickname(`[☆] ${memberNickname}`);
       }
-      if (!hasRoleNow && hadRoleBefore) {
+
+      if (removedRole) {
         if (!existingChannel) {
-          await memberArchive.permissionOverwrites.set([
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionsBitField.Flags.ViewChannel],
-            },
-            {
-              id: member,
-              allow: permissions,
-            },
-            {
-              id: process.env.TIER_CHECKER_ROLE_ID,
-              allow: permissions,
-            },
-            ...adminRoles
-              .filter((roleId) => member.guild.roles.cache.has(roleId))
-              .map((roleId) => ({
-                id: roleId,
-                allow: permissions,
-              })),
-          ]);
-        } else {
-          await createChannel(interaction, {
+          existingChannel = await createChannel(guild, {
             channelName,
             member: newMember,
           });
+        } else {
+          await existingChannel.permissionOverwrites.set([
+            { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+            { id: newMember.id, allow: basePermissions },
+            ...adminRoles.map((id) => ({ id, allow: basePermissions })),
+          ]);
         }
-        const newNickname = memberNickname.replace(/\[.*\]/g, "").trim();
-        newMember.setNickname(newNickname);
+
+        if (memberNickname.includes("[") || memberNickname.includes("]")) {
+          const cleanNickname = memberNickname.replace(/\[.*\]/g, "").trim();
+          await newMember.setNickname(cleanNickname).catch(() => {});
+        }
       }
     } catch (err) {
-      console.error("Ошибка при изменении ника:", err);
+      console.error("Ошибка в onMakeAdmin", err);
     }
   });
 };

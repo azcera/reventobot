@@ -14,12 +14,8 @@ module.exports = (client) => {
       const guild = newMember.guild;
 
       // Проверяем, была ли роль только что добавлена
-      const hadRoleBefore = oldMember.roles.cache.some(
-        (role) => role.id === process.env.AUTO_ROLE,
-      );
-      const hasRoleNow = newMember.roles.cache.some(
-        (role) => role.id === process.env.AUTO_ROLE,
-      );
+      const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE);
+      const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE);
 
       if (!hadRoleBefore && hasRoleNow) {
         // роль была добавлена
@@ -31,7 +27,7 @@ module.exports = (client) => {
         const channels = guild.channels.cache;
         const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
 
-        const existingChannel = channels.find(
+        let existingChannel = channels.find(
           (channel) => channel.name === channelName,
         );
 

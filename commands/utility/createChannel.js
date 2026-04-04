@@ -2,12 +2,30 @@ const { MessageFlags, PermissionsBitField } = require("discord.js");
 const { adminRoles } = require("../../config.json");
 require("dotenv").config();
 
-async function createChannel(interaction, { channelName, member }) {
+async function createChannel(interactionOrGuild, { channelName, member }) {
+  const guild = interactionOrGuild.guild || interactionOrGuild;
+  const isInteraction = !!interactionOrGuild.reply;
+
   const permissions = [
     PermissionsBitField.Flags.ViewChannel,
     PermissionsBitField.Flags.SendMessages,
     PermissionsBitField.Flags.ReadMessageHistory,
   ];
+  const isUserAdmin = member.roles.cache.some((role) =>
+    adminRoles.includes(role.id),
+  );
+  const permissionsForAdmins = isUserAdmin
+    ? [
+        {
+          id: adminRoles[0],
+          allow: permissions,
+        },
+      ]
+    : adminRoles.map((roleId) => ({
+        id: roleId,
+        allow: permissions,
+      }));
+
   const newChannel = await guild.channels.create({
     name: channelName,
     type: 0,
@@ -18,25 +36,24 @@ async function createChannel(interaction, { channelName, member }) {
         deny: [PermissionsBitField.Flags.ViewChannel],
       },
       {
-        id: member,
+        id: member.id,
         allow: permissions,
       },
       {
         id: process.env.TIER_CHECKER_ROLE_ID,
         allow: permissions,
       },
-      ...adminRoles
-        .filter((roleId) => member.guild.roles.cache.has(roleId))
-        .map((roleId) => ({
-          id: roleId,
-          allow: permissions,
-        })),
+      ...permissionsForAdmins,
     ],
   });
-  await interaction.reply({
-    content: `Архив для <@${member.id}> создан - ${newChannel}`,
-    flags: MessageFlags.Ephemeral,
-  });
+  if (isInteraction) {
+    await interactionOrGuild
+      .reply({
+        content: `Архив для <@${member.id}> создан - ${newChannel}`,
+        flags: MessageFlags.Ephemeral,
+      })
+      .catch(() => {});
+  }
   return newChannel;
 }
 

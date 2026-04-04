@@ -66,4 +66,5 @@ module.exports = async (client) => {
     });
     console.log("Сообщение с кнопкой отправлено");
   }
+  return;
 };

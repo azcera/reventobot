@@ -12,7 +12,7 @@ async function sendArchiveMessage(channel) {
     return channel.send("Пользователь не найден.");
   }
 
-  await channel.send({
+  return await channel.send({
     content: `<@${member.id}>, это твой личный канал-архив, куда ты можешь отправлять:
 
   **- Откаты с мероприятий
