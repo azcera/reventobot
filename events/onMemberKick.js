@@ -18,6 +18,9 @@ module.exports = (client) => {
         console.log(`${member.user.tag} был кикнут.`);
 
         const splittedData = splitName(member.displayName);
+        console.log(
+          `Splitted Data: ${splittedData.name}, ${splittedData.stat} `,
+        );
         if (!splittedData) return;
 
         const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
