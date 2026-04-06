@@ -6,6 +6,7 @@ const {
   Events,
   GatewayIntentBits,
   MessageFlags,
+  Partials,
 } = require("discord.js");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -18,7 +19,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
-  partials: ["GUILD_MEMBER"],
+  partials: [Partials.GuildMember, Partials.User],
 });
 
 // эвенты

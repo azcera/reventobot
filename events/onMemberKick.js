@@ -17,10 +17,34 @@ module.exports = (client) => {
       if (kickLog && kickLog.target.id === member.id) {
         console.log(`${member.user.tag} был кикнут.`);
 
-        const splittedData = splitName(member.displayName);
-        console.log(
-          `Splitted Data: ${splittedData.name}, ${splittedData.stat} `,
+        const updateLogs = await member.guild.fetchAuditLogs({
+          limit: 10, // берем несколько последних записей
+          type: AuditLogEvent.MemberUpdate,
+          targetId: member.id, // фильтруем по конкретному пользователю
+        });
+        const nickChangeLog = updateLogs.entries.find((entry) =>
+          entry.changes.some((change) => change.key === "nick"),
         );
+
+        let finalNickname;
+
+        if (nickChangeLog) {
+          // Берем "новое" значение из последнего изменения ника
+          const nickChange = nickChangeLog.changes.find(
+            (c) => c.key === "nick",
+          );
+          finalNickname = nickChange.new || nickChange.old;
+        } else {
+          // Если логов изменения ника нет, используем displayName (текущий в кэше)
+          finalNickname = member.nickname || member.displayName;
+        }
+
+        const kickedUser = kickLog.target;
+
+        const nameToSplit =
+          member.displayName || kickedUser.globalName || kickedUser.username;
+        const splittedData = splitName(finalNickname);
+        console.log(`Name:  ${nameToSplit}, finalNickname: ${finalNickname}`);
         if (!splittedData) return;
 
         const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
