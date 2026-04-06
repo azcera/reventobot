@@ -72,7 +72,7 @@ handleMakeAdmin = async (oldMember, newMember, channelName) => {
   }
 };
 
-handleMakeRevento = (oldMember, newMember, channelName) => {
+handleMakeRevento = async (oldMember, newMember, channelName) => {
   const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE);
   const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE);
 
