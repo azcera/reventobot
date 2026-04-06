@@ -6,7 +6,7 @@ module.exports = (client) => {
   client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
 
-    const [action, name, stat, memberID] = interaction.customId.split(":");
+    const [action, name, stat, memberID] = interaction.customId.split("-");
 
     const guild = interaction.guild;
     if (!guild) return;
@@ -18,7 +18,7 @@ module.exports = (client) => {
         flags: MessageFlags.Ephemeral,
       });
 
-    if (action === "cancel_create") {
+    if (action === "cancel_create_archive") {
       console.log("Создание архива отменено.");
       await interaction.message
         .delete()
