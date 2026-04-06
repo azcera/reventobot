@@ -37,4 +37,4 @@ waitForPort = 3000
 [deployment]
 build = ["sh", "-c", "npm install"]
 run = ["node", "index.js"]
-deploymentTarget = "vm"
+deploymentTarget = "cloudrun"
