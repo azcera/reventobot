@@ -21,12 +21,12 @@ module.exports = (client) => {
         if (!splittedData) return;
 
         const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
-        const channel = member.guild.channels.cache.find(
+        const existingChannel = member.guild.channels.cache.find(
           (ch) => ch.name === channelName,
         );
 
-        if (channel) {
-          await channel.delete("Пользователь был кикнут с сервера");
+        if (existingChannel) {
+          await existingChannel.delete("Пользователь был кикнут с сервера");
         } else {
           console.log(`Канал для ${member.user.tag} не создан.`);
         }
