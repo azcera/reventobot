@@ -49,14 +49,22 @@ handleMakeAdmin = async (oldMember, newMember, channelName) => {
   }));
 
   if (addedRole) {
-    await existingChannel.permissionOverwrites.set([
-      ...baseOverwrites,
-      { id: adminRoles[0], allow: basePermissions },
-    ]);
     if (addedRole.id === adminRoles[0]) {
+      // owner
       newPrefix = "[★] ";
     } else if (adminRoles.slice(1).includes(addedRole.id)) {
+      // high, recruit
       newPrefix = "[☆] ";
+    }
+
+    if (addedRole.id === adminRoles[2]) {
+      // recruit
+      await existingChannel.permissionOverwrites.set([
+        ...baseOverwrites,
+        { id: adminRoles[0], allow: basePermissions },
+      ]);
+    } else {
+      await existingChannel.permissionOverwrites.set(baseOverwrites);
     }
   } else if (removedRole) {
     await existingChannel.permissionOverwrites.set([
