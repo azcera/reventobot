@@ -4,6 +4,7 @@ module.exports = (client) => {
   const PREFIX = "!"; // префикс для обычных команд
 
   client.on("messageCreate", async (message) => {
+    require("../commands/utility/pingUsers")(client, message);
     if (message.author.bot) return; // игнорируем ботов
     if (!message.content.startsWith(PREFIX)) return; // проверяем префикс
 
