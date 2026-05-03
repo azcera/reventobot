@@ -24,15 +24,14 @@ args = "Start application"
 
 [[workflows.workflow]]
 name = "Start application"
+mode = "sequential"
 author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
 
 [workflows.workflow.metadata]
 outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "node index.js"
-waitForPort = 3000
 
 [deployment]
 build = ["sh", "-c", "npm install"]
