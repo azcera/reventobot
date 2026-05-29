@@ -1,6 +1,14 @@
-const { MessageFlags, PermissionsBitField } = require("discord.js");
+const {
+  MessageFlags,
+  PermissionsBitField,
+  ChannelType,
+} = require("discord.js");
 const { adminRoles } = require("../../config.json");
 require("dotenv").config();
+
+const categoryIds = process.env.CATEGORY_IDS
+  ? process.env.CATEGORY_IDS.split(",").map((id) => id.trim())
+  : [];
 
 async function createChannel(interactionOrGuild, { channelName, member }) {
   const guild = interactionOrGuild.guild || interactionOrGuild;
@@ -26,10 +34,40 @@ async function createChannel(interactionOrGuild, { channelName, member }) {
         allow: permissions,
       }));
 
+  await guild.channels.fetch().catch(() => {});
+
+  let availableCategoryId = null;
+  for (const catId of categoryIds) {
+    const category = guild.channels.cache.get(catId);
+    if (!category || category.type !== ChannelType.GuildCategory) continue;
+
+    const childrenCount = guild.channels.cache.filter(
+      (ch) => ch.parentId === catId,
+    ).size;
+
+    if (childrenCount < 50) {
+      availableCategoryId = catId;
+      break;
+    }
+  }
+
+  if (!availableCategoryId) {
+    if (isInteraction) {
+      await interactionOrGuild
+        .reply({
+          content:
+            "Ошибка: все доступные категории переполнены или не найдены.",
+          flags: MessageFlags.Ephemeral,
+        })
+        .catch(() => {});
+    }
+    throw new Error("Нет доступных категорий для создания канала.");
+  }
+
   const newChannel = await guild.channels.create({
     name: channelName,
-    type: 0,
-    parent: process.env.CATEGORY_ID,
+    type: ChannelType.GuildText,
+    parent: availableCategoryId,
     permissionOverwrites: [
       {
         id: member.guild.roles.everyone.id,
