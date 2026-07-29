@@ -50,11 +50,11 @@ handleMakeAdmin = async (oldMember, newMember, channelName) => {
 
   if (addedRole) {
     if (addedRole.id === adminRoles[0]) {
-      // owner
-      newPrefix = "[★] ";
-    } else if (adminRoles.slice(1).includes(addedRole.id)) {
-      // high, recruit
-      newPrefix = "[☆] ";
+      newPrefix = "[𝐃𝐞𝐩] "; // dep
+    } else if (addedRole.id === adminRoles[1]) {
+      newPrefix = "[𝐇𝐢𝐠𝐡] "; // high
+    } else if (addedRole.id === adminRoles[2]) {
+      newPrefix = "[𝐑𝐞𝐜] "; // recruit
     }
 
     if (addedRole.id === adminRoles[2]) {
