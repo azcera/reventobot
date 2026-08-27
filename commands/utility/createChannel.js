@@ -1,6 +1,6 @@
 const { MessageFlags, ChannelType } = require("discord.js");
 require("dotenv").config();
-
+const { getComponents } = require("./createButtons");
 const parentChannelId = process.env.PARENT_CHANNEL_ID;
 
 async function createChannel(interactionOrGuild, { channelName, member }) {
@@ -43,7 +43,17 @@ async function createChannel(interactionOrGuild, { channelName, member }) {
   // 4. Отправляем приветственное сообщение
   await newThread
     .send({
-      content: `Привет <@${member.id}>! Твой приватный архив создан.`,
+      content: `<@${member.id}>, это твой личный канал-архив, куда ты можешь отправлять:
+  
+    **- Откаты с мероприятий
+    - Откаты с каптов
+    - Заявки на повышение
+    - Задавать вопросы хай-составу**
+    **Зачем отправлять откаты?**
+  
+    Это все нужно для получения TIER, который показывает уровень твоей игры в нашей семье. Ниже ты можешь увидеть кнопки с навигацией, которые помогут тебе быстро найти нужный контент.`,
+      allowedMentions: { users: [member.id] },
+      components: getComponents(),
     })
     .catch(() => {});
 
