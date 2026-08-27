@@ -30,7 +30,7 @@ module.exports = (client) => {
         .delete()
         .catch((err) => console.log("Не удалось удалить сообщение:", err));
       await createChannel(interaction, {
-        channelName: `archive-${name}-${stat}`,
+        channelName: `archive ${name} ${stat}`,
         member,
       });
     }
