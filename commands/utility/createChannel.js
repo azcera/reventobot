@@ -1,98 +1,82 @@
-const {
-  MessageFlags,
-  PermissionsBitField,
-  ChannelType,
-} = require("discord.js");
+const { MessageFlags, ChannelType } = require("discord.js");
 const { adminRoles } = require("../../config.json");
 require("dotenv").config();
 
-const categoryIds = process.env.CATEGORY_IDS
-  ? process.env.CATEGORY_IDS.split(",").map((id) => id.trim())
-  : [];
+const parentChannelId = process.env.PARENT_CHANNEL_ID;
 
 async function createChannel(interactionOrGuild, { channelName, member }) {
   const guild = interactionOrGuild.guild || interactionOrGuild;
   const isInteraction = !!interactionOrGuild.reply;
 
-  const permissions = [
-    PermissionsBitField.Flags.ViewChannel,
-    PermissionsBitField.Flags.SendMessages,
-    PermissionsBitField.Flags.ReadMessageHistory,
-  ];
-  const isUserAdmin = member.roles.cache.some((role) =>
-    adminRoles.includes(role.id),
-  );
-  const permissionsForAdmins = isUserAdmin
-    ? [
-        {
-          id: adminRoles[0],
-          allow: permissions,
-        },
-      ]
-    : adminRoles.map((roleId) => ({
-        id: roleId,
-        allow: permissions,
-      }));
+  const parentChannel =
+    guild.channels.cache.get(parentChannelId) ||
+    (await guild.channels.fetch(parentChannelId).catch(() => null));
 
-  await guild.channels.fetch().catch(() => {});
-
-  let availableCategoryId = null;
-  for (const catId of categoryIds) {
-    const category = guild.channels.cache.get(catId);
-    if (!category || category.type !== ChannelType.GuildCategory) continue;
-
-    const childrenCount = guild.channels.cache.filter(
-      (ch) => ch.parentId === catId,
-    ).size;
-
-    if (childrenCount < 50) {
-      availableCategoryId = catId;
-      break;
-    }
-  }
-
-  if (!availableCategoryId) {
+  if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
     if (isInteraction) {
       await interactionOrGuild
         .reply({
           content:
-            "Ошибка: все доступные категории переполнены или не найдены.",
+            "Ошибка: родительский канал для веток не найден или настроен неверно.",
           flags: MessageFlags.Ephemeral,
         })
         .catch(() => {});
     }
-    throw new Error("Нет доступных категорий для создания канала.");
+    throw new Error(
+      "Не удалось найти текстовый канал PARENT_CHANNEL_ID для создания ветки.",
+    );
   }
 
-  const newChannel = await guild.channels.create({
+  const newThread = await parentChannel.threads.create({
     name: channelName,
-    type: ChannelType.GuildText,
-    parent: availableCategoryId,
-    permissionOverwrites: [
-      {
-        id: member.guild.roles.everyone.id,
-        deny: [PermissionsBitField.Flags.ViewChannel],
-      },
-      {
-        id: member.id,
-        allow: permissions,
-      },
-      {
-        id: process.env.TIER_CHECKER_ROLE_ID,
-        allow: permissions,
-      },
-      ...permissionsForAdmins,
-    ],
+    autoArchiveDuration: 1440,
+    type: ChannelType.GuildPrivateThread,
+    reason: `Приватная ветка для ${member.user.tag}`,
   });
+
+  // 1. Добавляем пользователя, для которого создается ветка
+  await newThread.members.add(member.id).catch(() => {});
+
+  // Принудительно запрашиваем участников сервера из API Discord, чтобы кэш ролей заполнился гарантированно
+  await guild.members.fetch().catch(() => {});
+
+  // 2. Добавляем роль проверки (TIER_CHECKER_ROLE_ID)
+  if (process.env.TIER_CHECKER_ROLE_ID) {
+    const tierRole = guild.roles.cache.get(process.env.TIER_CHECKER_ROLE_ID);
+    if (tierRole) {
+      // Теперь tierRole.members точно не будет пустой
+      for (const [memberId] of tierRole.members) {
+        await newThread.members.add(memberId).catch(() => {});
+      }
+    }
+  }
+
+  // 3. Добавляем администраторов из config.json
+  for (const roleId of adminRoles) {
+    const adminRole = guild.roles.cache.get(roleId);
+    if (adminRole) {
+      for (const [memberId] of adminRole.members) {
+        await newThread.members.add(memberId).catch(() => {});
+      }
+    }
+  }
+
+  await newThread
+    .send({
+      content: `Привет <@${member.id}>! Твой приватный архив создан.`,
+    })
+    .catch(() => {});
+
   if (isInteraction) {
     await interactionOrGuild
       .reply({
-        content: `Архив для <@${member.id}> создан - ${newChannel}`,
+        content: `Приватная ветка создана успешно — ${newThread}`,
         flags: MessageFlags.Ephemeral,
       })
       .catch(() => {});
   }
-  return newChannel;
+
+  return newThread;
 }
 
 module.exports = { createChannel };
