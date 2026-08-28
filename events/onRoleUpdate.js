@@ -3,13 +3,12 @@ const {
   ButtonBuilder,
   ButtonStyle,
   roleMention,
-  PermissionsBitField,
 } = require("discord.js");
 const { splitName } = require("../commands/utility/splitName");
 const { adminRoles } = require("../config.json");
 require("dotenv").config();
 
-handleMakeAdmin = async (oldMember, newMember, channelName) => {
+let handleMakeAdmin = async (oldMember, newMember) => {
   const oldHasAdmin = oldMember.roles.cache.filter((role) =>
     adminRoles.includes(role.id),
   );
@@ -23,30 +22,7 @@ handleMakeAdmin = async (oldMember, newMember, channelName) => {
 
   const cleanName = newMember.displayName.replace(/^\[.*\]\s*/g, "").trim();
 
-  let existingChannel = newMember.guild.channels.cache.find(
-    (c) => c.name === channelName,
-  );
-
-  const basePermissions = [
-    PermissionsBitField.Flags.ViewChannel,
-    PermissionsBitField.Flags.SendMessages,
-    PermissionsBitField.Flags.ReadMessageHistory,
-  ];
-
-  if (!existingChannel) return console.log(`Архив для ${newMember} не создан.`);
-
   let newPrefix = "";
-
-  const baseOverwrites = [
-    { id: newMember.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-    { id: newMember.id, allow: basePermissions },
-    { id: process.env.TIER_CHECKER_ROLE_ID, allow: basePermissions },
-  ];
-
-  const adminOverwrites = adminRoles.map((id) => ({
-    id,
-    allow: basePermissions,
-  }));
 
   if (addedRole) {
     if (addedRole.id === adminRoles[0]) {
@@ -56,23 +32,7 @@ handleMakeAdmin = async (oldMember, newMember, channelName) => {
     } else if (addedRole.id === adminRoles[2]) {
       newPrefix = "[𝐑𝐞𝐜] "; // recruit
     }
-
-    if (addedRole.id === adminRoles[2]) {
-      // recruit
-      await existingChannel.permissionOverwrites.set([
-        ...baseOverwrites,
-        { id: adminRoles[0], allow: basePermissions },
-      ]);
-    } else {
-      await existingChannel.permissionOverwrites.set(baseOverwrites);
-    }
-  } else if (removedRole) {
-    await existingChannel.permissionOverwrites.set([
-      ...baseOverwrites,
-      ...adminOverwrites,
-    ]);
   }
-
   const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32);
 
   if (newMember.displayName !== finalNickname && newMember.manageable) {
@@ -80,7 +40,7 @@ handleMakeAdmin = async (oldMember, newMember, channelName) => {
   }
 };
 
-handleMakeRevento = async (oldMember, newMember, channelName) => {
+let handleMakeRevento = async (oldMember, newMember, channelName) => {
   const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE);
   const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE);
 
@@ -116,13 +76,13 @@ handleMakeRevento = async (oldMember, newMember, channelName) => {
   }
 };
 
-handleNameEdit = async (oldMember, newMember, channelName) => {
+let handleNameEdit = async (oldMember, newMember, channelName) => {
   if (oldMember.displayName === newMember.displayName) return;
   const channels = newMember.guild.channels.cache;
   const splittedData = splitName(newMember.displayName);
   if (!splittedData) return;
 
-  const newMemberChannelName = `archive-${splittedData.name}-${splittedData.stat}`;
+  const newMemberChannelName = `archive ${splittedData.name} ${splittedData.stat}`;
 
   let existingChannel = channels.find(
     (channel) => channel.name === channelName,
@@ -141,10 +101,10 @@ module.exports = (client) => {
     const splittedData = splitName(displayName);
     if (!splittedData) return;
 
-    const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
+    const channelName = `archive ${splittedData.name} ${splittedData.stat}`;
 
     try {
-      await handleMakeAdmin(oldMember, newMember, channelName);
+      await handleMakeAdmin(oldMember, newMember);
     } catch (error) {
       console.error("Ошибка MakeAdmin: ", error);
     }
