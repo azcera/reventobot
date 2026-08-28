@@ -27,6 +27,7 @@ module.exports = {
         .setLabel("Создать набор")
         .setStyle(ButtonStyle.Danger),
     );
+
     await message.channel.send({
       content: "Панель управления:",
       components: [row],

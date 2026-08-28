@@ -9,31 +9,38 @@ const {
 require("dotenv").config();
 
 // Убедитесь, что путь к файлу указан верно относительно этого скрипта
-const { parseDateTime } = require("./commands/utility/parseDateTime");
+const {
+  parseDateTime,
+  getDiscordTimestamp,
+} = require("../commands/utility/parseDateTime");
+
+const naborManager = require("../commands/utility/naborManager");
 
 module.exports = (client) => {
   client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isButton() && !interaction.isModalSubmit()) return;
-
-    // ОШИБКА 1 ИСПРАВЛЕНА: Извлекаем customId, только если это КНОПКА.
-    // Если это модальное окно, split ИСКАЖАЛ action (например, "modal_capt-имя-стат-id" превращался в "modal_capt")
-    let action, name, stat, memberID;
-    if (interaction.isButton()) {
-      [action, name, stat, memberID] = interaction.customId.split("-");
+    // Добавляем обработку кнопок участников "Присоединиться/Выйти"
+    if (
+      interaction.isButton() &&
+      (interaction.customId === "nabor_join" ||
+        interaction.customId === "nabor_leave")
+    ) {
+      return await naborManager.handleNaborInteraction(interaction);
     }
+
+    if (!interaction.isButton() && !interaction.isModalSubmit()) return;
 
     const guild = interaction.guild;
     if (!guild) return;
 
-    // Проверку пользователя выполняем только для кнопок, где передается memberID
+    // ОБРАБОТКА НАЖАТИЙ НА КНОПКИ
     if (interaction.isButton()) {
-      const member = await guild.members.fetch(memberID).catch(() => null);
-      if (!member)
-        return interaction.reply({
-          content: "Пользователь не найден.",
-          flags: MessageFlags.Ephemeral,
-        });
+      const [action, name, stat, memberID] = interaction.customId.split("-");
 
+      // -----------------------------------------------------------------
+      // КАТЕГОРИЯ 1: Действия, для которых НЕ нужен пользователь (member)
+      // -----------------------------------------------------------------
+
+      // Отмена создания архива (просто удаляем сообщение)
       if (action === "cancel_create_archive") {
         console.log("Создание архива отменено.");
         return await interaction.message
@@ -41,16 +48,7 @@ module.exports = (client) => {
           .catch((err) => console.log("Не удалось удалить сообщение:", err));
       }
 
-      if (action === "create_archive") {
-        await interaction.message
-          .delete()
-          .catch((err) => console.log("Не удалось удалить сообщение:", err));
-        return await createChannel(interaction, {
-          channelName: `archive ${name} ${stat}`,
-          member,
-        });
-      }
-
+      // Создание группы (открытие модалки)
       if (action === "create_group") {
         const modal = new ModalBuilder()
           .setCustomId(`modal_group`)
@@ -60,7 +58,7 @@ module.exports = (client) => {
           .setCustomId("group_time")
           .setLabel("Время проведения")
           .setStyle(TextInputStyle.Short)
-          .setPlaceholder("Например: 18:00 или 29.08.2026 18:00") // Обновили плейсхолдер
+          .setPlaceholder("Например: 18:00 или 29.08.2026 18:00")
           .setRequired(true);
 
         const targetInput = new TextInputBuilder()
@@ -84,30 +82,61 @@ module.exports = (client) => {
         modal.addComponents(firstRow, secondRow, thirdRow);
 
         return await interaction.showModal(modal);
-      } else if (action === "create_capt") {
+      }
+
+      // КНОПКА СОЗДАНИЯ КАПТА
+      if (action === "create_capt") {
         const modal = new ModalBuilder()
-          .setCustomId(`modal_capt-${name}-${stat}-${memberID}`)
-          .setTitle("Создание капта");
+          .setCustomId(`modal_capt`)
+          .setTitle("Создание группы");
 
         const timeInput = new TextInputBuilder()
           .setCustomId("capt_time")
-          .setLabel("Время капта")
+          .setLabel("Время проведения")
           .setStyle(TextInputStyle.Short)
-          .setPlaceholder("Например: 20:30 или 29.08.2026 20:30") // Обновили плейсхолдер
+          .setPlaceholder("Например: 18:00 или 29.08.2026 18:00")
           .setRequired(true);
 
         const firstRow = new ActionRowBuilder().addComponents(timeInput);
-
         modal.addComponents(firstRow);
 
         return await interaction.showModal(modal);
       }
+
+      // -----------------------------------------------------------------
+      // КАТЕГОРИЯ 2: Действия, где пользователь (member) ОБЯЗАТЕЛЕН
+      // -----------------------------------------------------------------
+
+      // Запрашиваем пользователя, только если в ID кнопки был передан memberID
+      const member = memberID
+        ? await guild.members.fetch(memberID).catch(() => null)
+        : null;
+
+      // Если дошли сюда, а пользователя нет — выводим ошибку
+      if (!member) {
+        return interaction.reply({
+          content: "Пользователь не найден.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      // Создание архива
+      if (action === "create_archive") {
+        await interaction.message
+          .delete()
+          .catch((err) => console.log("Не удалось удалить сообщение:", err));
+        return await createChannel(interaction, {
+          channelName: `archive ${name} ${stat}`,
+          member,
+        });
+      }
     }
 
-    // ОБРАБОТКА МОДАЛЬНЫХ ОКНО
+    // ОБРАБОТКА МОДАЛЬНЫХ ОКОН
     if (interaction.isModalSubmit()) {
       const modalId = interaction.customId;
 
+      // Модалка группы
       if (modalId === "modal_group") {
         const timeInput = interaction.fields
           .getTextInputValue("group_time")
@@ -125,15 +154,48 @@ module.exports = (client) => {
           });
         }
 
-        const timestamp = Math.floor(parsedDate.getTime() / 1000);
-        const discordTimestamp = `<t:${timestamp}:F>`;
+        const discordTimestamp = getDiscordTimestamp(parsedDate);
+        const discordTimestampWith5Min = getDiscordTimestamp(parsedDate, -300);
 
         await interaction.reply({
           content: `Группа создана!\nВремя: ${discordTimestamp}\nЦель: ${target}\nКод: ${code}`,
           flags: MessageFlags.Ephemeral,
         });
+
+        try {
+          const pingChannelId = process.env.PING_CHANNEL_ID;
+          const mentionedRoleId = process.env.MENTIONED_ROLE;
+
+          if (!pingChannelId) {
+            return console.log(
+              "Ошибка: В файле .env не указан PING_CHANNEL_ID",
+            );
+          }
+
+          const pingChannel =
+            interaction.client.channels.cache.get(pingChannelId) ||
+            (await interaction.client.channels
+              .fetch(pingChannelId)
+              .catch(() => null));
+
+          if (!pingChannel) {
+            return console.log(
+              `Ошибка: Канал с ID ${pingChannelId} не найден.`,
+            );
+          }
+          const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : "";
+
+          await pingChannel.send(
+            `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
+          );
+        } catch (error) {
+          console.error("Не удалось отправить сообщения в пинг-канал:", error);
+        }
+
+        return;
       }
 
+      // Модалка капта
       if (modalId.startsWith("modal_capt")) {
         const timeInput = interaction.fields
           .getTextInputValue("capt_time")
@@ -149,11 +211,12 @@ module.exports = (client) => {
           });
         }
 
-        const timestamp = Math.floor(parsedDate.getTime() / 1000);
-        const discordTimestamp = `<t:${timestamp}:F>`;
+        const discordTimestamp = getDiscordTimestamp(parsedDate);
 
-        await interaction.reply({
-          content: `Капт запланирован на ${discordTimestamp}`,
+        await naborManager.sendNabor(interaction, discordTimestamp);
+
+        return await interaction.reply({
+          content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
           flags: MessageFlags.Ephemeral,
         });
       }
