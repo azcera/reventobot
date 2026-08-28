@@ -20,16 +20,25 @@ module.exports = {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`create_group`)
-        .setLabel("Создать групп")
+        .setLabel("ГРУПП")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`create_capt`)
-        .setLabel("Создать набор")
+        .setLabel("КАПТ")
         .setStyle(ButtonStyle.Danger),
     );
 
     await message.channel.send({
-      content: "Панель управления:",
+      content: `
+# Панель управления:
+Для взаимодействия с ботом используйте кнопки ниже.
+
+Кнопка \`"ГРУПП"\` — создает оповещение в канал пингов о предстоящем сборе.
+Кнопка \`"КАПТ"\` — создает регу на капт.
+
+Время необходимо указывать с учетом часового пояса Москвы (то есть написанное вами время будет считаться Московским временем).
+Указывать время в формате \`ДД.ММ.ГГГГ ЧЧ:ММ\` необходимо только если дата не сегодняшняя. Во всех остальных случаях достаточно указать только время в формате \`ЧЧ:ММ\`.
+`,
       components: [row],
     });
     return await message
