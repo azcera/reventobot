@@ -43,12 +43,13 @@ let handleMakeAdmin = async (oldMember, newMember) => {
 let handleMakeRevento = async (oldMember, newMember, channelName) => {
   const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE);
   const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE);
+  let parsedChannelName = channelName.replace(/-/g, " ");
 
   if (!hadRoleBefore && hasRoleNow) {
     const channels = newMember.guild.channels.cache;
 
     let existingChannel = channels.find(
-      (channel) => channel.name === channelName,
+      (channel) => channel.name === parsedChannelName,
     );
 
     if (!existingChannel) {
@@ -101,7 +102,7 @@ module.exports = (client) => {
     const splittedData = splitName(displayName);
     if (!splittedData) return;
 
-    const channelName = `archive ${splittedData.name} ${splittedData.stat}`;
+    const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
 
     try {
       await handleMakeAdmin(oldMember, newMember);
