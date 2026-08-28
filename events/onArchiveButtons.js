@@ -52,7 +52,7 @@ module.exports = (client) => {
       if (action === "create_group") {
         const modal = new ModalBuilder()
           .setCustomId(`modal_group`)
-          .setTitle("Создание группы");
+          .setTitle("Создание группа");
 
         const timeInput = new TextInputBuilder()
           .setCustomId("group_time")
@@ -88,7 +88,7 @@ module.exports = (client) => {
       if (action === "create_capt") {
         const modal = new ModalBuilder()
           .setCustomId(`modal_capt`)
-          .setTitle("Создание группы");
+          .setTitle("Создание реги на капт");
 
         const timeInput = new TextInputBuilder()
           .setCustomId("capt_time")
