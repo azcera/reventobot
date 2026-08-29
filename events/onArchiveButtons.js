@@ -184,7 +184,12 @@ module.exports = (client) => {
             );
           }
           const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : "";
-
+          await pingChannel.send(
+            `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
+          );
+          await pingChannel.send(
+            `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
+          );
           await pingChannel.send(
             `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
           );
