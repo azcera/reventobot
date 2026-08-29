@@ -107,24 +107,24 @@ module.exports = (client) => {
       // КАТЕГОРИЯ 2: Действия, где пользователь (member) ОБЯЗАТЕЛЕН
       // -----------------------------------------------------------------
 
-      // Запрашиваем пользователя, только если в ID кнопки был передан memberID
-      const member = memberID
-        ? await guild.members.fetch(memberID).catch(() => null)
-        : null;
-
-      // Если дошли сюда, а пользователя нет — выводим ошибку
-      if (!member) {
-        return interaction.reply({
-          content: "Пользователь не найден.",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      // Создание архива
+      // Создание архива (перенесли fetch внутрь, чтобы не тормозить модалки)
       if (action === "create_archive") {
+        // Запрашиваем пользователя только здесь
+        const member = memberID
+          ? await guild.members.fetch(memberID).catch(() => null)
+          : null;
+
+        if (!member) {
+          return interaction.reply({
+            content: "Пользователь не найден.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
         await interaction.message
           .delete()
           .catch((err) => console.log("Не удалось удалить сообщение:", err));
+
         return await createChannel(interaction, {
           channelName: `archive ${name} ${stat}`,
           member,
