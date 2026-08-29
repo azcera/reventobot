@@ -155,7 +155,7 @@ module.exports = (client) => {
         }
 
         const discordTimestamp = getDiscordTimestamp(parsedDate);
-        const discordTimestampWith5Min = getDiscordTimestamp(parsedDate, -300);
+        const discordTimestampWith5Min = getDiscordTimestamp(parsedDate, 300);
 
         await interaction.reply({
           content: `Группа создана!\nВремя: ${discordTimestamp}\nЦель: ${target}\nКод: ${code}`,
