@@ -227,12 +227,27 @@ module.exports = (client) => {
 
         const discordTimestamp = getDiscordTimestamp(parsedDate);
 
-        await naborManager.sendNabor(interaction, discordTimestamp);
+        // 1. СНАЧАЛА ОТВЕЧАЕМ ДИСКОРДУ, чтобы уложиться в 3 секунды
+        await interaction
+          .reply({
+            content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
+            flags: MessageFlags.Ephemeral,
+          })
+          .catch((err) =>
+            console.error("Не удалось ответить на модалку капта:", err),
+          );
 
-        return await interaction.reply({
-          content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
-          flags: MessageFlags.Ephemeral,
-        });
+        // 2. ТЕПЕРЬ СПОКОЙНО ВЫПОЛНЯЕМ ДОЛГУЮ СЕТЕВУЮ ОПЕРАЦИЮ В ФОНЕ
+        try {
+          await naborManager.sendNabor(interaction, discordTimestamp);
+        } catch (error) {
+          console.error(
+            "Ошибка при отправке набора через naborManager:",
+            error,
+          );
+        }
+
+        return;
       }
     }
   });
