@@ -149,7 +149,7 @@ module.exports = (client) => {
         if (!parsedDate || isNaN(parsedDate.getTime())) {
           return await interaction.reply({
             content:
-              "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ` (например, `29.08.2026 18:00`).",
+              "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.",
             flags: MessageFlags.Ephemeral,
           });
         }
@@ -157,11 +157,17 @@ module.exports = (client) => {
         const discordTimestamp = getDiscordTimestamp(parsedDate);
         const discordTimestampWith5Min = getDiscordTimestamp(parsedDate, 300);
 
-        await interaction.reply({
-          content: `Группа создана!\nВремя: ${discordTimestamp}\nЦель: ${target}\nКод: ${code}`,
-          flags: MessageFlags.Ephemeral,
-        });
+        // МЕНЯЕМ МЕСТАМИ: Сначала отвечаем Discord, чтобы уложиться в 3 секунды!
+        await interaction
+          .reply({
+            content: `Группа создана!\nВремя: ${discordTimestamp}\nЦель: ${target}\nКод: ${code}`,
+            flags: MessageFlags.Ephemeral,
+          })
+          .catch((err) =>
+            console.error("Не удалось ответить на модалку:", err),
+          );
 
+        // Теперь бот может спокойно выполнять долгие сетевые запросы в фоне
         try {
           const pingChannelId = process.env.PING_CHANNEL_ID;
           const mentionedRoleId = process.env.MENTIONED_ROLE;
@@ -183,7 +189,10 @@ module.exports = (client) => {
               `Ошибка: Канал с ID ${pingChannelId} не найден.`,
             );
           }
+
           const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : "";
+
+          // Отправляем сообщения (также можно объединить в один send, чтобы не спамить API)
           await pingChannel.send(
             `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
           );
