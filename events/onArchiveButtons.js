@@ -8,21 +8,18 @@ const {
 } = require("discord.js");
 require("dotenv").config();
 
-// Убедитесь, что путь к файлу указан верно относительно этого скрипта
 const {
   parseDateTime,
   getDiscordTimestamp,
 } = require("../commands/utility/parseDateTime");
-
 const naborManager = require("../commands/utility/naborManager");
 
 module.exports = (client) => {
   client.on("interactionCreate", async (interaction) => {
-    // Добавляем обработку кнопок участников "Присоединиться/Выйти"
+    // 1. Быстрая обработка кнопок набора
     if (
       interaction.isButton() &&
-      (interaction.customId === "nabor_join" ||
-        interaction.customId === "nabor_leave")
+      ["nabor_join", "nabor_leave"].includes(interaction.customId)
     ) {
       return await naborManager.handleNaborInteraction(interaction);
     }
@@ -32,27 +29,22 @@ module.exports = (client) => {
     const guild = interaction.guild;
     if (!guild) return;
 
-    // ОБРАБОТКА НАЖАТИЙ НА КНОПКИ
+    // 2. ОБРАБОТКА НАЖАТИЙ НА КНОПКИ
     if (interaction.isButton()) {
-      const [action, name, stat, memberID] = interaction.customId.split("-");
+      const [action, name, stat, memberID] = interaction.customId.split("_");
 
-      // -----------------------------------------------------------------
-      // КАТЕГОРИЯ 1: Действия, для которых НЕ нужен пользователь (member)
-      // -----------------------------------------------------------------
-
-      // Отмена создания архива (просто удаляем сообщение)
-      if (action === "cancel_create_archive") {
-        console.log("Создание архива отменено.");
+      // Отмена создания архива
+      if (action === "cancel") {
         return await interaction.message
           .delete()
-          .catch((err) => console.log("Не удалось удалить сообщение:", err));
+          .catch((err) => console.error("Ошибка удаления:", err));
       }
 
-      // Создание группы (открытие модалки)
-      if (action === "create_group") {
+      // Создание группы (Модалка)
+      if (action === "group") {
         const modal = new ModalBuilder()
-          .setCustomId(`modal_group`)
-          .setTitle("Создание группа");
+          .setCustomId("modal_group")
+          .setTitle("Создание группы");
 
         const timeInput = new TextInputBuilder()
           .setCustomId("group_time")
@@ -75,21 +67,20 @@ module.exports = (client) => {
           .setPlaceholder("Введите код...")
           .setRequired(true);
 
-        const firstRow = new ActionRowBuilder().addComponents(timeInput);
-        const secondRow = new ActionRowBuilder().addComponents(targetInput);
-        const thirdRow = new ActionRowBuilder().addComponents(codeInput);
-
-        modal.addComponents(firstRow, secondRow, thirdRow);
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(timeInput),
+          new ActionRowBuilder().addComponents(targetInput),
+          new ActionRowBuilder().addComponents(codeInput),
+        );
 
         return await interaction.showModal(modal);
       }
 
-      // КНОПКА СОЗДАНИЯ КАПТА
-      if (action === "create_capt") {
+      // Создание капта (Модалка)
+      if (action === "capt") {
         const modal = new ModalBuilder()
-          .setCustomId(`modal_capt`)
-          .setTitle("Создание реги на капт");
-
+          .setCustomId("modal_capt")
+          .setTitle("Создание регистрации на капт");
         const timeInput = new TextInputBuilder()
           .setCustomId("capt_time")
           .setLabel("Время проведения")
@@ -97,23 +88,20 @@ module.exports = (client) => {
           .setPlaceholder("Например: 18:00 или 29.08.2026 18:00")
           .setRequired(true);
 
-        const firstRow = new ActionRowBuilder().addComponents(timeInput);
-        modal.addComponents(firstRow);
-
+        modal.addComponents(new ActionRowBuilder().addComponents(timeInput));
         return await interaction.showModal(modal);
       }
 
-      // -----------------------------------------------------------------
-      // КАТЕГОРИЯ 2: Действия, где пользователь (member) ОБЯЗАТЕЛЕН
-      // -----------------------------------------------------------------
+      // Действия создания архива по кнопке из логов ролей
+      if (action === "create" || action === "cancelcreate") {
+        const targetMemberID = name; // В данном случае во вторых кнопках передается ID
+        if (action === "cancelcreate") {
+          return await interaction.message.delete().catch(() => {});
+        }
 
-      // Создание архива (перенесли fetch внутрь, чтобы не тормозить модалки)
-      if (action === "create_archive") {
-        // Запрашиваем пользователя только здесь
-        const member = memberID
-          ? await guild.members.fetch(memberID).catch(() => null)
+        const member = targetMemberID
+          ? await guild.members.fetch(targetMemberID).catch(() => null)
           : null;
-
         if (!member) {
           return interaction.reply({
             content: "Пользователь не найден.",
@@ -121,22 +109,15 @@ module.exports = (client) => {
           });
         }
 
-        await interaction.message
-          .delete()
-          .catch((err) => console.log("Не удалось удалить сообщение:", err));
-
-        return await createChannel(interaction, {
-          channelName: `archive ${name} ${stat}`,
-          member,
-        });
+        await interaction.message.delete().catch(() => {});
+        return await createChannel(interaction, { channelName: stat, member }); // В stat передается сгенерированное имя
       }
     }
 
-    // ОБРАБОТКА МОДАЛЬНЫХ ОКОН
+    // 3. ОБРАБОТКА МОДАЛЬНЫХ ОКНО
     if (interaction.isModalSubmit()) {
       const modalId = interaction.customId;
 
-      // Модалка группы
       if (modalId === "modal_group") {
         const timeInput = interaction.fields
           .getTextInputValue("group_time")
@@ -145,7 +126,6 @@ module.exports = (client) => {
         const code = interaction.fields.getTextInputValue("group_code");
 
         const parsedDate = parseDateTime(timeInput);
-
         if (!parsedDate || isNaN(parsedDate.getTime())) {
           return await interaction.reply({
             content:
@@ -157,96 +137,70 @@ module.exports = (client) => {
         const discordTimestamp = getDiscordTimestamp(parsedDate);
         const discordTimestampWith5Min = getDiscordTimestamp(parsedDate, 300);
 
-        // МЕНЯЕМ МЕСТАМИ: Сначала отвечаем Discord, чтобы уложиться в 3 секунды!
         await interaction
           .reply({
             content: `Группа создана!\nВремя: ${discordTimestamp}\nЦель: ${target}\nКод: ${code}`,
             flags: MessageFlags.Ephemeral,
           })
-          .catch((err) =>
-            console.error("Не удалось ответить на модалку:", err),
-          );
+          .catch(console.error);
 
-        // Теперь бот может спокойно выполнять долгие сетевые запросы в фоне
         try {
           const pingChannelId = process.env.PING_CHANNEL_ID;
           const mentionedRoleId = process.env.MENTIONED_ROLE;
-
-          if (!pingChannelId) {
+          if (!pingChannelId)
             return console.log(
               "Ошибка: В файле .env не указан PING_CHANNEL_ID",
             );
-          }
 
           const pingChannel =
             interaction.client.channels.cache.get(pingChannelId) ||
             (await interaction.client.channels
               .fetch(pingChannelId)
               .catch(() => null));
-
-          if (!pingChannel) {
+          if (!pingChannel)
             return console.log(
               `Ошибка: Канал с ID ${pingChannelId} не найден.`,
             );
-          }
 
           const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : "";
+          const msgContent = `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``;
 
-          // Отправляем сообщения (также можно объединить в один send, чтобы не спамить API)
-          await pingChannel.send(
-            `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
-          );
-          await pingChannel.send(
-            `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
-          );
-          await pingChannel.send(
-            `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``,
-          );
+          // Вместо спама тремя сообщениями отправляем одно красивое с тремя пингами внутри (или дублируем текст в одном)
+          await pingChannel.send(`${msgContent}\n${msgContent}\n${msgContent}`);
         } catch (error) {
           console.error("Не удалось отправить сообщения в пинг-канал:", error);
         }
-
         return;
       }
 
-      // Модалка капта
-      if (modalId.startsWith("modal_capt")) {
+      if (modalId === "modal_capt") {
         const timeInput = interaction.fields
           .getTextInputValue("capt_time")
           .trim();
-
         const parsedDate = parseDateTime(timeInput);
 
         if (!parsedDate || isNaN(parsedDate.getTime())) {
           return await interaction.reply({
             content:
-              "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ` (например, `29.08.2026 20:30`).",
+              "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.",
             flags: MessageFlags.Ephemeral,
           });
         }
 
         const discordTimestamp = getDiscordTimestamp(parsedDate);
 
-        // 1. СНАЧАЛА ОТВЕЧАЕМ ДИСКОРДУ, чтобы уложиться в 3 секунды
         await interaction
           .reply({
             content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
             flags: MessageFlags.Ephemeral,
           })
-          .catch((err) =>
-            console.error("Не удалось ответить на модалку капта:", err),
-          );
+          .catch(console.error);
 
-        // 2. ТЕПЕРЬ СПОКОЙНО ВЫПОЛНЯЕМ ДОЛГУЮ СЕТЕВУЮ ОПЕРАЦИЮ В ФОНЕ
         try {
           await naborManager.sendNabor(interaction, discordTimestamp);
         } catch (error) {
-          console.error(
-            "Ошибка при отправке набора через naborManager:",
-            error,
-          );
+          console.error("Ошибка при отправке набора:", error);
         }
-
         return;
       }
     }
