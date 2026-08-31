@@ -3,178 +3,168 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  MessageFlags,
+  ComponentType,
+  SectionBuilder, // Используется для создания красивых блоков-контейнеров
+  SeparatorBuilder, // Новый компонент для красивых разделительных линий
 } = require("discord.js");
 
-const activeNabors = new Map();
-const MAX_MAIN_SEATS = 20;
-
-function createNaborEmbed(time, mainList, reserveList, leftList = []) {
-  const embed = new EmbedBuilder()
-    .setTitle("📢 Сбор на капт!")
-    .setDescription(
-      `**Время проведения:** ${time}\n\nНажимайте кнопки ниже, чтобы записаться или выписаться.`,
-    )
-    .setColor("#2f3136")
-    .setTimestamp();
-
-  embed.addFields({
-    name: `👥 Основной состав (${mainList.length}/${MAX_MAIN_SEATS})`,
-    value:
-      mainList.length > 0
-        ? mainList.map((id, i) => `${i + 1}. <@${id}>`).join("\n")
-        : "_Список пуст_",
-  });
-
-  if (reserveList.length > 0) {
-    embed.addFields({
-      name: `⏳ Резерв (${reserveList.length})`,
-      value: reserveList.map((id, i) => `${i + 1}. <@${id}>`).join("\n"),
-    });
-  }
-
-  if (leftList.length > 0) {
-    embed.addFields({
-      name: `🚪 Покинули набор (${leftList.length})`,
-      value: leftList.map((id, i) => `${i + 1}. <@${id}>`).join("\n"),
-    });
-  }
-
-  return embed;
-}
-
-function createNaborButtons() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("nabor_join")
-      .setLabel("Присоединиться")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("nabor_leave")
-      .setLabel("Выйти")
-      .setStyle(ButtonStyle.Danger),
-  );
-}
-
 module.exports = {
-  async sendNabor(interaction, time) {
-    const plusChannelId = process.env.PLUS_CHANNEL_ID;
-    const mentionedRoleId = process.env.MENTIONED_ROLE;
+  async sendNabor(interaction, discordTimestamp) {
+    // Начальные пустые списки участников (хранятся в замыкании для этого конкретного сбора)
+    const mainList = [];
+    const reserveList = [];
+    const leftList = [];
 
-    if (!plusChannelId)
-      return console.error("Ошибка: В .env не указан PLUS_CHANNEL_ID");
+    // Функция генерации контента (инкапсулирует логику красивого отображения)
+    function generateNaborMessage() {
+      // 1. Создаем чистый, премиальный Embed без визуального мусора
+      const embed = new EmbedBuilder()
+        .setColor("#2b2d31") // Трендовый "невидимый" цвет Discord
+        .setTitle("⚔️ Сбор на Капт")
+        .setDescription(
+          `**Время проведения:** ${discordTimestamp}\n\n*Нажимайте кнопки ниже, чтобы управлять своим участием.*`,
+        )
+        .setTimestamp();
 
-    const channel =
-      interaction.client.channels.cache.get(plusChannelId) ||
-      (await interaction.client.channels
-        .fetch(plusChannelId)
-        .catch(() => null));
-    if (!channel)
-      return console.error(`Ошибка: Канал ${plusChannelId} не найден.`);
+      // Наполнение основного состава (Максимум 20)
+      const mainValue =
+        mainList.length > 0
+          ? mainList.map((id, index) => `\`${index + 1}.\` <@${id}>`).join("\n")
+          : "*Пока никого нет*";
+      embed.addFields({
+        name: `🟢 Основной состав (${mainList.length}/20)`,
+        value: mainValue,
+        inline: false,
+      });
 
-    const roleMention = mentionedRoleId
-      ? `<@&${mentionedRoleId}>`
-      : "@everyone";
-    const msg = await channel.send({
-      content: roleMention,
-      embeds: [createNaborEmbed(time, [], [], [])],
-      components: [createNaborButtons()],
+      // Наполнение резерва
+      const reserveValue =
+        reserveList.length > 0
+          ? reserveList
+              .map((id, index) => `\`${index + 1}.\` <@${id}>`)
+              .join("\n")
+          : "*Пусто*";
+      embed.addFields({
+        name: "⏳ Резерв",
+        value: reserveValue,
+        inline: false,
+      });
+
+      // Условие из ТЗ: Категория покинувших показывается ТОЛЬКО если там кто-то есть
+      if (leftList.length > 0) {
+        const leftValue = leftList.map((id) => `<@${id}>`).join(", ");
+        embed.addFields({
+          name: "🗑️ Покинули сбор",
+          value: leftValue,
+          inline: false,
+        });
+      }
+
+      // 2. Строим компоненты нового поколения (Components v2)
+      // Оборачиваем кнопки в Section (Container), чтобы отделить интерфейс от текста
+      const section = new SectionBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("nabor_join")
+          .setLabel("Присоединиться")
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId("nabor_leave")
+          .setLabel("Выйти")
+          .setStyle(ButtonStyle.Danger),
+      );
+
+      // Добавляем красивую разделительную линию (Separator) перед кнопками
+      const separator = new SeparatorBuilder();
+
+      // Возвращаем структуру для отправки/обновления
+      return {
+        embeds: [embed],
+        components: [separator, section], // Передаем разделитель и контейнер с кнопками
+      };
+    }
+
+    // Первичная отправка сообщения в канал
+    const message = await interaction.channel.send(generateNaborMessage());
+
+    // Создаем производительный коллектор без нагрузки на БД
+    const collector = message.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 7200000, // Время жизни сбора (например, 2 часа)
     });
 
-    activeNabors.set(msg.id, {
-      time,
-      mainList: [],
-      reserveList: [],
-      leftList: [],
+    collector.on("collect", async (btnInteraction) => {
+      const userId = btnInteraction.user.id;
+
+      // Вспомогательная функция для полной очистки игрока из текущих списков
+      const removeFromLists = (id) => {
+        const mIdx = mainList.indexOf(id);
+        if (mIdx > -1) mainList.splice(mIdx, 1);
+        const rIdx = reserveList.indexOf(id);
+        if (rIdx > -1) reserveList.splice(rIdx, 1);
+        const lIdx = leftList.indexOf(id);
+        if (lIdx > -1) leftList.splice(lIdx, 1);
+      };
+
+      // ЛОГИКА НАЖАТИЯ: ПРИСОЕДИНИТЬСЯ
+      if (btnInteraction.customId === "nabor_join") {
+        if (mainList.includes(userId) || reserveList.includes(userId)) {
+          return btnInteraction.reply({
+            content: "❌ Вы уже находитесь в списках этого сбора!",
+            ephemeral: true,
+          });
+        }
+
+        removeFromLists(userId);
+
+        if (mainList.length < 20) {
+          mainList.push(userId);
+        } else {
+          reserveList.push(userId);
+        }
+      }
+
+      // ЛОГИКА НАЖАТИЯ: ВЫЙТИ
+      else if (btnInteraction.customId === "nabor_leave") {
+        if (!mainList.includes(userId) && !reserveList.includes(userId)) {
+          return btnInteraction.reply({
+            content: "❌ Вас изначально не было в списках участников.",
+            ephemeral: true,
+          });
+        }
+
+        removeFromLists(userId);
+        leftList.push(userId);
+
+        // Автобаланс: если освободилось место в основе, двигаем человека из резерва вперед
+        if (mainList.length < 20 && reserveList.length > 0) {
+          const promotedUser = reserveList.shift();
+          mainList.push(promotedUser);
+        }
+      }
+
+      // Обновляем сообщение актуальными данными
+      await btnInteraction.update(generateNaborMessage()).catch(console.error);
     });
 
-    // Оптимизация: Отправляем три пинга одной строкой, а не тремя запросами к API
-    const followUpText = `${roleMention} рега выше`;
-    await channel
-      .send({ content: `${followUpText}\n${followUpText}\n${followUpText}` })
-      .catch(console.error);
-  },
+    // Обработка завершения сбора (выключение кнопок)
+    collector.on("end", () => {
+      const disabledSeparator = new SeparatorBuilder();
+      const disabledSection = new SectionBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("nabor_join")
+          .setLabel("Сбор завершен")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true),
+        new ButtonBuilder()
+          .setCustomId("nabor_leave")
+          .setLabel("Выйти")
+          .setStyle(ButtonStyle.Danger)
+          .setDisabled(true),
+      );
 
-  async handleNaborInteraction(interaction) {
-    const { customId, user, message } = interaction;
-    if (!activeNabors.has(message.id)) {
-      return interaction.reply({
-        content: "❌ Этот набор устарел или бот был перезапущен.",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    const nabor = activeNabors.get(message.id);
-    const userId = user.id;
-    if (!nabor.leftList) nabor.leftList = [];
-
-    if (customId === "nabor_join") {
-      if (
-        nabor.mainList.includes(userId) ||
-        nabor.reserveList.includes(userId)
-      ) {
-        return interaction.reply({
-          content: "❌ Вы уже записаны!",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      const inLeft = nabor.leftList.indexOf(userId);
-      if (inLeft !== -1) nabor.leftList.splice(inLeft, 1);
-
-      if (nabor.mainList.length < MAX_MAIN_SEATS) {
-        nabor.mainList.push(userId);
-        await interaction.reply({
-          content: "✅ Вы записаны в **основной состав**!",
-          flags: MessageFlags.Ephemeral,
-        });
-      } else {
-        nabor.reserveList.push(userId);
-        await interaction.reply({
-          content: "⚠️ Мест нет. Вы добавлены в **резерв**.",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-    }
-
-    if (customId === "nabor_leave") {
-      const inMain = nabor.mainList.indexOf(userId);
-      const inReserve = nabor.reserveList.indexOf(userId);
-
-      if (inMain === -1 && inReserve === -1) {
-        return interaction.reply({
-          content: "❌ Вас нет в списках.",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      if (inMain !== -1) {
-        nabor.mainList.splice(inMain, 1);
-        if (nabor.reserveList.length > 0)
-          nabor.mainList.push(nabor.reserveList.shift());
-      } else {
-        nabor.reserveList.splice(inReserve, 1);
-      }
-
-      if (!nabor.leftList.includes(userId)) nabor.leftList.push(userId);
-      await interaction.reply({
-        content: "ℹ️ Вы успешно выписались.",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    activeNabors.set(message.id, nabor);
-    await message
-      .edit({
-        embeds: [
-          createNaborEmbed(
-            nabor.time,
-            nabor.mainList,
-            nabor.reserveList,
-            nabor.leftList,
-          ),
-        ],
-      })
-      .catch(console.error);
+      message
+        .edit({ components: [disabledSeparator, disabledSection] })
+        .catch(() => {});
+    });
   },
 };

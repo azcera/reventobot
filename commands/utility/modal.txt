@@ -1,0 +1,31 @@
+if (modalId === "modal_capt") {
+        const timeInput = interaction.fields
+          .getTextInputValue("capt_time")
+          .trim();
+        const parsedDate = parseDateTime(timeInput);
+
+        if (!parsedDate || isNaN(parsedDate.getTime())) {
+          return await interaction.reply({
+            content:
+              "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const discordTimestamp = getDiscordTimestamp(parsedDate);
+
+        await interaction
+          .reply({
+            content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
+            flags: MessageFlags.Ephemeral,
+          })
+          .catch(console.error);
+
+        try {
+          await naborManager.sendNabor(interaction, discordTimestamp);
+        } catch (error) {
+          console.error("Ошибка при отправке набора:", error);
+        }
+        return;
+      }
+
