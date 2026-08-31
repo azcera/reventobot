@@ -1,5 +1,5 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const { navigationButttons } = require("../../config.json");
+const { navigationButttons } = require("../../../config.json");
 
 function getComponents() {
   const rows = [];

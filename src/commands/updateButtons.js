@@ -1,4 +1,4 @@
-const { messagesLinks } = require("../config.json");
+const { messagesLinks } = require("../../config.json");
 const { getComponents } = require("./utility/createButtons");
 
 async function editMessageByLink(client, messageLink) {

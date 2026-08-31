@@ -5,7 +5,7 @@ const {
   roleMention,
 } = require("discord.js");
 const { splitName } = require("../commands/utility/splitName");
-const { adminRoles } = require("../config.json");
+const { adminRoles } = require("../../config.json");
 require("dotenv").config();
 
 let handleMakeAdmin = async (oldMember, newMember) => {
