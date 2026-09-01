@@ -9,6 +9,7 @@ const {
     MessageFlags,
     ContainerBuilder,
     TextDisplayBuilder,
+    LabelBuilder,
     SeparatorBuilder,
 } = require("discord.js");
 const db = require("../../commands/utility/db.js");

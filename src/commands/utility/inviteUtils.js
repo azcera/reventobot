@@ -9,7 +9,7 @@ const {
     MessageFlags,
 } = require("discord.js");
 
-const ADMIN_ROLES = require("../../../config.json").adminRoles;
+const ADMIN_ROLES = process.env.ADMIN_ROLES.split(',');
 
 // Проверка, является ли пользователь администратором заявок
 function isApplicationMod(member) {

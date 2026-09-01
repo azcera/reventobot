@@ -9,7 +9,7 @@ const {
 } = require("discord.js");
 const db = require("../../commands/utility/db.js");
 const { buildContainer } = require("../../commands/utility/inviteUtils");
-const ADMIN_ROLES = require("../../../config.json").adminRoles;
+const ADMIN_ROLES = process.env.ADMIN_ROLES.split(",");
 
 class InviteCandidate {
     async showModal(interaction) {

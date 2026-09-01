@@ -1,6 +1,6 @@
 const { MessageFlags, ChannelType } = require("discord.js");
+const { getNavigationContainer } = require("./getNavigationContainer");
 require("dotenv").config();
-const { getComponents } = require("./createButtons");
 const parentChannelId = process.env.PARENT_CHANNEL_ID;
 
 async function createChannel(interactionOrGuild, { channelName, member }) {
@@ -44,18 +44,21 @@ async function createChannel(interactionOrGuild, { channelName, member }) {
   // 4. Отправляем приветственное сообщение
   await newThread
     .send({
-      content: `<@${member.id}>, это твой личный канал-архив, куда ты можешь отправлять:
-
-**- Откаты с мероприятий
-- Откаты с каптов
-- Заявки на повышение
-- Задавать вопросы хай-составу**
-
-## Зачем отправлять откаты?
-
-Это все нужно для получения TIER, который показывает уровень твоей игры в нашей семье. Ниже ты можешь увидеть кнопки с навигацией, которые помогут тебе быстро найти нужный контент.`,
       allowedMentions: { users: [member.id] },
-      components: getComponents(),
+      flags: [MessageFlags.IsComponentsV2],
+      components: [
+        getNavigationContainer(
+          `## <@${member.id}>\n` +
+            `### Это твой личный канал-архив, куда ты можешь отправлять:\n` +
+            `> Откаты с мероприятий\n` +
+            `> Откаты с каптов\n` +
+            `> Заявки на повышение\n` +
+            `> Задавать вопросы хай-составу\n` +
+            `## Зачем отправлять откаты?\n` +
+            `Это все нужно для получения TIER, который показывает уровень твоей игры в нашей семье. Ниже ты можешь увидеть кнопки с навигацией, которые помогут тебе быстро найти нужный контент.`,
+          false,
+        ),
+      ],
     })
     .catch(() => {});
 

@@ -5,7 +5,7 @@ const {
   roleMention,
 } = require("discord.js");
 
-const { adminRoles } = require("../../config.json");
+const ADMIN_ROLES = process.env.ADMIN_ROLES.split(",");
 require("dotenv").config();
 
 function splitName(nickname) {
@@ -24,10 +24,10 @@ function splitName(nickname) {
 
 let handleMakeAdmin = async (oldMember, newMember) => {
   const oldHasAdmin = oldMember.roles.cache.filter((role) =>
-    adminRoles.includes(role.id),
+    ADMIN_ROLES.includes(role.id),
   );
   const newHasAdmin = newMember.roles.cache.filter((role) =>
-    adminRoles.includes(role.id),
+    ADMIN_ROLES.includes(role.id),
   );
   const addedRole = newHasAdmin.find((role) => !oldHasAdmin.has(role.id));
   const removedRole = oldHasAdmin.find((role) => !newHasAdmin.has(role.id));
@@ -39,11 +39,11 @@ let handleMakeAdmin = async (oldMember, newMember) => {
   let newPrefix = "";
 
   if (addedRole) {
-    if (addedRole.id === adminRoles[0]) {
+    if (addedRole.id === ADMIN_ROLES[0]) {
       newPrefix = "[𝐃𝐞𝐩] "; // dep
-    } else if (addedRole.id === adminRoles[1]) {
+    } else if (addedRole.id === ADMIN_ROLES[1]) {
       newPrefix = "[𝐇𝐢𝐠𝐡] "; // high
-    } else if (addedRole.id === adminRoles[2]) {
+    } else if (addedRole.id === ADMIN_ROLES[2]) {
       newPrefix = "[𝐑𝐞𝐜] "; // recruit
     }
   }
@@ -83,7 +83,7 @@ let handleMakeRevento = async (oldMember, newMember, channelName) => {
 
       if (messagesChannel && messagesChannel.isTextBased()) {
         messagesChannel.send({
-          content: `${adminRoles.map((e) => roleMention(e))} Создать для <@${newMember.id}> архив - \`${channelName}\`?`,
+          content: `${ADMIN_ROLES.map((e) => roleMention(e))} Создать для <@${newMember.id}> архив - \`${channelName}\`?`,
           components: [row],
         });
       }
@@ -121,18 +121,18 @@ module.exports = (client) => {
     try {
       await handleMakeAdmin(oldMember, newMember);
     } catch (error) {
-      console.error("Ошибка MakeAdmin: ", error);
+      console.error("❌ Ошибка MakeAdmin: ", error);
     }
 
     try {
       await handleMakeRevento(oldMember, newMember, channelName);
     } catch (error) {
-      console.error("Ошибка MakeRevento: ", error);
+      console.error("❌ Ошибка MakeRevento: ", error);
     }
     try {
       await handleNameEdit(oldMember, newMember, channelName);
     } catch (error) {
-      console.error("Ошибка NameEdit: ", error);
+      console.error("❌ Ошибка NameEdit: ", error);
     }
   });
 };

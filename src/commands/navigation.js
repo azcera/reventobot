@@ -1,5 +1,5 @@
-const { roleMention } = require("discord.js");
-const { getComponents } = require("./utility/createButtons");
+const { MessageFlags } = require("discord.js");
+const { getNavigationContainer } = require("./utility/getNavigationContainer");
 require("dotenv").config();
 
 module.exports = {
@@ -11,9 +11,8 @@ module.exports = {
       .catch((err) => console.log("Не удалось удалить сообщение:", err));
 
     return await message.channel.send({
-      content: `||${roleMention(process.env.MENTIONED_ROLE)}||`,
-      allowedMentions: { roles: [process.env.MENTIONED_ROLE] },
-      components: getComponents(),
+      flags: [MessageFlags.IsComponentsV2],
+      components: [getNavigationContainer(null, false)],
     });
   },
 };
