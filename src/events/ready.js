@@ -99,6 +99,13 @@ module.exports = (client) => {
           }
         }
 
+        if (/нейтрал/i.test(attacker) || /нейтрал/i.test(defender)) {
+          console.log(
+            `[Telegram] Капт против Нейтрала обнаружен. Пропускаю сообщение...`,
+          );
+          return;
+        }
+
         const startTime = (
           text.match(/Начало:\s*([^\n]+)/i)?.[1] || "Не указано"
         ).trim();
