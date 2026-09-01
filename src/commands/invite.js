@@ -8,6 +8,9 @@ const {
   MediaGalleryItemBuilder,
   AttachmentBuilder,
   SeparatorSpacingSize,
+  SectionBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } = require("discord.js");
 const path = require("path");
 
@@ -61,6 +64,19 @@ module.exports = {
     const descriptionText5 = new TextDisplayBuilder().setContent(
       "```css\n1. Поля будут заполнены некорректно\n2. Форма подачи заявки будет не соблюдена\n3. В заявке присутствует обман в любом виде\n4. На момент принятия заявки ваш никнейм не будет соответствовать форме (Имя | Статик)```",
     );
+
+    const inviteButton = new SectionBuilder()
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          '## 😎 Оставить заявку на вступление\nДля этого нажмите кнопку "Подать заявку" справа и заполните необходимые данные.',
+        ),
+      )
+      .setButtonAccessory(
+        new ButtonBuilder()
+          .setCustomId("open_invite_modal")
+          .setLabel("😎 Подать заявку")
+          .setStyle(ButtonStyle.Primary),
+      );
 
     const container = new ContainerBuilder()
       .addMediaGalleryComponents(inviteImage)
@@ -124,7 +140,11 @@ module.exports = {
         new TextDisplayBuilder().setContent(
           "Чем больше информации вы предоставите в заявке - тем больше шансов на ее одобрение.",
         ),
-      );
+      )
+      .addSeparatorComponents(
+        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
+      )
+      .addSectionComponents(inviteButton);
     await message.channel.send({
       flags: MessageFlags.IsComponentsV2,
       components: [container],

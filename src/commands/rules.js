@@ -7,7 +7,6 @@ const {
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   AttachmentBuilder,
-  SeparatorSpacingSize,
 } = require("discord.js");
 const path = require("path");
 

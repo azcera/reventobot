@@ -9,7 +9,7 @@ const {
 } = require("discord.js");
 const {
   parseDateTime,
-  getDiscordTimestamp,
+  getMskTimeString,
 } = require("../../commands/utility/parseDateTime");
 
 const { options, optionsMap } = require("../../commands/utility/groupOptions");
@@ -25,7 +25,7 @@ async function showGroupSelect(interaction) {
   await interaction.reply({
     content: "Пожалуйста, выберите цель создания группы из списка ниже:",
     components: [row],
-    flags: [MessageFlags.Ephemeral]
+    flags: [MessageFlags.Ephemeral],
   });
 }
 
@@ -43,7 +43,9 @@ async function showGroupModal(interaction) {
     .setCustomId("group_time")
     .setLabel("Время проведения")
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder("Например: 18:00 или 29.08.2026 18:00 (указывать именно начало МП, время расчитается само)")
+    .setPlaceholder(
+      "Например: 18:00 или 29.08.2026 18:00 (указывать именно начало МП, время расчитается само)",
+    )
     .setRequired(true);
 
   const targetInput = new TextInputBuilder()
@@ -97,12 +99,13 @@ async function submitGroupModal(interaction) {
     });
   }
 
-  const discordTimestamp = getDiscordTimestamp(parsedDate, -600);
-  const discordTimestampWith5Min = getDiscordTimestamp(parsedDate, -300);
+  // Получаем статичный текст времени по МСК (например, "18:00" и "17:55")
+  const mskTimeStr = getMskTimeString(parsedDate, -600);
+  const mskTimeWith5MinStr = getMskTimeString(parsedDate, -300);
 
   await interaction
     .reply({
-      content: `Группа создана!\nВремя: ${discordTimestamp}\nЦель: ${target}\nКод: ${code}`,
+      content: `Группа создана!\nВремя: ${mskTimeStr} МСК\nЦель: ${target}\nКод: ${code}`,
       flags: MessageFlags.Ephemeral,
     })
     .catch(console.error);
@@ -123,7 +126,9 @@ async function submitGroupModal(interaction) {
       return console.log(`Ошибка: Канал с ID ${pingChannelId} не найден.`);
 
     const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : "";
-    const msgContent = `# 📢 ${roleMention} Групп на \`${target}\` в ${discordTimestamp}, проверка явки в ${discordTimestampWith5Min}. 🔑 Код группы: \`${code}\``;
+
+    // В тексте сообщения теперь используются обычные строки времени
+    const msgContent = `# 📢 ${roleMention} Групп на \`${target}\` в \`${mskTimeStr}\`, проверка явки в \`${mskTimeWith5MinStr}\`. 🔑 Код группы: \`${code}\``;
 
     for (let i = 0; i < 3; i++) {
       await pingChannel.send(msgContent);

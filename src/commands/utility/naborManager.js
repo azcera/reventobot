@@ -1,5 +1,4 @@
 const {
-  SectionBuilder,
   MessageFlags,
   ActionRowBuilder,
   TextDisplayBuilder,
@@ -10,27 +9,52 @@ const {
 } = require("discord.js");
 require("dotenv").config();
 
+const { Pool } = require("pg");
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Добавляем новые колонки target и max_main в БД для старых и новых наборов
+async function initDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS active_captures (
+        message_id TEXT PRIMARY KEY,
+        discord_timestamp TEXT,
+        main_list JSONB,
+        reserve_list JSONB,
+        left_list JSONB,
+        target TEXT,
+        max_main INTEGER DEFAULT 20
+      );
+    `);
+  } catch (err) {
+    console.error("Ошибка при инициализации базы данных PostgreSQL:", err);
+  }
+}
+initDatabase();
+
 const PLUS_CHANNEL = process.env.PLUS_CHANNEL_ID;
-const MAX_MAIN = 20;
 
-const activeCaptures = new Map();
-
-// Вспомогательная функция для сборки компонентов сообщения на основе списков
 function buildCaptureMessage(
   discordTimestamp,
   mainList,
   reserveList,
   leftList,
+  target,
+  maxMain,
 ) {
-  const title = new TextDisplayBuilder().setContent("## 📢 Рега на капт!");
+  const title = new TextDisplayBuilder().setContent(
+    `## 📢 Рега на ${target ?? "капт"}!`,
+  );
   const time = new TextDisplayBuilder().setContent(
     "## Время проведения: " + discordTimestamp,
   );
+
   const helpText = new TextDisplayBuilder().setContent(
     "-# Нажмите на кнопку ниже, чтобы записаться на капт.",
   );
 
-  // Формируем текст списков с упоминаниями пользователей
   const mainPlayersText =
     mainList.length > 0
       ? mainList.map((id, index) => `${index + 1}. <@${id}>`).join("\n")
@@ -44,8 +68,9 @@ function buildCaptureMessage(
       ? leftList.map((id, index) => `• <@${id}>`).join("\n")
       : "Пусто";
 
+  // Используем maxMain вместо статичной переменной
   const mainTitle = new TextDisplayBuilder().setContent(
-    `### 👥 Основной состав (${mainList.length}/${MAX_MAIN})\n${mainPlayersText}`,
+    `### 👥 Основной состав (${mainList.length}/${maxMain})\n${mainPlayersText}`,
   );
   const reserveTitle = new TextDisplayBuilder().setContent(
     `### 🤝 Резерв (${reserveList.length})\n${reservePlayersText}`,
@@ -54,8 +79,11 @@ function buildCaptureMessage(
     `### 🚪 Покинули набор (${leftList.length})\n${leftPlayersText}`,
   );
 
-  const containerComponent = new ContainerBuilder()
-    .addTextDisplayComponents(title, time, helpText)
+  const containerComponent = new ContainerBuilder();
+
+  containerComponent.addTextDisplayComponents(title, time, helpText);
+
+  containerComponent
     .addSeparatorComponents(new SeparatorBuilder())
     .addTextDisplayComponents(mainTitle);
 
@@ -89,8 +117,8 @@ function buildCaptureMessage(
 }
 
 module.exports = {
-  // 1. Создание и отправка первоначального набора
-  async sendNabor(interaction, discordTimestamp) {
+  // Принимаем target и maxMain из модального окна
+  async sendNabor(interaction, discordTimestamp, target = null, maxMain = 20) {
     const guild = interaction.guild;
     const channel = guild.channels.cache.get(PLUS_CHANNEL);
 
@@ -103,6 +131,8 @@ module.exports = {
       mainList,
       reserveList,
       leftList,
+      target,
+      maxMain,
     );
     const message = await channel.send(messageData);
     for (let i = 0; i < 3; i++) {
@@ -110,16 +140,26 @@ module.exports = {
         content: `<@&${process.env.MENTIONED_ROLE}> рега выше`,
       });
     }
-    // Сохраняем состояние для этого конкретного сообщения
-    activeCaptures.set(message.id, {
-      discordTimestamp,
-      mainList,
-      reserveList,
-      leftList,
-    });
+
+    try {
+      await pool.query(
+        `INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, target, max_main)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          message.id,
+          discordTimestamp,
+          JSON.stringify(mainList),
+          JSON.stringify(reserveList),
+          JSON.stringify(leftList),
+          target,
+          maxMain,
+        ],
+      );
+    } catch (err) {
+      console.error("Не удалось сохранить набор в БД:", err);
+    }
   },
 
-  // 2. Обработчик нажатий на кнопки (вызывать из главного файла бота в interactionCreate)
   async handleButton(interaction) {
     if (!interaction.isButton()) return;
     if (
@@ -129,21 +169,36 @@ module.exports = {
       return;
 
     const messageId = interaction.message.id;
-    const captureData = activeCaptures.get(messageId);
 
-    // Если бот перезапускался и память очистилась
-    if (!captureData) {
+    let row;
+    try {
+      const res = await pool.query(
+        "SELECT * FROM active_captures WHERE message_id = $1",
+        [messageId],
+      );
+      row = res.rows[0]; // Получаем первую строку результата
+    } catch (err) {
+      console.error("Ошибка при поиске набора в БД:", err);
+    }
+
+    if (!row) {
       return interaction.reply({
         content: "❌ Данная регистрация устарела или неактивна.",
         flags: MessageFlags.Ephemeral,
       });
     }
 
+    const discordTimestamp = row.discord_timestamp;
+    const target = row.target;
+    const maxMain = row.max_main || 20; // Динамический лимит из БД
+
+    let mainList = row.main_list || [];
+    let reserveList = row.reserve_list || [];
+    let leftList = row.left_list || [];
+
     const userId = interaction.user.id;
-    let { discordTimestamp, mainList, reserveList, leftList } = captureData;
 
     if (interaction.customId === "capt_join") {
-      // Проверяем, нет ли уже игрока в списках
       if (mainList.includes(userId) || reserveList.includes(userId)) {
         return interaction.reply({
           content: "Вы уже записаны на капт!",
@@ -151,12 +206,11 @@ module.exports = {
         });
       }
 
-      // Удаляем из списка вышедших, если он там был
       const leftIndex = leftList.indexOf(userId);
       if (leftIndex !== -1) leftList.splice(leftIndex, 1);
 
-      // Добавляем в основу или резерв
-      if (mainList.length < MAX_MAIN) {
+      // Проверка по динамическому лимиту maxMain
+      if (mainList.length < maxMain) {
         mainList.push(userId);
       } else {
         reserveList.push(userId);
@@ -165,7 +219,6 @@ module.exports = {
       const mainIndex = mainList.indexOf(userId);
       const reserveIndex = reserveList.indexOf(userId);
 
-      // Если игрока вообще нигде нет
       if (mainIndex === -1 && reserveIndex === -1) {
         return interaction.reply({
           content: "Вас и так нет в списках.",
@@ -173,41 +226,49 @@ module.exports = {
         });
       }
 
-      // Если выходим из основы
       if (mainIndex !== -1) {
         mainList.splice(mainIndex, 1);
 
-        // Передвигаем первого человека из резерва в основу (опционально, но логично)
         if (reserveList.length > 0) {
           const movingPlayer = reserveList.shift();
           mainList.push(movingPlayer);
         }
-      }
-      // Если выходим из резерва
-      else if (reserveIndex !== -1) {
+      } else if (reserveIndex !== -1) {
         reserveList.splice(reserveIndex, 1);
       }
 
-      // Добавляем в список вышедших (если еще не там)
       if (!leftList.includes(userId)) {
         leftList.push(userId);
       }
     }
 
-    // Сохраняем обновленные данные обратно в Map
-    activeCaptures.set(messageId, {
-      discordTimestamp,
-      mainList,
-      reserveList,
-      leftList,
-    });
+    try {
+      await pool.query(
+        `UPDATE active_captures 
+         SET main_list = $1, reserve_list = $2, left_list = $3
+         WHERE message_id = $4`,
+        [
+          JSON.stringify(mainList),
+          JSON.stringify(reserveList),
+          JSON.stringify(leftList),
+          messageId,
+        ],
+      );
+    } catch (err) {
+      console.error("Не удалось обновить данные набора в БД:", err);
+      return interaction.reply({
+        content: "❌ Произошла ошибка базы данных при сохранении.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
 
-    // Генерируем новые компоненты и обновляем сообщение бота
     const updatedMessageData = buildCaptureMessage(
       discordTimestamp,
       mainList,
       reserveList,
       leftList,
+      target,
+      maxMain,
     );
     await interaction.update(updatedMessageData);
   },

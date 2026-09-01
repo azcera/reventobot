@@ -9,6 +9,8 @@ const {
   TextDisplayBuilder,
 } = require("discord.js");
 
+const path = require("path");
+
 module.exports = {
   name: "panel",
   description: "Создает кнопки админ-панели",
@@ -18,6 +20,18 @@ module.exports = {
         .reply("У вас нет прав для использования этой команды!")
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
+
+    const imagePath = path.join(__dirname, "..", "images", "panel.png");
+
+    const localImage = new AttachmentBuilder(imagePath, {
+      name: "panel.png",
+    });
+
+    const inviteImage = new MediaGalleryBuilder().addItems(
+      new MediaGalleryItemBuilder()
+        .setURL("attachment://panel.png")
+        .setDescription("REVENTO"),
+    );
 
     const titleText = new TextDisplayBuilder().setContent(
       "## 📌 Админ-панель\nДля взаимодействия с ботом используйте кнопки ниже.",
@@ -35,14 +49,32 @@ module.exports = {
           .setLabel("📢 Создать групп")
           .setStyle(ButtonStyle.Primary),
       );
+
+    // Старая кнопка (Обычный капт)
     const captSection = new SectionBuilder()
       .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent("⚔️ ╎ **Создать регу на капт**"),
+        new TextDisplayBuilder().setContent(
+          "⚔️ ╎ **Создать обычную регу на капт**",
+        ),
       )
       .setButtonAccessory(
         new ButtonBuilder()
           .setCustomId("capt")
-          .setLabel("⚔️ Создать капт")
+          .setLabel("⚔️ Рега капт")
+          .setStyle(ButtonStyle.Success),
+      );
+
+    // Новая кнопка (Расширенный капт с целью и лимитом мест)
+    const captExtendedSection = new SectionBuilder()
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          "🔥 ╎ **Создать другую регу (МП + Места)**",
+        ),
+      )
+      .setButtonAccessory(
+        new ButtonBuilder()
+          .setCustomId("capt_extended")
+          .setLabel("🔥 Другая рега")
           .setStyle(ButtonStyle.Danger),
       );
 
@@ -64,11 +96,14 @@ module.exports = {
     );
 
     const container = new ContainerBuilder()
+      .addMediaGalleryComponents(inviteImage)
       .addTextDisplayComponents(titleText)
       .addSeparatorComponents(new SeparatorBuilder())
       .addSectionComponents(groupSection)
       .addSeparatorComponents(new SeparatorBuilder())
       .addSectionComponents(captSection)
+      .addSeparatorComponents(new SeparatorBuilder())
+      .addSectionComponents(captExtendedSection)
       .addSeparatorComponents(new SeparatorBuilder())
       .addSectionComponents(moveAllSection)
       .addSeparatorComponents(new SeparatorBuilder())
@@ -77,6 +112,7 @@ module.exports = {
     await message.channel.send({
       flags: MessageFlags.IsComponentsV2,
       components: [container],
+      files: [localImage],
     });
 
     return await message.delete().catch(() => {});

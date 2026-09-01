@@ -3,6 +3,8 @@ const groupInteractions = require("./handlers/groupInteractions");
 const captInteractions = require("./handlers/captInteractions");
 const archiveInteractions = require("./handlers/archiveInteractions");
 const moveAllInteractions = require("./handlers/moveAllInteractions");
+const inviteCandidate = require("./handlers/inviteCandidate");
+const inviteAdmin = require("./handlers/inviteAdmin");
 
 module.exports = (client) => {
   client.on("interactionCreate", async (interaction) => {
@@ -35,14 +37,30 @@ module.exports = (client) => {
       if (customId === "move_all_channel") {
         return await moveAllInteractions.handleMoveAllSelect(interaction);
       }
+      // Перенаправляем на админский модуль управления
+      if (customId.startsWith("invite_select_voice_")) {
+        return await inviteAdmin.handleVoiceSelect(interaction);
+      }
     }
 
     // 3. Обработка кнопок
     if (interaction.isButton()) {
+      // Кнопку открытия формы обрабатывает модуль кандидата
+      if (customId === "open_invite_modal") {
+        return await inviteCandidate.showModal(interaction);
+      }
+      // Админские кнопки управления обрабатывает модуль администратора
+      if (customId.startsWith("invite_")) {
+        return await inviteAdmin.handleButtons(interaction);
+      }
+
       if (customId === "group")
         return await groupInteractions.showGroupSelect(interaction);
       if (customId === "capt")
         return await captInteractions.showCaptModal(interaction);
+      if (interaction.customId === "capt_extended") {
+        await captInteractions.showExtendedCaptModal(interaction);
+      }
       if (customId === "moveall")
         return await moveAllInteractions.showMoveAllSelect(interaction);
       if (customId === "cancel")
@@ -56,11 +74,24 @@ module.exports = (client) => {
 
     // 4. Обработка модальных окон
     if (interaction.isModalSubmit()) {
+      // Анкету кандидата перенаправляем в inviteCandidate
+      if (customId === "invite_modal_submit") {
+        return await inviteCandidate.submitModal(interaction);
+      }
+      // Причину отказа перенаправляем в inviteAdmin
+      if (customId.startsWith("invite_modal_reject_")) {
+        return await inviteAdmin.submitRejectModal(interaction);
+      }
+
       if (customId.startsWith("modal_group_"))
         return await groupInteractions.submitGroupModal(interaction);
 
-      if (customId === "modal_capt")
-        return await captInteractions.submitCaptModal(interaction);
+      if (
+        interaction.customId === "modal_capt_base" ||
+        interaction.customId === "modal_capt_extended"
+      ) {
+        await captInteractions.submitCaptModal(interaction);
+      }
     }
   });
 };

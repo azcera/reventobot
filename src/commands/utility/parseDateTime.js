@@ -32,8 +32,6 @@ function parseDateTime(inputString) {
     return null;
   }
 
-  // 3. Собираем строку в формате, который понимает конструктор Date,
-  // и явно указываем смещение Москвы (+03:00)
   const isoString = `${year}-${month}-${day}T${hours}:${minutes}:00+03:00`;
   const targetDate = new Date(isoString);
 
@@ -45,14 +43,44 @@ function parseDateTime(inputString) {
   return targetDate;
 }
 
-function getDiscordTimestamp(parsedDate, offsetSeconds = 0) {
+// НОВАЯ ФУНКЦИЯ ВМЕСТО getDiscordTimestamp
+function getMskTimeString(parsedDate, offsetSeconds = 0) {
+  // Высчитываем дату с учетом сдвига
   const targetDate = new Date(parsedDate.getTime() + offsetSeconds * 1000);
-  const timestamp = Math.floor(targetDate.getTime() / 1000);
-  const today = new Date();
-  const isToday =
-    targetDate.toLocaleDateString() === today.toLocaleDateString();
-  return `<t:${timestamp}:${isToday ? "t" : "F"}>`;
+
+  // Форматируем строго в часовой пояс Москвы, выводя только часы и минуты
+  return targetDate.toLocaleTimeString("ru-RU", {
+    timeZone: "Europe/Moscow",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-// Экспортируем как объект, чтобы работал импорт: const { parseDateTime } = require(...)
-module.exports = { parseDateTime, getDiscordTimestamp };
+function getDiscordTimestamp(parsedDate) {
+  if (!parsedDate || isNaN(parsedDate.getTime())) return "Неизвестное время";
+
+  // 1. Создаем объект даты, который представляет введенное время в UTC формате
+  const utcYear = parsedDate.getFullYear();
+  const utcMonth = parsedDate.getMonth();
+  const utcDay = parsedDate.getDate();
+  const utcHours = parsedDate.getHours();
+  const utcMinutes = parsedDate.getMinutes();
+
+  const mskUtcTimestamp = Date.UTC(
+    utcYear,
+    utcMonth,
+    utcDay,
+    utcHours,
+    utcMinutes,
+  );
+
+  // 3. Вычитаем 3 часа (3 * 60 * 60 * 1000 мс), чтобы перевести МСК обратно в чистый UTC для Discord
+  const finalTimestampSeconds = Math.floor(
+    (mskUtcTimestamp - 3 * 60 * 60 * 1000) / 1000,
+  );
+
+  // Возвращаем короткий формат времени Discord (например, "18:30")
+  return `<t:${finalTimestampSeconds}:t>`;
+}
+
+module.exports = { parseDateTime, getMskTimeString, getDiscordTimestamp };
