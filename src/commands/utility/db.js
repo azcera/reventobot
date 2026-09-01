@@ -3,16 +3,28 @@ const { Pool } = require("pg");
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
+    // Рекомендуется добавить таймаут простоя, чтобы пул сам чистил старые коннекты:
+    idleTimeoutMillis: 30000,
 });
 
-pool.connect()
+// 🔥 ОБЯЗАТЕЛЬНО: Перехватываем ошибки пула, чтобы приложение не падало
+// именно из-за отсутствия этой строки Node.js завершал работу при команде от БД
+pool.on("error", (err) => {
+    console.error(
+        "Непредвиденная ошибка на незанятом клиенте PostgreSQL:",
+        err,
+    );
+});
+
+// Безопасная проверка подключения через одноразовый запрос
+pool.query("SELECT NOW()")
     .then(() => console.log("Успешное подключение к пулу PostgreSQL"))
     .catch((err) => console.error("Ошибка подключения к пулу БД:", err));
 
 // Централизованная инициализация всех таблиц проекта
-
 const initDb = async () => {
     try {
+        // Используем pool.query напрямую — пул сам возьмет клиента и сразу вернет его обратно
         await pool.query(`
             CREATE TABLE IF NOT EXISTS family_applications (
                 user_id TEXT PRIMARY KEY,
