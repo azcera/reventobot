@@ -1,4 +1,3 @@
-// src/events/handlers/inviteAdmin.js
 const {
     ModalBuilder,
     TextInputBuilder,
@@ -24,7 +23,7 @@ class InviteAdmin {
         if (!isApplicationMod(interaction.member)) {
             return interaction.reply({
                 content: "❌ У вас нет прав для управления заявками!",
-                flags: MessageFlags.Ephemeral,
+                flags: [MessageFlags.Ephemeral],
             });
         }
 
@@ -36,7 +35,7 @@ class InviteAdmin {
         if (res.rows.length === 0) {
             return interaction.reply({
                 content: "❌ Данные о заявке не найдены.",
-                flags: MessageFlags.Ephemeral,
+                flags: [MessageFlags.Ephemeral],
             });
         }
         const appData = res.rows[0];
@@ -45,32 +44,39 @@ class InviteAdmin {
             const modal = new ModalBuilder()
                 .setCustomId(`invite_modal_reject_${targetUserId}`)
                 .setTitle("Причина отклонения");
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(
+            const inputLabel = new LabelBuilder()
+                .setLabel("Укажите причину отказа кандидату")
+                .setTextInputComponent(
                     new TextInputBuilder()
                         .setCustomId("reject_reason")
-                        .setLabel("Укажите причину отказа кандидату")
                         .setPlaceholder("Пример: Ошибки в анкете")
                         .setStyle(TextInputStyle.Short)
                         .setRequired(true),
-                ),
-            );
+                );
+            modal.addLabelComponents(inputLabel);
+
             return interaction.showModal(modal);
         }
 
         if (actionType === "accept") {
             await interaction.reply({
-                content: "Заявка одобрена! Выдаю роль...",
-                flags: MessageFlags.Ephemeral,
+                content: `✅ Заявка <@${targetUserId}> одобрена!`,
+                flags: [MessageFlags.Ephemeral],
             });
             const targetMember = await interaction.guild.members
                 .fetch(targetUserId)
                 .catch(() => null);
-            if (targetMember)
+            if (targetMember) {
+                const roleId = String(process.env.AUTO_ROLE).trim();
                 await targetMember.roles
-                    .add(process.env.AUTO_ROLE_ID)
-                    .catch(() => {});
-
+                    .add(roleId)
+                    .catch((err) =>
+                        console.error(
+                            `[Role Error] Не удалось выдать роль ${roleId}:`,
+                            err,
+                        ),
+                    );
+            }
             const targetUser = await interaction.client.users
                 .fetch(targetUserId)
                 .catch(() => null);
@@ -125,12 +131,13 @@ class InviteAdmin {
             );
             if (voiceChannels.size === 0) {
                 return interaction.reply({
-                    content: "Ошибка: Нет голосовых каналов со значком 📞.",
-                    flags: MessageFlags.Ephemeral,
+                    content: "❌ Нет подходящих голосовых каналов.",
+                    flags: [MessageFlags.Ephemeral],
                 });
             }
 
-            // 1. Блокируем кнопку (передаем true в самый конец)
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
             const disabledContainer = await buildContainer(
                 targetUserId,
                 appData.full_name,
@@ -144,7 +151,6 @@ class InviteAdmin {
                 true,
             );
 
-            // Обновляем сообщение в канале, делая кнопку серой
             const mainMessage = interaction.message;
             await mainMessage
                 .edit({ components: [disabledContainer.toJSON()] })
@@ -161,28 +167,24 @@ class InviteAdmin {
                 ),
             );
 
-            // 2. Отправляем меню выбора комнат кандидату и сохраняем ссылку на ответ
-            await interaction.reply({
+            const response = await interaction.editReply({
                 content:
                     "Выберите комнату для кандидата (меню активно 1 минуту):",
                 components: [new ActionRowBuilder().addComponents(selectMenu)],
-                flags: MessageFlags.Ephemeral,
-                fetchReply: true, // Обязательно для получения объекта сообщения
+                withResponse: true,
             });
 
-            // 3. Запускаем таймаут на 60 секунд для автоматической разблокировки
             setTimeout(async () => {
-                // Проверяем в БД, не удалена ли еще заявка (если админ уже принял/отклонил или успешно выбрал войс)
                 const checkStatus = await db.query(
                     "SELECT * FROM family_applications WHERE user_id = $1",
                     [targetUserId],
                 );
                 if (checkStatus.rows.length === 0) return;
 
-                // Удаляем эфемерное меню выбора у администратора, так как время вышло
-                await interaction.deleteReply().catch(() => {});
+                if (response?.resource?.message) {
+                    await response.resource.message.delete().catch(() => {});
+                }
 
-                // Пересобираем контейнер с АКТИВНОЙ кнопкой (передаем false)
                 const enabledContainer = await buildContainer(
                     targetUserId,
                     appData.full_name,
@@ -196,18 +198,16 @@ class InviteAdmin {
                     false,
                 );
 
-                // Возвращаем кнопке рабочий статус в канале заявки
                 await mainMessage
                     .edit({ components: [enabledContainer.toJSON()] })
                     .catch(() => {});
 
-                // Опционально: пингуем в чат заявки, что выбор отменен по таймауту
                 await interaction.channel
                     .send({
                         content: `⚠️ Время выбора комнаты истекло. Кнопка обзвона снова активна.`,
                     })
                     .catch(() => {});
-            }, 60000); // 60000 мс = 1 минута
+            }, 60000);
 
             return;
         }
@@ -223,14 +223,14 @@ class InviteAdmin {
         );
         if (res.rows.length === 0)
             return interaction.reply({
-                content: "Заявка не найдена.",
-                flags: MessageFlags.Ephemeral,
+                content: "❌ Заявка не найдена.",
+                flags: [MessageFlags.Ephemeral],
             });
         const appData = res.rows[0];
 
         await interaction.reply({
-            content: "Заявка отклонена, канал удаляется...",
-            flags: MessageFlags.Ephemeral,
+            content: `✅ Заявка <@${targetUserId}> отклонена `,
+            flags: [MessageFlags.Ephemeral],
         });
 
         const targetUser = await interaction.client.users
@@ -280,8 +280,8 @@ class InviteAdmin {
     async handleVoiceSelect(interaction) {
         if (!isApplicationMod(interaction.member)) {
             return interaction.reply({
-                content: "Недостаточно прав.",
-                flags: MessageFlags.Ephemeral,
+                content: "❌ Недостаточно прав.",
+                flags: [MessageFlags.Ephemeral],
             });
         }
 
@@ -294,13 +294,13 @@ class InviteAdmin {
         );
         if (res.rows.length === 0)
             return interaction.reply({
-                content: "Заявка не найдена.",
-                flags: MessageFlags.Ephemeral,
+                content: "❌ Заявка не найдена.",
+                flags: [MessageFlags.Ephemeral],
             });
         const appData = res.rows[0];
 
         await interaction.channel.send({
-            content: `📢 <@${targetUserId}>, вы были вызваны на обзвон администратором <@${interaction.user.id}>!\nГолосовой канал: <#${voiceChannelId}>`,
+            content: `> 📢 <@${targetUserId}>, вы были вызваны на обзвон.\n> Администратор: <@${interaction.user.id}>!\n> Голосовой канал: <#${voiceChannelId}>`,
         });
 
         const targetUser = await interaction.client.users
@@ -342,8 +342,8 @@ class InviteAdmin {
         await logAction(interaction.guild, logContainer);
 
         return interaction.reply({
-            content: "Кандидат успешно вызван на обзвон!",
-            flags: MessageFlags.Ephemeral,
+            content: "✅ Кандидат успешно вызван на обзвон!",
+            flags: [MessageFlags.Ephemeral],
         });
     }
 }

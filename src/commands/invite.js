@@ -47,24 +47,6 @@ module.exports = {
         .setDescription("REVENTO"),
     );
 
-    const descriptionText = new TextDisplayBuilder().setContent(
-      "Мы ставим большие амбиции, так-как Revento - это прежде всего семья, жаждущая побед. Перед нами стоит много преград и наша цель - их преодолеть. В составе адекватные ребята, которые также замотивированы на победу.",
-    );
-
-    const descriptionText2 = new TextDisplayBuilder().setContent(
-      "### • Опытный и отзывчивый старший состав, готовый делится опытом и помогать\n### • Семейный офис, большой склад на 16 тонн\n### • Богатый автопарк, вертолеты\n### • Много интересного контента - капты, рп-контент, контракты\n### • Зафулл на все семейные мероприятия",
-    );
-    const descriptionText3 = new TextDisplayBuilder().setContent(
-      "### 1. Возраст 16+ (бывают исключения).\n### 2. Наличие рабочего микрофона и Discord.\n### 3. Знание базовых правил сервера (DM, PG, NRD).\n### 4. Адекватность и готовность участвовать в жизни семьи.",
-    );
-    const descriptionText4 = new TextDisplayBuilder().setContent(
-      "### Никнейм без фамилии по форме (Имя | Статик)\n||Пример: Tony | 132961||\n### Возраст (ООС)\n||Пример: 18||\n### Как узнали о семье, чем заинтересовала?\n||Пример: узнал через маркет, вижу часто||\n### Где ранее играли (проекты, серверы, семьи)?\n||Пример: Revento, Sweet (maj), Gucci (5rp)||\n### Чего ждете от семьи, чем хотите заниматься?\n||Пример: хочу тулиться, развиваться||",
-    );
-
-    const descriptionText5 = new TextDisplayBuilder().setContent(
-      "```css\n1. Поля будут заполнены некорректно\n2. Форма подачи заявки будет не соблюдена\n3. В заявке присутствует обман в любом виде\n4. На момент принятия заявки ваш никнейм не будет соответствовать форме (Имя | Статик)```",
-    );
-
     const inviteButton = new SectionBuilder()
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
@@ -86,7 +68,11 @@ module.exports = {
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
-      .addTextDisplayComponents(descriptionText)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          "Мы ставим большие амбиции, так-как Revento - это прежде всего семья, жаждущая побед. Перед нами стоит много преград и наша цель - их преодолеть. В составе адекватные ребята, которые также замотивированы на победу.",
+        ),
+      )
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
@@ -96,7 +82,11 @@ module.exports = {
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
-      .addTextDisplayComponents(descriptionText2)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          "### • Опытный и отзывчивый старший состав, готовый делится опытом и помогать\n### • Семейный офис, большой склад на 16 тонн\n### • Богатый автопарк, вертолеты\n### • Много интересного контента - капты, рп-контент, контракты\n### • Зафулл на все семейные мероприятия",
+        ),
+      )
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
@@ -106,7 +96,11 @@ module.exports = {
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
-      .addTextDisplayComponents(descriptionText3)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          "### 1. Возраст 16+ (бывают исключения).\n### 2. Наличие рабочего микрофона и Discord.\n### 3. Знание базовых правил сервера (DM, PG, NRD).\n### 4. Адекватность и готовность участвовать в жизни семьи.",
+        ),
+      )
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
@@ -120,7 +114,11 @@ module.exports = {
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
-      .addTextDisplayComponents(descriptionText4)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          "### Никнейм без фамилии по форме (Имя | Статик)\n||Пример: Tony | 132961||\n### Возраст (ООС)\n||Пример: 18||\n### Как узнали о семье, чем заинтересовала?\n||Пример: узнал через маркет, вижу часто||\n### Где ранее играли (проекты, серверы, семьи)?\n||Пример: Revento, Sweet (maj), Gucci (5rp)||\n### Чего ждете от семьи, чем хотите заниматься?\n||Пример: хочу тулиться, развиваться||",
+        ),
+      )
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
@@ -132,7 +130,11 @@ module.exports = {
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
-      .addTextDisplayComponents(descriptionText5)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          "```css\n1. Поля будут заполнены некорректно\n2. Форма подачи заявки будет не соблюдена\n3. В заявке присутствует обман в любом виде\n4. На момент принятия заявки ваш никнейм не будет соответствовать форме (Имя | Статик)```",
+        ),
+      )
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
@@ -146,7 +148,7 @@ module.exports = {
       )
       .addSectionComponents(inviteButton);
     await message.channel.send({
-      flags: MessageFlags.IsComponentsV2,
+      flags: [MessageFlags.IsComponentsV2],
       components: [container],
       files: [localImage1, localImage2],
     });

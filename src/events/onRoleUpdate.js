@@ -4,9 +4,23 @@ const {
   ButtonStyle,
   roleMention,
 } = require("discord.js");
-const { splitName } = require("../commands/utility/splitName");
+
 const { adminRoles } = require("../../config.json");
 require("dotenv").config();
+
+function splitName(nickname) {
+  const splittedName = nickname.split(" | ");
+  if (splittedName.length < 2) return null;
+
+  const match = splittedName[0].match(/[A-Za-z]+/);
+
+  return {
+    name: match
+      ? match[0].trim().toLowerCase()
+      : splittedName[0].trim().toLowerCase(),
+    stat: splittedName[1].trim(),
+  };
+}
 
 let handleMakeAdmin = async (oldMember, newMember) => {
   const oldHasAdmin = oldMember.roles.cache.filter((role) =>

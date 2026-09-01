@@ -6,33 +6,11 @@ const {
   ButtonStyle,
   ContainerBuilder,
   SeparatorBuilder,
+  ChannelType 
 } = require("discord.js");
 require("dotenv").config();
 
-const { Pool } = require("pg");
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-// Добавляем новые колонки target и max_main в БД для старых и новых наборов
-async function initDatabase() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS active_captures (
-        message_id TEXT PRIMARY KEY,
-        discord_timestamp TEXT,
-        main_list JSONB,
-        reserve_list JSONB,
-        left_list JSONB,
-        target TEXT,
-        max_main INTEGER DEFAULT 20
-      );
-    `);
-  } catch (err) {
-    console.error("Ошибка при инициализации базы данных PostgreSQL:", err);
-  }
-}
-initDatabase();
+const pool = require("./db.js"); 
 
 const PLUS_CHANNEL = process.env.PLUS_CHANNEL_ID;
 
@@ -184,7 +162,7 @@ module.exports = {
     if (!row) {
       return interaction.reply({
         content: "❌ Данная регистрация устарела или неактивна.",
-        flags: MessageFlags.Ephemeral,
+        flags: [MessageFlags.Ephemeral],
       });
     }
 
@@ -202,7 +180,7 @@ module.exports = {
       if (mainList.includes(userId) || reserveList.includes(userId)) {
         return interaction.reply({
           content: "Вы уже записаны на капт!",
-          flags: MessageFlags.Ephemeral,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
@@ -222,7 +200,7 @@ module.exports = {
       if (mainIndex === -1 && reserveIndex === -1) {
         return interaction.reply({
           content: "Вас и так нет в списках.",
-          flags: MessageFlags.Ephemeral,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
@@ -258,7 +236,7 @@ module.exports = {
       console.error("Не удалось обновить данные набора в БД:", err);
       return interaction.reply({
         content: "❌ Произошла ошибка базы данных при сохранении.",
-        flags: MessageFlags.Ephemeral,
+        flags: [MessageFlags.Ephemeral],
       });
     }
 

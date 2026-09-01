@@ -16,7 +16,6 @@ module.exports = (client) => {
       return await naborManager.handleButton(interaction);
     }
 
-    // ИСПРАВЛЕНИЕ: Добавляем разрешение для выпадающих списков (isStringSelectMenu)
     if (
       !interaction.isButton() &&
       !interaction.isModalSubmit() &&
@@ -37,7 +36,6 @@ module.exports = (client) => {
       if (customId === "move_all_channel") {
         return await moveAllInteractions.handleMoveAllSelect(interaction);
       }
-      // Перенаправляем на админский модуль управления
       if (customId.startsWith("invite_select_voice_")) {
         return await inviteAdmin.handleVoiceSelect(interaction);
       }
@@ -45,11 +43,9 @@ module.exports = (client) => {
 
     // 3. Обработка кнопок
     if (interaction.isButton()) {
-      // Кнопку открытия формы обрабатывает модуль кандидата
       if (customId === "open_invite_modal") {
         return await inviteCandidate.showModal(interaction);
       }
-      // Админские кнопки управления обрабатывает модуль администратора
       if (customId.startsWith("invite_")) {
         return await inviteAdmin.handleButtons(interaction);
       }
@@ -58,9 +54,6 @@ module.exports = (client) => {
         return await groupInteractions.showGroupSelect(interaction);
       if (customId === "capt")
         return await captInteractions.showCaptModal(interaction);
-      if (interaction.customId === "capt_extended") {
-        await captInteractions.showExtendedCaptModal(interaction);
-      }
       if (customId === "moveall")
         return await moveAllInteractions.showMoveAllSelect(interaction);
       if (customId === "cancel")
@@ -74,11 +67,9 @@ module.exports = (client) => {
 
     // 4. Обработка модальных окон
     if (interaction.isModalSubmit()) {
-      // Анкету кандидата перенаправляем в inviteCandidate
       if (customId === "invite_modal_submit") {
         return await inviteCandidate.submitModal(interaction);
       }
-      // Причину отказа перенаправляем в inviteAdmin
       if (customId.startsWith("invite_modal_reject_")) {
         return await inviteAdmin.submitRejectModal(interaction);
       }
@@ -86,10 +77,7 @@ module.exports = (client) => {
       if (customId.startsWith("modal_group_"))
         return await groupInteractions.submitGroupModal(interaction);
 
-      if (
-        interaction.customId === "modal_capt_base" ||
-        interaction.customId === "modal_capt_extended"
-      ) {
+      if (interaction.customId === "modal_capt") {
         await captInteractions.submitCaptModal(interaction);
       }
     }

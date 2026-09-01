@@ -1,12 +1,11 @@
 require("dotenv").config();
 
-module.exports = (client) => {
-  const PREFIX = "!"; // префикс для обычных команд
+const PREFIX = "!";
 
+module.exports = (client) => {
   client.on("messageCreate", async (message) => {
-    require("../commands/utility/pingUsers")(client, message);
-    if (message.author.bot) return; // игнорируем ботов
-    if (!message.content.startsWith(PREFIX)) return; // проверяем префикс
+    if (message.author.bot) return;
+    if (!message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const commandName = args.shift().toLowerCase();
@@ -17,8 +16,13 @@ module.exports = (client) => {
     try {
       await command.execute(message, args);
     } catch (error) {
-      console.error(error);
-      await message.channel.send("Произошла ошибка при выполнении команды!");
+      console.error(
+        `[Command Error] Ошибка выполнения префиксной команды !${commandName}:`,
+        error,
+      );
+      await message.channel
+        .send("❌ Произошла ошибка при выполнении этой команды!")
+        .catch(() => {});
     }
   });
 };

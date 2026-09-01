@@ -2,7 +2,6 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
   MessageFlags,
 } = require("discord.js");
 const {
@@ -11,61 +10,45 @@ const {
 } = require("../../commands/utility/parseDateTime");
 const naborManager = require("../../commands/utility/naborManager");
 
-// 1. Старая кнопка — только время
 async function showCaptModal(interaction) {
   const modal = new ModalBuilder()
-    .setCustomId("modal_capt_base")
-    .setTitle("Регистрация на капт");
-  const timeInput = new TextInputBuilder()
-    .setCustomId("capt_time")
+    .setCustomId("modal_capt")
+    .setTitle("Создание реги");
+
+  const timeLabel = new LabelBuilder()
     .setLabel("Время проведения")
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder("Например: 18:00 или 29.08.2026 18:00")
-    .setRequired(true);
-
-  modal.addComponents(new ActionRowBuilder().addComponents(timeInput));
-  return await interaction.showModal(modal);
-}
-
-// 2. Новая кнопка — время + цель + количество участников
-async function showExtendedCaptModal(interaction) {
-  const modal = new ModalBuilder()
-    .setCustomId("modal_capt_extended")
-    .setTitle("Расширенная регистрация");
-
-  const timeInput = new TextInputBuilder()
-    .setCustomId("capt_time")
-    .setLabel("Время проведения")
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder("Например: 18:00 или 29.08.2026 18:00")
-    .setRequired(true);
-
-  const targetInput = new TextInputBuilder()
-    .setCustomId("capt_target")
+    .setTextInputComponent(
+      new TextInputBuilder()
+        .setCustomId("capt_time")
+        .setPlaceholder("Например: 18:00 или 29.08.2026 18:00")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true),
+    );
+  const targetLabel = new LabelBuilder()
     .setLabel("Цель проведения")
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder("Например: Захват фабрики / Защита территорий")
-    .setRequired(true);
-
-  const countInput = new TextInputBuilder()
-    .setCustomId("capt_count")
+    .setTextInputComponent(
+      new TextInputBuilder()
+        .setCustomId("capt_target")
+        .setPlaceholder("По умолчанию: КАПТ")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false),
+    );
+  const countLabel = new LabelBuilder()
     .setLabel("Количество участников в основе")
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder("По умолчанию: 20")
-    .setRequired(false);
+    .setTextInputComponent(
+      new TextInputBuilder()
+        .setCustomId("capt_count")
+        .setPlaceholder("По умолчанию: 20")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false),
+    );
 
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(timeInput),
-    new ActionRowBuilder().addComponents(targetInput),
-    new ActionRowBuilder().addComponents(countInput),
-  );
+  modal.addLabelComponents(timeLabel, targetLabel, countLabel);
   return await interaction.showModal(modal);
 }
 
 // 3. Общий обработчик отправки формы
 async function submitCaptModal(interaction) {
-  const customId = interaction.customId; // 'modal_capt_base' или 'modal_capt_extended'
-
   const timeInput = interaction.fields.getTextInputValue("capt_time").trim();
   const parsedDate = parseDateTime(timeInput);
 
@@ -73,46 +56,43 @@ async function submitCaptModal(interaction) {
     return await interaction.reply({
       content:
         "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.",
-      flags: MessageFlags.Ephemeral,
+      flags: [MessageFlags.Ephemeral],
     });
   }
 
   const discordTimestamp = getDiscordTimestamp(parsedDate);
 
-  // Значения по умолчанию для обычного капта
-  let target = null;
+  let target =
+    interaction.fields.getTextInputValue("capt_target").trim() ?? "капт";
   let maxMain = 20;
 
-  // Если форма расширенная — собираем дополнительные данные
-  if (customId === "modal_capt_extended") {
-    target = interaction.fields.getTextInputValue("capt_target").trim();
-    const countInput = interaction.fields
-      .getTextInputValue("capt_count")
-      .trim();
+  const countInput = interaction.fields.getTextInputValue("capt_count").trim();
 
-    if (countInput) {
-      const parsedCount = parseInt(countInput, 10);
-      if (!isNaN(parsedCount) && parsedCount > 0) {
-        maxMain = parsedCount;
-      } else {
-        return await interaction.reply({
-          content:
-            "❌ Количество участников должно быть целым положительным числом.",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+  if (countInput) {
+    const parsedCount = parseInt(countInput, 10);
+    if (!isNaN(parsedCount) && parsedCount > 0) {
+      maxMain = parsedCount;
+    } else {
+      return await interaction.reply({
+        content:
+          "❌ Количество участников должно быть целым положительным числом.",
+        flags: [MessageFlags.Ephemeral],
+      });
     }
   }
 
   await interaction
     .reply({
       content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
-      flags: MessageFlags.Ephemeral,
+      flags: [MessageFlags.Ephemeral],
+    })
+    .then(() => {
+      setTimeout(async () => {
+        await interaction.deleteReply().catch(() => {});
+      }, 60000);
     })
     .catch(console.error);
-
   try {
-    // Передаем дополнительные параметры в менеджер наборов
     await naborManager.sendNabor(
       interaction,
       discordTimestamp,
@@ -124,4 +104,4 @@ async function submitCaptModal(interaction) {
   }
 }
 
-module.exports = { showCaptModal, showExtendedCaptModal, submitCaptModal };
+module.exports = { showCaptModal, submitCaptModal };

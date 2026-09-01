@@ -1,9 +1,7 @@
-// src/events/handlers/inviteCandidate.js
 const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    ActionRowBuilder,
     ChannelType,
     PermissionFlagsBits,
     MessageFlags,
@@ -22,7 +20,7 @@ class InviteCandidate {
         if (checkActive.rows.length > 0) {
             return interaction.reply({
                 content: "❌ Вы уже подали заявку!",
-                flags: MessageFlags.Ephemeral,
+                flags: [MessageFlags.Ephemeral],
             });
         }
 
@@ -96,17 +94,18 @@ class InviteCandidate {
         const f4 = interaction.fields.getTextInputValue("invite_f4");
         const f5 = interaction.fields.getTextInputValue("invite_f5");
 
-        if (!/^.+\s*\|\s*\d+$/.test(nameInput)) {
+        if (!/^.+\s\|\s\d+$/.test(nameInput)) {
             return interaction.reply({
-                content: "❌ Ошибка! Формат должен быть строго `Имя | Статик`.",
-                flags: MessageFlags.Ephemeral,
+                content:
+                    "❌ Формат должен быть строго `Имя | Статик` (обязательно по одному пробелу до и после черты).",
+                flags: [MessageFlags.Ephemeral],
             });
         }
         const age = parseInt(ageInput);
         if (isNaN(age)) {
             return interaction.reply({
-                content: "❌ Ошибка! Возраст должен быть указан числом.",
-                flags: MessageFlags.Ephemeral,
+                content: "❌ Возраст должен быть указан числом.",
+                flags: [MessageFlags.Ephemeral],
             });
         }
 

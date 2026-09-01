@@ -9,6 +9,7 @@ const {
   TextDisplayBuilder,
   AttachmentBuilder,
   MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
 } = require("discord.js");
 
 const path = require("path");
@@ -52,32 +53,17 @@ module.exports = {
           .setStyle(ButtonStyle.Primary),
       );
 
-    // Старая кнопка (Обычный капт)
     const captSection = new SectionBuilder()
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          "⚔️ ╎ **Создать обычную регу на капт**",
+          "⚔️ ╎ **Создать регу на капт или другое МП**",
         ),
       )
       .setButtonAccessory(
         new ButtonBuilder()
           .setCustomId("capt")
-          .setLabel("⚔️ Рега капт")
+          .setLabel("⚔️ Создать регу")
           .setStyle(ButtonStyle.Success),
-      );
-
-    // Новая кнопка (Расширенный капт с целью и лимитом мест)
-    const captExtendedSection = new SectionBuilder()
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          "🔥 ╎ **Создать другую регу (МП + Места)**",
-        ),
-      )
-      .setButtonAccessory(
-        new ButtonBuilder()
-          .setCustomId("capt_extended")
-          .setLabel("🔥 Другая рега")
-          .setStyle(ButtonStyle.Danger),
       );
 
     const moveAllSection = new SectionBuilder()
@@ -104,8 +90,6 @@ module.exports = {
       .addSectionComponents(groupSection)
       .addSeparatorComponents(new SeparatorBuilder())
       .addSectionComponents(captSection)
-      .addSeparatorComponents(new SeparatorBuilder())
-      .addSectionComponents(captExtendedSection)
       .addSeparatorComponents(new SeparatorBuilder())
       .addSectionComponents(moveAllSection)
       .addSeparatorComponents(new SeparatorBuilder())
