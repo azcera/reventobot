@@ -7,6 +7,8 @@ const {
   SectionBuilder,
   SeparatorBuilder,
   TextDisplayBuilder,
+  AttachmentBuilder,
+  MediaGalleryBuilder,
 } = require("discord.js");
 
 const path = require("path");
