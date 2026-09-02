@@ -1,198 +1,390 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Discord UI Components v2 Constructor</title>
-  <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1f22; color: #dbdee1; margin: 0; padding: 20px; display: flex; gap: 20px; }
-    .panel { background-color: #2b2d31; padding: 20px; border-radius: 8px; flex: 1; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-    .preview-panel { flex: 1; background-color: #313338; padding: 20px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
-    h2 { margin-top: 0; color: #fff; border-bottom: 1px solid #3f4147; padding-bottom: 10px; }
-    input, textarea, select { width: 100%; padding: 10px; background-color: #1e1f22; border: 1px solid #3f4147; border-radius: 4px; color: #dbdee1; box-sizing: border-box; }
-    button { padding: 10px 15px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-    .btn-add { background-color: #248046; color: #fff; }
-    .btn-add:hover { background-color: #1a6535; }
-    .btn-send { background-color: #5865f2; color: #fff; font-size: 16px; margin-top: auto; }
-    .btn-send:hover { background-color: #4752c4; }
-    .btn-delete { background-color: #da373c; color: #fff; padding: 5px 10px; }
-    .item-row { background-color: #313338; padding: 15px; border-radius: 6px; border-left: 4px solid #5865f2; display: flex; flex-direction: column; gap: 10px; position: relative; }
-    .item-header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #fff; }
+  <head>
+    <meta charset="UTF-8" />
+    <title>Discord UI Components v2 Constructor</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #1e1f22;
+        color: #dbdee1;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        gap: 20px;
+      }
+      .panel {
+        background-color: #2b2d31;
+        padding: 20px;
+        border-radius: 8px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      }
+      .preview-panel {
+        flex: 1;
+        background-color: #313338;
+        padding: 20px;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+      }
+      h2 {
+        margin-top: 0;
+        color: #fff;
+        border-bottom: 1px solid #3f4147;
+        padding-bottom: 10px;
+      }
+      input,
+      textarea,
+      select {
+        width: 100%;
+        padding: 10px;
+        background-color: #1e1f22;
+        border: 1px solid #3f4147;
+        border-radius: 4px;
+        color: #dbdee1;
+        box-sizing: border-box;
+      }
+      button {
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .btn-add {
+        background-color: #248046;
+        color: #fff;
+      }
+      .btn-add:hover {
+        background-color: #1a6535;
+      }
+      .btn-send {
+        background-color: #5865f2;
+        color: #fff;
+        font-size: 16px;
+        margin-top: auto;
+      }
+      .btn-send:hover {
+        background-color: #4752c4;
+      }
+      .btn-delete {
+        background-color: #da373c;
+        color: #fff;
+        padding: 5px 10px;
+      }
+      .item-row {
+        background-color: #313338;
+        padding: 15px;
+        border-radius: 6px;
+        border-left: 4px solid #5865f2;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        position: relative;
+      }
+      .item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: bold;
+        color: #fff;
+      }
 
-    /* Discord Container Preview */
-    .discord-container { border-left: 4px solid #5865f2; background-color: #2b2d31; padding: 16px; border-radius: 4px; width: 100%; max-width: 500px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
-    .discord-text { font-size: 16px; white-space: pre-wrap; line-height: 1.4; }
-    .discord-separator { height: 1px; background-color: #3f4147; width: 100%; }
-    .discord-separator.large { height: 4px; background-color: #4e5058; }
-    .discord-btn { background-color: #4e5058; color: #fff; padding: 8px 16px; border-radius: 3px; font-size: 14px; text-decoration: none; display: inline-block; width: fit-content; margin-top: 4px; pointer-events: none; }
-  </style>
-</head>
-<body>
+      /* Discord Container Preview */
+      .discord-container {
+        border-left: 4px solid #5865f2;
+        background-color: #2b2d31;
+        padding: 16px;
+        border-radius: 4px;
+        width: 100%;
+        max-width: 500px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .discord-container.no-border {
+        border-left: none !important;
+      }
+      .discord-text {
+        font-size: 16px;
+        white-space: pre-wrap;
+        line-height: 1.4;
+      }
 
-  <!-- Левая панель: Управление -->
-  <div class="panel">
-    <h2>Конструктор интерфейсов v2</h2>
+      /* Разделители v2 */
+      .discord-separator {
+        height: 1px;
+        background-color: #3f4147;
+        width: 100%;
+        margin: 4px 0;
+      }
+      .discord-separator.large-spacing {
+        height: 1px;
+        background-color: #3f4147;
+        width: 100%;
+        margin: 24px 0;
+      }
 
-    <label>ID Текстового канала Discord:</label>
-    <input type="text" id="channelId" placeholder="Введите ID канала (например: 123456789...)" required>
+      /* Секция с кнопкой справа */
+      .discord-section-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        gap: 15px;
+      }
+      .discord-btn {
+        background-color: #4e5058;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 3px;
+        font-size: 14px;
+        text-decoration: none;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Левая панель: Управление -->
+    <div class="panel">
+      <h2>Конструктор интерфейсов v2</h2>
 
-    <label>Цвет боковой панели:</label>
-    <input type="color" id="accentColor" value="#5865f2" onchange="updatePreview()">
+      <label>ID Текстового канала Discord:</label>
+      <input
+        type="text"
+        id="channelId"
+        placeholder="Введите ID канала..."
+        required
+      />
 
-    <div style="display: flex; gap: 10px; margin-top: 10px;">
-      <button class="btn-add" onclick="addItem('text')">+ Текст</button>
-      <button class="btn-add" onclick="addItem('separator')">+ Разделитель</button>
-      <button class="btn-add" onclick="addItem('section')">+ Раздел (Секция с кнопкой)</button>
+      <div
+        style="display: flex; align-items: center; gap: 15px; margin-top: 5px"
+      >
+        <div style="flex: 1">
+          <label>Цвет боковой панели:</label>
+          <input
+            type="color"
+            id="accentColor"
+            value="#5865f2"
+            onchange="updatePreview()"
+          />
+        </div>
+        <div style="margin-top: 20px">
+          <label
+            ><input
+              type="checkbox"
+              id="noColor"
+              onchange="toggleColorInput(this.checked)"
+            />
+            Без боковой полоски</label
+          >
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 10px">
+        <button class="btn-add" onclick="addItem('text')">+ Текст</button>
+        <button class="btn-add" onclick="addItem('separator')">
+          + Разделитель
+        </button>
+        <button class="btn-add" onclick="addItem('section')">
+          + Раздел (Кнопка справа)
+        </button>
+      </div>
+
+      <div
+        id="itemsContainer"
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          margin-top: 15px;
+          max-height: 50vh;
+          overflow-y: auto;
+          padding-right: 5px;
+        "
+      ></div>
+
+      <button class="btn-send" onclick="sendToDiscord()">
+        🚀 Отправить в Discord
+      </button>
     </div>
 
-    <div id="itemsContainer" style="display: flex; flex-direction: column; gap: 15px; margin-top: 15px; max-height: 50vh; overflow-y: auto; padding-right: 5px;">
-      <!-- Тут динамически появляются строки сборщика -->
+    <!-- Правая панель: Превью -->
+    <div class="preview-panel">
+      <h2 style="width: 100%">Живое превью (Discord UI)</h2>
+      <div class="discord-container" id="discordPreview"></div>
     </div>
 
-    <button class="btn-send" onclick="sendToDiscord()">🚀 Отправить в Discord</button>
-  </div>
+    <script>
+      let items = [];
 
-  <!-- Правая панель: Превью -->
-  <div class="preview-panel">
-    <h2 style="width:100%">Живое превью (Discord UI)</h2>
-    <div class="discord-container" id="discordPreview">
-      <!-- Сюда рендерится контейнер -->
-    </div>
-  </div>
-
-  <script>
-    let items = [];
-
-    function addItem(type) {
-      const id = Date.now() + Math.random().toString(36).substr(2, 5);
-      let itemObj = { id, type, value: '', large: false, btnLabel: '', btnLink: '' };
-
-      if (type === 'text') itemObj.placeholder = 'Введите текст (поддерживает Markdown, # заголовки)';
-      if (type === 'section') itemObj.placeholder = 'Текст описания раздела...';
-
-      items.push(itemObj);
-      renderInputs();
-      updatePreview();
-    }
-
-    function deleteItem(id) {
-      items = items.filter(item => item.id !== id);
-      renderInputs();
-      updatePreview();
-    }
-
-    function updateItemData(id, field, value) {
-      const item = items.find(item => item.id === id);
-      if (item) {
-        item[field] = value;
+      function toggleColorInput(disabled) {
+        document.getElementById("accentColor").disabled = disabled;
         updatePreview();
       }
-    }
 
-    function renderInputs() {
-      const container = document.getElementById('itemsContainer');
-      container.innerHTML = '';
+      function addItem(type) {
+        const id = Date.now() + Math.random().toString(36).substr(2, 5);
+        let itemObj = {
+          id,
+          type,
+          value: "",
+          large: false,
+          btnLabel: "",
+          btnLink: "",
+        };
 
-      items.forEach((item, index) => {
-        const row = document.createElement('div');
-        row.className = 'item-row';
+        if (type === "text")
+          itemObj.placeholder = "Введите текст (поддерживает Markdown)";
+        if (type === "section")
+          itemObj.placeholder = "Текст описания левой части раздела...";
 
-        let html = `<div class="item-header">
-          <span>#${index + 1} [${item.type.toUpperCase()}]</span>
+        items.push(itemObj);
+        renderInputs();
+        updatePreview();
+      }
+
+      function deleteItem(id) {
+        items = items.filter((item) => item.id !== id);
+        renderInputs();
+        updatePreview();
+      }
+
+      function updateItemData(id, field, value) {
+        const item = items.find((item) => item.id === id);
+        if (item) {
+          item[field] = value;
+          updatePreview();
+        }
+      }
+
+      function renderInputs() {
+        const container = document.getElementById("itemsContainer");
+        container.innerHTML = "";
+
+        items.forEach((item, index) => {
+          const row = document.createElement("div");
+          row.className = "item-row";
+
+          let html = `<div class="item-header">
+          <span>#${index + 1} [${item.type === "section" ? "СЕКЦИЯ (КНОПКА СПРАВА)" : item.type.toUpperCase()}]</span>
           <button class="btn-delete" onclick="deleteItem('${item.id}')">Удалить</button>
         </div>`;
 
-        if (item.type === 'text') {
-          html += `<textarea placeholder="${item.placeholder}" oninput="updateItemData('${item.id}', 'value', this.value)">${item.value}</textarea>`;
-        } 
-        else if (item.type === 'separator') {
-          html += `<label><input type="checkbox" ${item.large ? 'checked' : ''} onchange="updateItemData('${item.id}', 'large', this.checked)"> Жирный (Большой разделитель)</label>`;
-        } 
-        else if (item.type === 'section') {
-          html += `
+          if (item.type === "text") {
+            html += `<textarea placeholder="${item.placeholder}" oninput="updateItemData('${item.id}', 'value', this.value)">${item.value}</textarea>`;
+          } else if (item.type === "separator") {
+            html += `<label><input type="checkbox" ${item.large ? "checked" : ""} onchange="updateItemData('${item.id}', 'large', this.checked)"> Большие пустые отступы (Spacing Large)</label>`;
+          } else if (item.type === "section") {
+            html += `
             <textarea placeholder="${item.placeholder}" oninput="updateItemData('${item.id}', 'value', this.value)">${item.value}</textarea>
             <div style="display:flex; gap:10px;">
-              <input type="text" placeholder="Текст на кнопке" value="${item.btnLabel}" oninput="updateItemData('${item.id}', 'btnLabel', this.value)">
-              <input type="text" placeholder="Ссылка (https://...)" value="${item.btnLink}" oninput="updateItemData('${item.id}', 'btnLink', this.value)">
+              <input type="text" placeholder="Текст кнопки (справа)" value="${item.btnLabel}" oninput="updateItemData('${item.id}', 'btnLabel', this.value)">
+              <input type="text" placeholder="Ссылка кнопки (https://...)" value="${item.btnLink}" oninput="updateItemData('${item.id}', 'btnLink', this.value)">
             </div>
           `;
-        }
+          }
 
-        row.innerHTML = html;
-        container.appendChild(row);
-      });
-    }
-
-    function updatePreview() {
-      const preview = document.getElementById('discordPreview');
-      const color = document.getElementById('accentColor').value;
-      preview.style.borderLeftColor = color;
-      preview.innerHTML = '';
-
-      if (items.length === 0) {
-        preview.innerHTML = '<div style="color:#4e5058; text-align:center;">Контейнер пуст. Добавьте элементы слева.</div>';
-        return;
+          row.innerHTML = html;
+          container.appendChild(row);
+        });
       }
 
-      items.forEach(item => {
-        if (item.type === 'text' && item.value) {
-          const div = document.createElement('div');
-          div.className = 'discord-text';
-          div.innerText = item.value;
-          preview.appendChild(div);
-        } 
-        else if (item.type === 'separator') {
-          const div = document.createElement('div');
-          div.className = 'discord-separator' + (item.large ? ' large' : '');
-          preview.appendChild(div);
-        } 
-        else if (item.type === 'section') {
-          if (item.value) {
-            const div = document.createElement('div');
-            div.className = 'discord-text';
+      function updatePreview() {
+        const preview = document.getElementById("discordPreview");
+        const color = document.getElementById("accentColor").value;
+        const noColor = document.getElementById("noColor").checked;
+
+        if (noColor) {
+          preview.classList.add("no-border");
+        } else {
+          preview.classList.remove("no-border");
+          preview.style.borderLeftColor = color;
+        }
+
+        preview.innerHTML = "";
+
+        if (items.length === 0) {
+          preview.innerHTML =
+            '<div style="color:#4e5058; text-align:center;">Контейнер пуст. Добавьте элементы слева.</div>';
+          return;
+        }
+
+        items.forEach((item) => {
+          if (item.type === "text" && item.value) {
+            const div = document.createElement("div");
+            div.className = "discord-text";
             div.innerText = item.value;
             preview.appendChild(div);
+          } else if (item.type === "separator") {
+            const div = document.createElement("div");
+            // Если большие отступы — ставим класс с большими маргинами
+            div.className = item.large
+              ? "discord-separator large-spacing"
+              : "discord-separator";
+            preview.appendChild(div);
+          } else if (item.type === "section") {
+            const rowDiv = document.createElement("div");
+            rowDiv.className = "discord-section-row";
+
+            const textDiv = document.createElement("div");
+            textDiv.className = "discord-text";
+            textDiv.innerText = item.value || "";
+            rowDiv.appendChild(textDiv);
+
+            if (item.btnLabel) {
+              const btn = document.createElement("a");
+              btn.className = "discord-btn";
+              btn.innerText = item.btnLabel;
+              rowDiv.appendChild(btn);
+            }
+
+            preview.appendChild(rowDiv);
           }
-          if (item.btnLabel) {
-            const btn = document.createElement('a');
-            btn.className = 'discord-btn';
-            btn.innerText = item.btnLabel;
-            preview.appendChild(btn);
-          }
-        }
-      });
-    }
-
-    async function sendToDiscord() {
-      const channelId = document.getElementById('channelId').value.trim();
-      const accentColor = document.getElementById('accentColor').value;
-
-      if (!channelId) {
-        alert('❌ Введите ID канала!');
-        return;
-      }
-
-      if (items.length === 0) {
-        alert('❌ Добавьте хотя бы один элемент в контейнер!');
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/send-container', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ channelId, accentColor, items })
         });
-
-        const result = await response.json();
-        if (result.success) {
-          alert('✅ Контейнер успешно отправлен в Discord!');
-        } else {
-          alert('❌ Ошибка: ' + result.error);
-        }
-      } catch (err) {
-        alert('❌ Не удалось связаться с сервером бота: ' + err.message);
       }
-    }
-  </script>
-</body>
+
+      async function sendToDiscord() {
+        const channelId = document.getElementById("channelId").value.trim();
+        const accentColor = document.getElementById("accentColor").value;
+        const noColor = document.getElementById("noColor").checked;
+
+        if (!channelId) {
+          alert("❌ Введите ID канала!");
+          return;
+        }
+
+        if (items.length === 0) {
+          alert("❌ Добавьте хотя бы один элемент!");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/send-container", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channelId, noColor, accentColor, items }),
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            alert("✅ Успешно отправлено в Discord!");
+          } else {
+            alert("❌ Ошибка API: " + result.error);
+          }
+        } catch (err) {
+          alert("❌ Ошибка отправки: " + err.message);
+        }
+      }
+    </script>
+  </body>
 </html>

@@ -7,7 +7,8 @@ const {
   ContainerBuilder,
   TextDisplayBuilder,
   SeparatorBuilder,
-  ActionRowBuilder,
+  SeparatorSpacing, // Используется для больших отступов
+  SectionBuilder,    // Используется для кнопок справа от текста
   ButtonBuilder,
   ButtonStyle
 } = require("discord.js");
@@ -60,19 +61,17 @@ if (fs.existsSync(eventsPath)) {
 
 // --- НАСТРОЙКА WEB СЕРВЕРА ДЛЯ КОНСТРУКТОРА ---
 const app = express();
-app.use(express.json()); // Для чтения JSON данных от сайта
-
-// Раздача статических файлов (чтобы открыть конструктор в браузере)
+app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// API Эндпоинт, куда сайт отправляет собранный контейнер
+// API Эндпоинт отправки
 app.post("/api/send-container", async (req, res) => {
   try {
-    const { channelId, accentColor, items } = req.body;
+    const { channelId, noColor, accentColor, items } = req.body;
 
     if (!channelId) {
       return res.status(400).json({ error: "Не указан ID канала Discord" });
@@ -80,16 +79,15 @@ app.post("/api/send-container", async (req, res) => {
 
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel) {
-      return res.status(404).json({ error: "Канал не найден или у бота нет к нему прав" });
+      return res.status(404).json({ error: "Канал не найден или у бота нет прав" });
     }
 
-    // Собираем ContainerBuilder по правилам Discord Components v2
     const container = new ContainerBuilder();
 
-    // Цвет полоски (дефолт: синий Discord)
-    container.setAccentColor(accentColor ? parseInt(accentColor.replace("#", "0x")) : 0x5865f2);
-
-    let currentActionRow = null;
+    // Если флаг "без цвета" не стоит — применяем цвет боковой полоски
+    if (!noColor) {
+      container.setAccentColor(accentColor ? parseInt(accentColor.replace("#", "0x")) : 0x5865f2);
+    }
 
     // Парсим каждый элемент, созданный на сайте
     for (const item of items) {
@@ -100,25 +98,31 @@ app.post("/api/send-container", async (req, res) => {
       } 
       else if (item.type === "separator") {
         const sep = new SeparatorBuilder();
-        if (item.large) sep.setLarge(true);
+        // Настройка отступов: если large равен true — ставим большие отступы
+        if (item.large) {
+          sep.setSpacing(SeparatorSpacing.Large); 
+        }
         container.addSeparatorComponents(sep);
       } 
       else if (item.type === "section") {
+        // Создаем правильную секцию Discord v2
+        const section = new SectionBuilder();
+
         if (item.value) {
-          container.addTextDisplayComponents(new TextDisplayBuilder().setContent(item.value));
+          section.setTextDisplayComponent(new TextDisplayBuilder().setContent(item.value));
         }
+
+        // Размещаем кнопку ПРАВЕЕ текста (в трейлинг зону секции)
         if (item.btnLabel && item.btnLink) {
-          if (!currentActionRow || currentActionRow.components.length >= 5) {
-            currentActionRow = new ActionRowBuilder();
-            container.addActionRowComponents(currentActionRow);
-          }
-          currentActionRow.addComponents(
-            new ButtonBuilder()
-              .setLabel(item.btnLabel)
-              .setURL(item.btnLink)
-              .setStyle(ButtonStyle.Link)
-          );
+          const button = new ButtonBuilder()
+            .setLabel(item.btnLabel)
+            .setURL(item.btnLink)
+            .setStyle(ButtonStyle.Link);
+
+          section.setTrailingAction(button);
         }
+
+        container.addSectionComponents(section);
       }
     }
 
