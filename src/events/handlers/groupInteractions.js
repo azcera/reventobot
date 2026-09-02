@@ -12,13 +12,16 @@ const {
   getMskTimeString,
 } = require("../../commands/utility/parseDateTime");
 
-const { options, optionsMap } = require("../../commands/utility/groupOptions");
+const {
+  getFilteredOptions,
+  optionsMap,
+} = require("../../commands/utility/groupOptions");
 
 async function showGroupSelect(interaction) {
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId("group_select_target")
     .setPlaceholder("Выберите цель проведения...")
-    .addOptions(...options);
+    .addOptions(getFilteredOptions());
 
   const row = new ActionRowBuilder().addComponents(selectMenu);
 

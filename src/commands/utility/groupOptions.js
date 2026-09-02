@@ -14,21 +14,46 @@ const optionsMap = {
   tainiki4: { icon: "🪙", target: "ТАЙНИКИ", time: "22:00" },
 };
 
-let options = [];
+function getFilteredOptions() {
+  const nowMSK = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" }),
+  );
 
-for (const key in optionsMap) {
-  let item = optionsMap[key];
-  options = [
-    ...options,
-    new StringSelectMenuOptionBuilder()
-      .setLabel(item.icon + " " + item.target + " " + item.time)
-      .setValue(key),
-  ];
+  const futureEvents = [];
+
+  for (const key in optionsMap) {
+    const item = optionsMap[key];
+    const [hours, minutes] = item.time.split(":").map(Number);
+
+    const eventDate = new Date(nowMSK);
+    eventDate.setHours(hours, minutes, 0, 0);
+
+    if (eventDate <= nowMSK) {
+      eventDate.setDate(eventDate.getDate() + 1);
+    }
+
+    futureEvents.push({
+      key,
+      item,
+      diff: eventDate - nowMSK,
+    });
+  }
+
+  const nearestEvents = futureEvents
+    .sort((a, b) => a.diff - b.diff)
+    .slice(0, 3);
+
+  let options = nearestEvents.map(({ key, item }) => {
+    return new StringSelectMenuOptionBuilder()
+      .setLabel(`${item.icon} ${item.target} ${item.time}`)
+      .setValue(key);
+  });
+
+  options.push(
+    new StringSelectMenuOptionBuilder().setLabel("ДРУГОЕ").setValue("other"),
+  );
+
+  return options;
 }
 
-options = [
-  ...options,
-  new StringSelectMenuOptionBuilder().setLabel("ДРУГОЕ").setValue("other"),
-];
-
-module.exports = { options, optionsMap };
+module.exports = { getFilteredOptions, optionsMap };
