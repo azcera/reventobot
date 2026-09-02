@@ -6,14 +6,11 @@ const {
   SectionBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MediaGalleryBuilder, // Добавлено для изображений v2
+  MediaGalleryItemBuilder, // Добавлено для изображений v2
   MessageFlags,
 } = require("discord.js");
 
-/**
- * Сборка ContainerBuilder на основе элементов с веб-сайта
- * @param {Object} data - Данные запроса { noColor, accentColor, items }
- * @returns {Object} Payload для отправки в Discord channel.send()
- */
 function buildWebContainer(data) {
   const { noColor, accentColor, items } = data;
   const container = new ContainerBuilder();
@@ -24,7 +21,6 @@ function buildWebContainer(data) {
     );
   }
 
-  // Парсинг элементов конструктора
   for (const item of items) {
     if (item.type === "text") {
       if (item.value) {
@@ -34,12 +30,21 @@ function buildWebContainer(data) {
       }
     } else if (item.type === "separator") {
       const sep = new SeparatorBuilder();
-
       if (item.large) {
-        // Большой невидимый отступ
         sep.setSpacing(SeparatorSpacingSize.Large);
+        sep.setDivider(false); // Делаем прозрачный отступ без линии
+      } else {
+        sep.setSpacing(SeparatorSpacingSize.Small);
+        sep.setDivider(true); // Обычный тонкий разделитель
       }
       container.addSeparatorComponents(sep);
+    } else if (item.type === "image") {
+      // ОБРАБОТКА ИЗОБРАЖЕНИЙ ПО URL ССЫЛКЕ
+      if (item.value) {
+        const mediaItem = new MediaGalleryItemBuilder().setURL(item.value);
+        const gallery = new MediaGalleryBuilder().addItems(mediaItem);
+        container.addMediaGalleryComponents(gallery);
+      }
     } else if (item.type === "section") {
       const section = new SectionBuilder();
 
@@ -49,7 +54,6 @@ function buildWebContainer(data) {
         );
       }
 
-      // Ссылка-кнопка в правый край секции
       if (item.btnLabel && item.btnLink) {
         const button = new ButtonBuilder()
           .setLabel(item.btnLabel)
