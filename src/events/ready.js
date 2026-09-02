@@ -22,6 +22,9 @@ const majesticBotUsername = "MajesticRolePlayBot";
 const discordChannelId = process.env.CAPT_INFO_CHANNEL_ID;
 const stringSession = new StringSession(process.env.TG_SESSION || "");
 
+// Хранилище для отправленных каптов, чтобы избегать дубликатов
+const processedCapts = new Map();
+
 module.exports = (client) => {
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Готово! Вход как ${readyClient.user.tag}`);
@@ -73,10 +76,6 @@ module.exports = (client) => {
 
         if (!isAttackMessage && !isDefendMessage) return;
 
-        console.log(
-          `[Telegram] Обнаружено уведомление о бизваре/капте! Парсим данные...`,
-        );
-
         let isAttack = isAttackMessage;
         let attacker = "Неизвестно";
         let defender = "Неизвестно";
@@ -119,6 +118,30 @@ module.exports = (client) => {
           text.match(/Количество нападающих:\s*([^\n]+)/i)?.[1] || "Не указано"
         ).trim();
 
+        // --- БЛОК ДЕДУПЛИКАЦИИ ---
+        // Создаем уникальный ключ на основе нападающих, защищающихся, времени и номера квадрата
+        const captKey = `${attacker}_${defender}_${startTime}_${zoneNum}`
+          .toLowerCase()
+          .replace(/\s+/g, "");
+
+        if (processedCapts.has(captKey)) {
+          console.log(
+            `[Telegram] Дубликат сообщения пропущен для капта: ${zoneNum} в ${startTime}`,
+          );
+          return;
+        }
+
+        // Запоминаем капт и ставим таймер на удаление из памяти через 5 минут (300000 мс)
+        processedCapts.set(captKey, true);
+        setTimeout(() => {
+          processedCapts.delete(captKey);
+        }, 300000);
+        // -------------------------
+
+        console.log(
+          `[Telegram] Обнаружено уведомление о бизваре/капте! Парсим данные...`,
+        );
+
         const channel = await client.channels.fetch(discordChannelId);
         if (!channel)
           return console.error("[Discord] Канал для каптов не найден!");
@@ -149,7 +172,6 @@ module.exports = (client) => {
                 ? "⚔️ Создать регу на АТАКУ ⚔️"
                 : "🛡️ Создать регу на ЗАЩИТУ 🛡️",
             )
-
             .setStyle(isAttack ? ButtonStyle.Success : ButtonStyle.Primary),
         );
 
