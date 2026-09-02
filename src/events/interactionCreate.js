@@ -66,9 +66,15 @@ module.exports = (client) => {
         return await inviteCandidate.showModal(interaction);
       if (customId.startsWith("invite_"))
         return await inviteAdmin.handleButtons(interaction);
+
+      if (customId === "capt_edit_time_trigger") {
+        return await captInteractions.handleInlineEditTimeButton(interaction);
+      }
+
       if (customId.startsWith("capt_")) {
         return await captInteractions.handleAutoCaptButton(interaction);
       }
+
       if (customId === "group")
         return await groupInteractions.showGroupSelect(interaction);
       if (customId === "capt")
@@ -82,7 +88,13 @@ module.exports = (client) => {
         return await archiveInteractions.handleDynamicButtons(interaction);
     }
 
+    // modals
+
     if (interaction.isModalSubmit()) {
+      if (customId === "modal_inline_edit_time") {
+        return await captInteractions.submitInlineEditTimeModal(interaction);
+      }
+
       if (customId === "invite_modal_submit")
         return await inviteCandidate.submitModal(interaction);
       if (customId.startsWith("invite_modal_reject_"))
@@ -90,7 +102,7 @@ module.exports = (client) => {
       if (customId.startsWith("modal_group_"))
         return await groupInteractions.submitGroupModal(interaction);
       if (interaction.customId === "modal_capt")
-        await captInteractions.submitCaptModal(interaction);
+        return await captInteractions.submitCaptModal(interaction);
     }
   });
 };

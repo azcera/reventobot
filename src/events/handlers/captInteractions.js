@@ -10,7 +10,7 @@ const {
   getDiscordTimestamp,
 } = require("../../commands/utility/parseDateTime");
 const naborManager = require("../../commands/utility/naborManager");
-const ADMIN_ROLES = process.env.ADMIN_ROLES.split(",");
+const ADMIN_ROLES = process.env.ADMIN_ROLES ? process.env.ADMIN_ROLES.split(",") : [];
 
 async function showCaptModal(interaction) {
   const modal = new ModalBuilder()
@@ -49,7 +49,6 @@ async function showCaptModal(interaction) {
   return await interaction.showModal(modal);
 }
 
-// 3. Общий обработчик отправки формы
 async function submitCaptModal(interaction) {
   const timeInput = interaction.fields.getTextInputValue("capt_time").trim();
   const parsedDate = parseDateTime(timeInput);
@@ -107,12 +106,10 @@ async function submitCaptModal(interaction) {
 }
 
 async function handleAutoCaptButton(interaction) {
-  // Проверяем, есть ли у пользователя хотя бы одна роль из списка allowedRoles
   const hasAdminRole = interaction.member.roles.cache.some((role) =>
     ADMIN_ROLES.includes(role.id),
   );
 
-  // Если у него нет нужной роли, прерываем выполнение
   if (!hasAdminRole) {
     return await interaction.reply({
       content: "❌ У вас нет необходимой роли для использования этой кнопки.",
@@ -144,7 +141,6 @@ async function handleAutoCaptButton(interaction) {
     }
   }
 
-  // Если совсем всё плохо — выдаем ошибку
   if (!parsedDate || isNaN(parsedDate.getTime())) {
     return await interaction.reply({
       content: `❌ Не удалось автоматически распознать формат времени: \`${timeInput}\`.`,
@@ -152,11 +148,9 @@ async function handleAutoCaptButton(interaction) {
     });
   }
 
-  // 4. Генерируем правильный Discord-таймстамп через вашу функцию getDiscordTimestamp
   const discordTimestamp = getDiscordTimestamp(parsedDate);
   const maxMain = 20;
 
-  // 5. Отвечаем пользователю (теперь Discord сам отобразит время правильно в самом ответе!)
   await interaction
     .reply({
       content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`,

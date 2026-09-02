@@ -189,7 +189,8 @@ module.exports = (client) => {
               `> ### 🆚 Против: \`${isAttack ? defender : attacker}\`\n` +
                 `> ### ⏰ Начало: \`${startTime}\`\n` +
                 `> ### 🗺️ Квадрат: \`${zoneName} (${zoneNum})\`\n` +
-                `> ### 👥 Кол-во врагов: \`${count}\``,
+                `> ### 👥 Кол-во врагов: \`${count}\`\n` +
+                `> ### ||@everyone||`,
             ),
           )
           .addActionRowComponents(actionRow);

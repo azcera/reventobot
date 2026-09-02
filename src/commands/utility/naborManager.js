@@ -46,7 +46,6 @@ function buildCaptureMessage(
       ? leftList.map((id, index) => `• <@${id}>`).join("\n")
       : "Пусто";
 
-  // Используем maxMain вместо статичной переменной
   const mainTitle = new TextDisplayBuilder().setContent(
     `### 👥 Основной состав (${mainList.length}/${maxMain})\n${mainPlayersText}`,
   );
@@ -77,6 +76,7 @@ function buildCaptureMessage(
       .addTextDisplayComponents(leftTitle);
   }
 
+  // Кнопки управления для участников и админов
   const buttonsRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("capt_join")
@@ -86,6 +86,10 @@ function buildCaptureMessage(
       .setCustomId("capt_leave")
       .setLabel("❌ Выйти")
       .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("capt_edit_time_trigger") // Название кнопки для перехвата админ права
+      .setLabel("✏️ Время")
+      .setStyle(ButtonStyle.Secondary),
   );
 
   return {
@@ -95,7 +99,8 @@ function buildCaptureMessage(
 }
 
 module.exports = {
-  // Принимаем target и maxMain из модального окна
+  buildCaptureMessage, // Экспортируем, чтобы использовать в функции редактирования времени
+
   async sendNabor(interaction, discordTimestamp, target = null, maxMain = 20) {
     const guild = interaction.guild;
     const channel = guild.channels.cache.get(PLUS_CHANNEL);
@@ -138,6 +143,46 @@ module.exports = {
     }
   },
 
+  // Метод для обновления времени из модального окна
+  async updateNaborTime(message, newTimestamp) {
+    let row;
+    try {
+      const res = await pool.query(
+        "SELECT * FROM active_captures WHERE message_id = $1",
+        [message.id],
+      );
+      row = res.rows[0];
+    } catch (err) {
+      console.error("Ошибка при получении данных для изменения времени:", err);
+      return;
+    }
+
+    if (!row) return;
+
+    // Сохраняем новое время в базу данных
+    try {
+      await pool.query(
+        "UPDATE active_captures SET discord_timestamp = $1 WHERE message_id = $2",
+        [newTimestamp, message.id],
+      );
+    } catch (err) {
+      console.error("Ошибка при обновлении времени в БД:", err);
+      return;
+    }
+
+    // Перерисовываем сообщение с новыми данными
+    const updatedMessageData = buildCaptureMessage(
+      newTimestamp,
+      row.main_list || [],
+      row.reserve_list || [],
+      row.left_list || [],
+      row.target,
+      row.max_main || 20,
+    );
+
+    await message.edit(updatedMessageData).catch(console.error);
+  },
+
   async handleButton(interaction) {
     if (!interaction.isButton()) return;
     if (
@@ -154,7 +199,7 @@ module.exports = {
         "SELECT * FROM active_captures WHERE message_id = $1",
         [messageId],
       );
-      row = res.rows[0]; // Получаем первую строку результата
+      row = res.rows[0];
     } catch (err) {
       console.error("Ошибка при поиске набора в БД:", err);
     }
@@ -168,7 +213,7 @@ module.exports = {
 
     const discordTimestamp = row.discord_timestamp;
     const target = row.target;
-    const maxMain = row.max_main || 20; // Динамический лимит из БД
+    const maxMain = row.max_main || 20;
 
     let mainList = row.main_list || [];
     let reserveList = row.reserve_list || [];
@@ -187,7 +232,6 @@ module.exports = {
       const leftIndex = leftList.indexOf(userId);
       if (leftIndex !== -1) leftList.splice(leftIndex, 1);
 
-      // Проверка по динамическому лимиту maxMain
       if (mainList.length < maxMain) {
         mainList.push(userId);
       } else {
