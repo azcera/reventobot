@@ -3,18 +3,11 @@ const {
   Collection,
   GatewayIntentBits,
   Partials,
-  MessageFlags,
-  ContainerBuilder,
-  TextDisplayBuilder,
-  SeparatorBuilder,
-  SeparatorSpacingSize, // ИСПРАВЛЕНО: Правильное название енама в discord.js v14
-  SectionBuilder,       
-  ButtonBuilder,
-  ButtonStyle
 } = require("discord.js");
 const express = require("express");
 const path = require("node:path");
 const fs = require("node:fs");
+const { buildWebContainer } = require("./src/services/containerService"); // Импорт нашего сервиса
 require("dotenv").config();
 
 const client = new Client({
@@ -59,7 +52,7 @@ if (fs.existsSync(eventsPath)) {
   }
 }
 
-// --- НАСТРОЙКА WEB СЕРВЕРА ДЛЯ КОНСТРУКТОРА ---
+// --- НАСТРОЙКА WEB СЕРВЕРА ---
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -68,10 +61,10 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// API Эндпоинт отправки
+// Лаконичный эндпоинт API
 app.post("/api/send-container", async (req, res) => {
   try {
-    const { channelId, noColor, accentColor, items } = req.body;
+    const { channelId } = req.body;
 
     if (!channelId) {
       return res.status(400).json({ error: "Не указан ID канала Discord" });
@@ -79,63 +72,16 @@ app.post("/api/send-container", async (req, res) => {
 
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel) {
-      return res.status(404).json({ error: "Канал не найден или у бота нет прав" });
+      return res
+        .status(404)
+        .json({ error: "Канал не найден или у бота нет к нему прав" });
     }
 
-    const container = new ContainerBuilder();
+    // Собираем payload через вынесенный сервис
+    const messagePayload = buildWebContainer(req.body);
 
-    // Если "без цвета" не активно — ставим цвет полоски
-    if (!noColor) {
-      container.setAccentColor(accentColor ? parseInt(accentColor.replace("#", "0x")) : 0x5865f2);
-    }
-
-    // Парсим элементы
-    for (const item of items) {
-      if (item.type === "text") {
-        if (item.value) {
-          container.addTextDisplayComponents(new TextDisplayBuilder().setContent(item.value));
-        }
-      } 
-      else if (item.type === "separator") {
-        const sep = new SeparatorBuilder();
-
-        if (item.large) {
-          // ИСПРАВЛЕНО: Ставим большой отступ и убираем саму серую линию (будет чистое пространство)
-          sep.setSpacing(SeparatorSpacingSize.Large);
-          sep.setDivider(false);
-        } else {
-          // Обычный тонкий разделитель с линией
-          sep.setSpacing(SeparatorSpacingSize.Small);
-          sep.setDivider(true);
-        }
-        container.addSeparatorComponents(sep);
-      } 
-      else if (item.type === "section") {
-        const section = new SectionBuilder();
-
-        if (item.value) {
-          section.setTextDisplayComponent(new TextDisplayBuilder().setContent(item.value));
-        }
-
-        // Кнопка принудительно встает в правый край на одной линии с текстом
-        if (item.btnLabel && item.btnLink) {
-          const button = new ButtonBuilder()
-            .setLabel(item.btnLabel)
-            .setURL(item.btnLink)
-            .setStyle(ButtonStyle.Link);
-
-          section.setTrailingAction(button);
-        }
-
-        container.addSectionComponents(section);
-      }
-    }
-
-    // Отправка
-    await channel.send({
-      flags: [MessageFlags.IsComponentsV2],
-      components: [container]
-    });
+    // Публикуем в текстовый канал
+    await channel.send(messagePayload);
 
     res.json({ success: true });
   } catch (err) {
@@ -144,7 +90,9 @@ app.post("/api/send-container", async (req, res) => {
   }
 });
 
-const server = app.listen(3000, () => console.log("Server is running on port 3000"));
+const server = app.listen(3000, () =>
+  console.log("Server is running on port 3000"),
+);
 
 // Отключение
 const shutdown = () => {
@@ -162,10 +110,10 @@ setTimeout(() => {
     .catch((err) => console.error("Discord login error:", err));
 }, 5000);
 
-client.on('error', error => {
-  console.error('Произошла ошибка клиента Discord:', error);
+client.on("error", (error) => {
+  console.error("Произошла ошибка клиента Discord:", error);
 });
 
-process.on('unhandledRejection', error => {
-  console.error('Необработанное исключение (Promise Rejection):', error);
+process.on("unhandledRejection", (error) => {
+  console.error("Необработанное исключение (Promise Rejection):", error);
 });
