@@ -18,7 +18,6 @@ function buildWebContainer(data) {
   const { noColor, accentColor, items } = data;
   const container = new ContainerBuilder();
 
-  // Установка цвета боковой полосы
   if (!noColor) {
     container.setAccentColor(
       accentColor ? parseInt(accentColor.replace("#", "0x")) : 0x5865f2,
@@ -39,11 +38,6 @@ function buildWebContainer(data) {
       if (item.large) {
         // Большой невидимый отступ
         sep.setSpacing(SeparatorSpacingSize.Large);
-        sep.setDivider(false);
-      } else {
-        // Тонкая разделительная линия
-        sep.setSpacing(SeparatorSpacingSize.Small);
-        sep.setDivider(true);
       }
       container.addSeparatorComponents(sep);
     } else if (item.type === "section") {
@@ -62,7 +56,7 @@ function buildWebContainer(data) {
           .setURL(item.btnLink)
           .setStyle(ButtonStyle.Link);
 
-        section.setPrimaryButtonAccessory(button);
+        section.setButtonAccessory(button);
       }
 
       container.addSectionComponents(section);
