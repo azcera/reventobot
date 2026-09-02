@@ -7,8 +7,8 @@ const {
   ContainerBuilder,
   TextDisplayBuilder,
   SeparatorBuilder,
-  SeparatorSpacing, // Используется для больших отступов
-  SectionBuilder,    // Используется для кнопок справа от текста
+  SeparatorSpacingSize, // ИСПРАВЛЕНО: Правильное название енама в discord.js v14
+  SectionBuilder,       
   ButtonBuilder,
   ButtonStyle
 } = require("discord.js");
@@ -84,12 +84,12 @@ app.post("/api/send-container", async (req, res) => {
 
     const container = new ContainerBuilder();
 
-    // Если флаг "без цвета" не стоит — применяем цвет боковой полоски
+    // Если "без цвета" не активно — ставим цвет полоски
     if (!noColor) {
       container.setAccentColor(accentColor ? parseInt(accentColor.replace("#", "0x")) : 0x5865f2);
     }
 
-    // Парсим каждый элемент, созданный на сайте
+    // Парсим элементы
     for (const item of items) {
       if (item.type === "text") {
         if (item.value) {
@@ -98,21 +98,26 @@ app.post("/api/send-container", async (req, res) => {
       } 
       else if (item.type === "separator") {
         const sep = new SeparatorBuilder();
-        // Настройка отступов: если large равен true — ставим большие отступы
+
         if (item.large) {
-          sep.setSpacing(SeparatorSpacing.Large); 
+          // ИСПРАВЛЕНО: Ставим большой отступ и убираем саму серую линию (будет чистое пространство)
+          sep.setSpacing(SeparatorSpacingSize.Large);
+          sep.setDivider(false);
+        } else {
+          // Обычный тонкий разделитель с линией
+          sep.setSpacing(SeparatorSpacingSize.Small);
+          sep.setDivider(true);
         }
         container.addSeparatorComponents(sep);
       } 
       else if (item.type === "section") {
-        // Создаем правильную секцию Discord v2
         const section = new SectionBuilder();
 
         if (item.value) {
           section.setTextDisplayComponent(new TextDisplayBuilder().setContent(item.value));
         }
 
-        // Размещаем кнопку ПРАВЕЕ текста (в трейлинг зону секции)
+        // Кнопка принудительно встает в правый край на одной линии с текстом
         if (item.btnLabel && item.btnLink) {
           const button = new ButtonBuilder()
             .setLabel(item.btnLabel)
@@ -126,7 +131,7 @@ app.post("/api/send-container", async (req, res) => {
       }
     }
 
-    // Отправляем в канал
+    // Отправка
     await channel.send({
       flags: [MessageFlags.IsComponentsV2],
       components: [container]
