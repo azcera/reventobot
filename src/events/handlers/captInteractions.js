@@ -3,13 +3,14 @@ const {
   TextInputBuilder,
   TextInputStyle,
   MessageFlags,
-  LabelBuilder
+  LabelBuilder,
 } = require("discord.js");
 const {
   parseDateTime,
   getDiscordTimestamp,
 } = require("../../commands/utility/parseDateTime");
 const naborManager = require("../../commands/utility/naborManager");
+const ADMIN_ROLES = process.env.ADMIN_ROLES.split(",");
 
 async function showCaptModal(interaction) {
   const modal = new ModalBuilder()
@@ -106,30 +107,37 @@ async function submitCaptModal(interaction) {
 }
 
 async function handleAutoCaptButton(interaction) {
-  // 1. Разбиваем customId кнопки: capt_[enemy]_[time]
+  // Проверяем, есть ли у пользователя хотя бы одна роль из списка allowedRoles
+  const hasAdminRole = interaction.member.roles.cache.some((role) =>
+    ADMIN_ROLES.includes(role.id),
+  );
+
+  // Если у него нет нужной роли, прерываем выполнение
+  if (!hasAdminRole) {
+    return await interaction.reply({
+      content: "❌ У вас нет необходимой роли для использования этой кнопки.",
+      flags: [MessageFlags.Ephemeral],
+    });
+  }
+
   const [, enemyRaw, timeRaw] = interaction.customId.split("_");
 
-  const target = enemyRaw.replace(/-/g, " "); // "Culture"
-  const timeInput = timeRaw.replace(/-/g, " "); // "29.08.2026 16:20:00"
+  const target = enemyRaw.replace(/-/g, " ");
+  const timeInput = timeRaw.replace(/-/g, " ");
 
-  // 2. Отрезаем секунды, чтобы ваша функция parseDateTime смогла прочитать строку!
-  // Из "29.08.2026 16:20:00" делаем "29.08.2026 16:20"
   const cleanTimeInput = timeInput.substring(0, 16);
 
-  // 3. Вызываем вашу родную функцию парсинга
   let parsedDate = null;
   if (typeof parseDateTime === "function") {
     parsedDate = parseDateTime(cleanTimeInput);
   }
 
-  // Если ваша функция вернула null, используем резервный нативный парсинг
   if (!parsedDate || isNaN(parsedDate.getTime())) {
     const dateMatch = cleanTimeInput.match(
       /^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/,
     );
     if (dateMatch) {
       const [, day, month, year, hours, minutes] = dateMatch;
-      // Собираем дату напрямую с указанием часового пояса +03:00 (МСК)
       parsedDate = new Date(
         `${year}-${month}-${day}T${hours}:${minutes}:00+03:00`,
       );
