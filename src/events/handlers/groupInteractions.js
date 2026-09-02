@@ -18,6 +18,12 @@ const {
 } = require("../../commands/utility/groupOptions");
 
 async function showGroupSelect(interaction) {
+  // 1. Сразу говорим Discord, что мы обрабатываем запрос в фоновом режиме
+  // Это продлевает жизнь взаимодействия до 15 минут
+  await interaction
+    .deferReply({ flags: [MessageFlags.Ephemeral] })
+    .catch(console.error);
+
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId("group_select_target")
     .setPlaceholder("Выберите цель проведения...")
@@ -25,15 +31,14 @@ async function showGroupSelect(interaction) {
 
   const row = new ActionRowBuilder().addComponents(selectMenu);
 
-  const response = await interaction.reply({
-    content:
-      "Пожалуйста, выберите цель создания группы из списка ниже (меню активно 1 минуту):",
-    components: [row],
-    flags: [MessageFlags.Ephemeral],
-    withResponse: true,
-  });
+  const message = await interaction
+    .editReply({
+      content:
+        "Пожалуйста, выберите цель создания группы из списка ниже (меню активно 1 минуту):",
+      components: [row],
+    })
+    .catch(console.error);
 
-  const message = response?.resource?.message;
   if (!message) return;
 
   const collector = message.createMessageComponentCollector({

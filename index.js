@@ -72,3 +72,11 @@ setTimeout(() => {
     .then(() => console.log("Discord login successful!"))
     .catch((err) => console.error("Discord login error:", err));
 }, 5000);
+
+client.on('error', error => {
+  console.error('Произошла ошибка клиента Discord:', error);
+});
+
+process.on('unhandledRejection', error => {
+  console.error('Необработанное исключение (Promise Rejection):', error);
+});
