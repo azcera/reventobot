@@ -137,12 +137,37 @@ async function updateCollectionTime(
 	const captureData = result.rows[0]
 	console.log('[UpdateTime] Данные из БД получены:', captureData.target)
 
+	// ✅ ИСПРАВЛЕНО: Проверяем тип данных перед парсингом
+	// JSONB в PostgreSQL уже возвращается как объект, а не строка
+	const safeParse = (data, fallback = []) => {
+		if (Array.isArray(data)) return data // Уже массив
+		if (typeof data === 'string') {
+			try {
+				return JSON.parse(data)
+			} catch (e) {
+				console.error('[UpdateTime] Ошибка парсинга JSON:', data)
+				return fallback
+			}
+		}
+		return fallback // null, undefined или что-то еще
+	}
+
+	const mainList = safeParse(captureData.main_list, [])
+	const reserveList = safeParse(captureData.reserve_list, [])
+	const leftList = safeParse(captureData.left_list, [])
+
+	console.log('[UpdateTime] Списки:', {
+		main: mainList.length,
+		reserve: reserveList.length,
+		left: leftList.length
+	})
+
 	// Пересобираем сообщение с новым временем
 	const updatedMessageData = buildCaptureMessage(
 		newTimestamp,
-		JSON.parse(captureData.main_list || '[]'),
-		JSON.parse(captureData.reserve_list || '[]'),
-		JSON.parse(captureData.left_list || '[]'),
+		mainList,
+		reserveList,
+		leftList,
 		captureData.target,
 		captureData.max_main
 	)
@@ -159,10 +184,9 @@ async function updateCollectionTime(
 				console.error('[UpdateTime] Канал не найден даже после fetch')
 				return
 			}
-			// Используем fetchedChannel вместо channel
 			const message = await fetchedChannel.messages.fetch(messageId)
 			await message.edit(updatedMessageData)
-			console.log('[UpdateTime] Сообщение успешно обновлено (через fetch)')
+			console.log('[UpdateTime] ✅ Сообщение успешно обновлено (через fetch)')
 			return
 		} catch (err) {
 			console.error('[UpdateTime] Ошибка при fetch канала:', err.message)
