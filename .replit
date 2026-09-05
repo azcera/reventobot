@@ -1,0 +1,43 @@
+modules = ["nodejs-20"]
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[nix]
+packages = ["speech-tools"]
+
+[agent]
+expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+mode = "sequential"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[deployment]
+build = ["sh", "-c", "npm install"]
+run = ["node", "index.js"]
+deploymentTarget = "cloudrun"
+
+[userenv]
+
+[userenv.shared]
