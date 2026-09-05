@@ -98,204 +98,250 @@ function buildCaptureMessage(
 	}
 }
 
-module.exports = {
-	buildCaptureMessage, // Экспортируем, чтобы использовать в функции редактирования времени
+/**
+ * Обновляет время в сообщении набора после редактирования
+ * @param {string} messageId - ID сообщения в канале
+ * @param {string} channelId - ID канала, где находится сообщение
+ * @param {string} newTimestamp - Новый Discord timestamp
+ * @param {Client} client - Discord клиент для поиска сообщения
+ */
+async function updateCollectionTime(
+	messageId,
+	channelId,
+	newTimestamp,
+	client
+) {
+	console.log(
+		`[UpdateTime] Начало обновления: messageId=${messageId}, channelId=${channelId}`
+	)
 
-	async sendCollection(
-		interaction,
-		discordTimestamp,
-		target = null,
-		maxMain = 20
-	) {
-		const guild = interaction.guild
-		const channel = guild.channels.cache.get(PLUS_CHANNEL)
+	if (!messageId || !channelId || !client) {
+		console.error('[UpdateTime] Недостающие параметры:', {
+			messageId,
+			channelId,
+			hasClient: !!client
+		})
+		return
+	}
 
-		const mainList = []
-		const reserveList = []
-		const leftList = []
+	const result = await pool.query(
+		'SELECT * FROM active_captures WHERE message_id = $1',
+		[messageId]
+	)
 
-		const messageData = buildCaptureMessage(
-			discordTimestamp,
-			mainList,
-			reserveList,
-			leftList,
-			target,
-			maxMain
+	if (result.rows.length === 0) {
+		console.error('[UpdateTime] Набор не найден в БД')
+		return
+	}
+
+	const captureData = result.rows[0]
+	console.log('[UpdateTime] Данные из БД получены:', captureData.target)
+
+	// Пересобираем сообщение с новым временем
+	const updatedMessageData = buildCaptureMessage(
+		newTimestamp,
+		JSON.parse(captureData.main_list || '[]'),
+		JSON.parse(captureData.reserve_list || '[]'),
+		JSON.parse(captureData.left_list || '[]'),
+		captureData.target,
+		captureData.max_main
+	)
+
+	// Ищем канал
+	const channel = client.channels.cache.get(channelId)
+	if (!channel) {
+		console.error(
+			`[UpdateTime] Канал ${channelId} не найден в cache, пытаемся fetch...`
 		)
-		const message = await channel.send(messageData)
-		for (let i = 0; i < 3; i++) {
-			await channel.send({
-				content: `<@&${process.env.AUTO_ROLE}> рега выше`
-			})
-		}
-
 		try {
-			await pool.query(
-				`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, target, max_main)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				[
-					message.id,
-					discordTimestamp,
-					JSON.stringify(mainList),
-					JSON.stringify(reserveList),
-					JSON.stringify(leftList),
-					target,
-					maxMain
-				]
-			)
+			const fetchedChannel = await client.channels.fetch(channelId)
+			if (!fetchedChannel) {
+				console.error('[UpdateTime] Канал не найден даже после fetch')
+				return
+			}
+			// Используем fetchedChannel вместо channel
+			const message = await fetchedChannel.messages.fetch(messageId)
+			await message.edit(updatedMessageData)
+			console.log('[UpdateTime] Сообщение успешно обновлено (через fetch)')
+			return
 		} catch (err) {
-			console.error('Не удалось сохранить набор в БД:', err)
+			console.error('[UpdateTime] Ошибка при fetch канала:', err.message)
+			return
 		}
-	},
+	}
 
-	/**
-	 * Обновляет время в сообщении набора после редактирования
-	 * @param {Interaction} interaction - Исходное взаимодействие (для получения message)
-	 * @param {string} newTimestamp - Новый Discord timestamp
-	 */
-	async updateCollectionTime(interaction, newTimestamp) {
-		const messageId = interaction.message.id
+	try {
+		console.log(`[UpdateTime] Канал найден, ищем сообщение ${messageId}...`)
+		const message = await channel.messages.fetch(messageId)
+		console.log('[UpdateTime] Сообщение найдено, обновляем...')
+		await message.edit(updatedMessageData)
+		console.log('[UpdateTime] ✅ Сообщение успешно обновлено')
+	} catch (err) {
+		console.error('[UpdateTime] Не удалось обновить сообщение:', err.message)
+	}
+}
 
-		// Получаем обновленные данные из БД
-		const result = await db.query(
+async function sendCollection(
+	interaction,
+	discordTimestamp,
+	target = null,
+	maxMain = 20
+) {
+	const guild = interaction.guild
+	const channel = guild.channels.cache.get(PLUS_CHANNEL)
+
+	const mainList = []
+	const reserveList = []
+	const leftList = []
+
+	const messageData = buildCaptureMessage(
+		discordTimestamp,
+		mainList,
+		reserveList,
+		leftList,
+		target,
+		maxMain
+	)
+	const message = await channel.send(messageData)
+	for (let i = 0; i < 3; i++) {
+		await channel.send({
+			content: `<@&${process.env.AUTO_ROLE}> рега выше`
+		})
+	}
+
+	try {
+		await pool.query(
+			`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, target, max_main)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			[
+				message.id,
+				discordTimestamp,
+				JSON.stringify(mainList),
+				JSON.stringify(reserveList),
+				JSON.stringify(leftList),
+				target,
+				maxMain
+			]
+		)
+	} catch (err) {
+		console.error('Не удалось сохранить набор в БД:', err)
+	}
+}
+
+async function handleButton(interaction) {
+	if (!interaction.isButton()) return
+	if (
+		interaction.customId !== 'capt_join' &&
+		interaction.customId !== 'capt_leave'
+	)
+		return
+
+	const messageId = interaction.message.id
+
+	let row
+	try {
+		const res = await pool.query(
 			'SELECT * FROM active_captures WHERE message_id = $1',
 			[messageId]
 		)
+		row = res.rows[0]
+	} catch (err) {
+		console.error('Ошибка при поиске набора в БД:', err)
+	}
 
-		if (result.rows.length === 0) {
-			console.error('[UpdateTime] Набор не найден в БД')
-			return
-		}
-
-		const captureData = result.rows[0]
-
-		// Пересобираем сообщение с новым временем
-		// (Предполагается, что у вас есть функция buildCaptureMessage или аналог)
-		const newContainer = buildCaptureMessage(
-			captureData.target,
-			newTimestamp,
-			JSON.parse(captureData.main_list || '[]'),
-			JSON.parse(captureData.reserve_list || '[]'),
-			JSON.parse(captureData.left_list || '[]'),
-			captureData.max_main
-		)
-
-		// Обновляем сообщение
-		await interaction.message.edit({
-			components: [newContainer],
-			flags: [MessageFlags.IsComponentsV2]
+	if (!row) {
+		return interaction.reply({
+			content: '❌ Данная регистрация устарела или неактивна.',
+			flags: [MessageFlags.Ephemeral]
 		})
-	},
+	}
 
-	async handleButton(interaction) {
-		if (!interaction.isButton()) return
-		if (
-			interaction.customId !== 'capt_join' &&
-			interaction.customId !== 'capt_leave'
-		)
-			return
+	const discordTimestamp = row.discord_timestamp
+	const target = row.target
+	const maxMain = row.max_main || 20
 
-		const messageId = interaction.message.id
+	let mainList = row.main_list || []
+	let reserveList = row.reserve_list || []
+	let leftList = row.left_list || []
 
-		let row
-		try {
-			const res = await pool.query(
-				'SELECT * FROM active_captures WHERE message_id = $1',
-				[messageId]
-			)
-			row = res.rows[0]
-		} catch (err) {
-			console.error('Ошибка при поиске набора в БД:', err)
-		}
+	const userId = interaction.user.id
 
-		if (!row) {
+	if (interaction.customId === 'capt_join') {
+		if (mainList.includes(userId) || reserveList.includes(userId)) {
 			return interaction.reply({
-				content: '❌ Данная регистрация устарела или неактивна.',
+				content: 'Вы уже записаны на капт!',
 				flags: [MessageFlags.Ephemeral]
 			})
 		}
 
-		const discordTimestamp = row.discord_timestamp
-		const target = row.target
-		const maxMain = row.max_main || 20
+		const leftIndex = leftList.indexOf(userId)
+		if (leftIndex !== -1) leftList.splice(leftIndex, 1)
 
-		let mainList = row.main_list || []
-		let reserveList = row.reserve_list || []
-		let leftList = row.left_list || []
+		if (mainList.length < maxMain) {
+			mainList.push(userId)
+		} else {
+			reserveList.push(userId)
+		}
+	} else if (interaction.customId === 'capt_leave') {
+		const mainIndex = mainList.indexOf(userId)
+		const reserveIndex = reserveList.indexOf(userId)
 
-		const userId = interaction.user.id
-
-		if (interaction.customId === 'capt_join') {
-			if (mainList.includes(userId) || reserveList.includes(userId)) {
-				return interaction.reply({
-					content: 'Вы уже записаны на капт!',
-					flags: [MessageFlags.Ephemeral]
-				})
-			}
-
-			const leftIndex = leftList.indexOf(userId)
-			if (leftIndex !== -1) leftList.splice(leftIndex, 1)
-
-			if (mainList.length < maxMain) {
-				mainList.push(userId)
-			} else {
-				reserveList.push(userId)
-			}
-		} else if (interaction.customId === 'capt_leave') {
-			const mainIndex = mainList.indexOf(userId)
-			const reserveIndex = reserveList.indexOf(userId)
-
-			if (mainIndex === -1 && reserveIndex === -1) {
-				return interaction.reply({
-					content: 'Вас и так нет в списках.',
-					flags: [MessageFlags.Ephemeral]
-				})
-			}
-
-			if (mainIndex !== -1) {
-				mainList.splice(mainIndex, 1)
-
-				if (reserveList.length > 0) {
-					const movingPlayer = reserveList.shift()
-					mainList.push(movingPlayer)
-				}
-			} else if (reserveIndex !== -1) {
-				reserveList.splice(reserveIndex, 1)
-			}
-
-			if (!leftList.includes(userId)) {
-				leftList.push(userId)
-			}
+		if (mainIndex === -1 && reserveIndex === -1) {
+			return interaction.reply({
+				content: 'Вас и так нет в списках.',
+				flags: [MessageFlags.Ephemeral]
+			})
 		}
 
-		try {
-			await pool.query(
-				`UPDATE active_captures 
+		if (mainIndex !== -1) {
+			mainList.splice(mainIndex, 1)
+
+			if (reserveList.length > 0) {
+				const movingPlayer = reserveList.shift()
+				mainList.push(movingPlayer)
+			}
+		} else if (reserveIndex !== -1) {
+			reserveList.splice(reserveIndex, 1)
+		}
+
+		if (!leftList.includes(userId)) {
+			leftList.push(userId)
+		}
+	}
+
+	try {
+		await pool.query(
+			`UPDATE active_captures 
          SET main_list = $1, reserve_list = $2, left_list = $3
          WHERE message_id = $4`,
-				[
-					JSON.stringify(mainList),
-					JSON.stringify(reserveList),
-					JSON.stringify(leftList),
-					messageId
-				]
-			)
-		} catch (err) {
-			console.error('Не удалось обновить данные набора в БД:', err)
-			return interaction.reply({
-				content: '❌ Произошла ошибка базы данных при сохранении.',
-				flags: [MessageFlags.Ephemeral]
-			})
-		}
-
-		const updatedMessageData = buildCaptureMessage(
-			discordTimestamp,
-			mainList,
-			reserveList,
-			leftList,
-			target,
-			maxMain
+			[
+				JSON.stringify(mainList),
+				JSON.stringify(reserveList),
+				JSON.stringify(leftList),
+				messageId
+			]
 		)
-		await interaction.update(updatedMessageData)
+	} catch (err) {
+		console.error('Не удалось обновить данные набора в БД:', err)
+		return interaction.reply({
+			content: '❌ Произошла ошибка базы данных при сохранении.',
+			flags: [MessageFlags.Ephemeral]
+		})
 	}
+
+	const updatedMessageData = buildCaptureMessage(
+		discordTimestamp,
+		mainList,
+		reserveList,
+		leftList,
+		target,
+		maxMain
+	)
+	await interaction.update(updatedMessageData)
+}
+module.exports = {
+	buildCaptureMessage,
+	updateCollectionTime,
+	sendCollection,
+	handleButton
 }

@@ -215,21 +215,41 @@ async function submitInlineEditTimeModal(interaction) {
 
 	const newDiscordTimestamp = getDiscordTimestamp(parsedDate)
 	const messageId = interaction.customId.replace('modal_inline_edit_time_', '')
-	const channelId = interaction.channelId
+
+	// ✅ Более надежное получение channelId
+	const channelId = interaction.channelId || interaction.channel?.id
+
+	if (!channelId) {
+		console.error('[EditTime] channelId не найден в interaction')
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ Не удалось определить канал. Попробуйте снова.'
+		})
+	}
 
 	await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
 
 	try {
+		// Обновляем время в базе данных
 		await db.query(
 			'UPDATE active_captures SET discord_timestamp = $1 WHERE message_id = $2',
 			[newDiscordTimestamp, messageId]
 		)
 
+		// ✅ Передаем client более надежно
+		const client = interaction.client
+		if (!client) {
+			console.error('[EditTime] client не найден в interaction')
+			await interaction.editReply({
+				content: '❌ Внутренняя ошибка: клиент недоступен.'
+			})
+			return
+		}
+
 		await captureManager.updateCollectionTime(
 			messageId,
 			channelId,
 			newDiscordTimestamp,
-			interaction.client
+			client
 		)
 
 		await interaction.editReply({
