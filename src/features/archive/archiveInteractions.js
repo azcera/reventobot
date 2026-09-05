@@ -12,6 +12,7 @@ async function cancelArchive(interaction) {
 }
 
 async function handleDynamicButtons(interaction) {
+	const customId = interaction.customId
 	if (customId.startsWith('cancel_create')) {
 		try {
 			await interaction.deferUpdate()
@@ -22,8 +23,8 @@ async function handleDynamicButtons(interaction) {
 		return
 	}
 
-	if (interaction.customId.startsWith('create_')) {
-		const rawData = interaction.customId.replace('create_', '')
+	if (customId.startsWith('create_')) {
+		const rawData = customId.replace('create_', '')
 
 		const idMatch = rawData.match(/\d{17,19}$/)
 		const targetMemberID = idMatch ? idMatch[0] : null
