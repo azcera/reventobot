@@ -18,72 +18,62 @@ const ADMIN_ROLES = process.env.ADMIN_ROLES
     ? process.env.ADMIN_ROLES.split(",")
     : [];
 
-// 🎯 КОНФИГУРАЦИЯ ПОЛЕЙ МОДАЛЬНОГО ОКНА
 const MODAL_FIELDS = [
     {
         customId: "invite_name",
-        label: "Имя",
+        label: "Никнейм",
         description: "Только имя (без фамилии и статика)",
         placeholder: "Tony",
         style: TextInputStyle.Short,
         required: true,
-        validate: (value) => {
-            if (!/^[A-Za-z]+$/.test(value)) {
-                return "❌ Имя должно содержать только английские буквы (A-Z, a-z).";
-            }
-            return null;
-        },
+        validate: (value) =>
+            /^[A-Za-z]+$/.test(value)
+                ? null
+                : "❌ Имя должно содержать только английские буквы.",
     },
     {
         customId: "invite_static",
         label: "Статик ID",
-        description: "Ваш уникальный числовой идентификатор",
+        description:
+            "Ваш уникальный числовой идентификатор (можно посмотреть справа вверху в игре после символа '#')",
         placeholder: "132961",
         style: TextInputStyle.Short,
         required: true,
-        validate: (value) => {
-            if (!/^\d+$/.test(value)) {
-                return "❌ Статик должен содержать только цифры.";
-            }
-            return null;
-        },
+        validate: (value) =>
+            /^\d+$/.test(value)
+                ? null
+                : "❌ Статик должен содержать только цифры.",
     },
     {
         customId: "invite_age",
         label: "Возраст (ООС)",
-        description: "Возраст от 10 до 90 лет",
         placeholder: "18",
         style: TextInputStyle.Short,
         required: true,
         validate: (value) => {
             const age = parseInt(value);
-            if (isNaN(age)) {
-                return "❌ Возраст должен быть числом.";
-            }
-            if (age < 10 || age > 90) {
-                return "❌ Возраст должен быть от 10 до 90 лет.";
-            }
+            if (isNaN(age) || age < 10 || age > 90)
+                return "❌ Возраст должен быть введен верным числом.";
             return null;
         },
     },
     {
         customId: "invite_info",
         label: "Как узнали о семье и чего ждете?",
-        description: "Расскажите, как вы узнали о нас и ваши ожидания",
-        placeholder:
-            "узнал через маркет, хочу развиваться и участвовать в жизни семьи",
+        description: "Расскажите о ваших ожиданиях",
+        placeholder: "Узнал через маркет, хочу развиваться",
         style: TextInputStyle.Paragraph,
         required: true,
-        validate: () => null, // Любой ввод
+        validate: () => null,
     },
     {
         customId: "invite_history",
         label: "Где ранее играли?",
-        description: "Указывайте по возможности все проекты и семьи",
-        placeholder: "Revento, Sweet (maj), Gucci (5rp)",
+        description: "Указывайте проекты и семьи",
+        placeholder: "Revento, Sweet, Gucci (5rp)",
         style: TextInputStyle.Paragraph,
         required: true,
-        validate: () => null, // Любой ввод
+        validate: () => null,
     },
 ];
 
@@ -93,7 +83,6 @@ class InviteCandidate {
             "SELECT * FROM family_applications WHERE user_id = $1",
             [interaction.user.id],
         );
-
         if (checkActive.rows.length > 0) {
             return sendEphemeralWithAutoDelete(interaction, {
                 content: "❌ Вы уже подали заявку!",
@@ -104,7 +93,6 @@ class InviteCandidate {
             .setCustomId("invite_modal_submit")
             .setTitle("Заявка в семью REVENTO");
 
-        // 🔄 Автоматическая сборка полей из массива
         const labels = MODAL_FIELDS.map((field) => {
             const label = new LabelBuilder()
                 .setLabel(field.label)
@@ -115,11 +103,7 @@ class InviteCandidate {
                         .setStyle(field.style)
                         .setRequired(field.required),
                 );
-
-            if (field.description) {
-                label.setDescription(field.description);
-            }
-
+            if (field.description) label.setDescription(field.description);
             return label;
         });
 
@@ -128,7 +112,6 @@ class InviteCandidate {
     }
 
     async submitModal(interaction) {
-        // 🔄 Автоматическое извлечение значений
         const values = {};
         MODAL_FIELDS.forEach((field) => {
             values[field.customId] = interaction.fields
@@ -136,22 +119,16 @@ class InviteCandidate {
                 .trim();
         });
 
-        // 🔄 Автоматическая валидация
         for (const field of MODAL_FIELDS) {
-            if (field.validate) {
-                const error = field.validate(values[field.customId]);
-                if (error) {
-                    return sendEphemeralWithAutoDelete(interaction, {
-                        content: error,
-                    });
-                }
-            }
+            const error = field.validate(values[field.customId]);
+            if (error)
+                return sendEphemeralWithAutoDelete(interaction, {
+                    content: error,
+                });
         }
 
         const fullName = `${values.invite_name} | ${values.invite_static}`;
         const age = parseInt(values.invite_age);
-        const info = values.invite_info;
-        const history = values.invite_history;
 
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
@@ -171,7 +148,6 @@ class InviteCandidate {
                     ],
                 },
             ];
-
             ADMIN_ROLES.forEach((roleId) =>
                 permissionOverwrites.push({
                     id: roleId,
@@ -190,19 +166,17 @@ class InviteCandidate {
                 permissionOverwrites,
             });
 
-            // Сохраняем в БД с новой структурой полей
             await db.query(
                 `INSERT INTO family_applications 
-                 (user_id, channel_id, full_name, age, field3, field4, field5) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                 (user_id, channel_id, full_name, age, about_and_expectations, previous_experience) 
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
                 [
                     interaction.user.id,
                     channel.id,
                     fullName,
                     age,
-                    info, // field3 теперь = как узнали + чего ждете
-                    history, // field4 = где ранее играли
-                    "", // field5 теперь пустой (объединен с field3)
+                    values.invite_info,
+                    values.invite_history,
                 ],
             );
 
@@ -210,9 +184,8 @@ class InviteCandidate {
                 interaction.user.id,
                 fullName,
                 age,
-                info,
-                history,
-                "",
+                values.invite_info,
+                values.invite_history,
                 "отправления",
             );
 
@@ -221,12 +194,12 @@ class InviteCandidate {
                 flags: [MessageFlags.IsComponentsV2],
             });
 
-            return await editReplyWithAutoDelete({
+            return await editReplyWithAutoDelete(interaction, {
                 content: `✅ Ваша заявка зарегистрирована! <#${channel.id}>`,
             });
         } catch (error) {
             console.error("[InviteCandidate] Ошибка создания заявки:", error);
-            return await editReplyWithAutoDelete({
+            return await editReplyWithAutoDelete(interaction, {
                 content: "❌ Произошла ошибка при создании заявки.",
             });
         }

@@ -33,7 +33,7 @@ async function showGroupSelect(interaction) {
 
   const row = new ActionRowBuilder().addComponents(selectMenu);
 
-  const message = await editReplyWithAutoDelete({
+  const message = await editReplyWithAutoDelete(interaction, {
       content:
         "Пожалуйста, выберите цель создания группы из списка ниже (меню активно 1 минуту):",
       components: [row],

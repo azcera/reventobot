@@ -14,8 +14,8 @@ pool.on("error", (err) => {
 });
 
 pool.query("SELECT NOW()")
-    .then(() => console.log("Успешное подключение к пулу PostgreSQL"))
-    .catch((err) => console.error("Ошибка подключения к пулу БД:", err));
+    .then(() => console.log("✅ Успешное подключение к пулу PostgreSQL"))
+    .catch((err) => console.error("❌ Ошибка подключения к пулу БД:", err));
 
 const initDb = async () => {
     try {
@@ -25,9 +25,8 @@ const initDb = async () => {
                 channel_id TEXT NOT NULL,
                 full_name TEXT NOT NULL,
                 age INT NOT NULL,
-                field3 TEXT,
-                field4 TEXT,
-                field5 TEXT,
+                about_and_expectations TEXT NOT NULL,
+                previous_experience TEXT NOT NULL,  
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -45,9 +44,12 @@ const initDb = async () => {
             );
         `);
 
-        console.log("Все таблицы БД успешно проверены и инициализированы.");
+        console.log("✅ Все таблицы БД успешно проверены и инициализированы.");
     } catch (err) {
-        console.error("Критическая ошибка при инициализации таблиц БД:", err);
+        console.error(
+            "❌ Критическая ошибка при инициализации таблиц БД:",
+            err,
+        );
     }
 };
 

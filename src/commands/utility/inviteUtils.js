@@ -45,11 +45,10 @@ const colors = {
 // Универсальный сборщик контейнеров (V2 Components)
 async function buildContainer(
     userId,
-    nameInput,
+    fullName,
     age,
-    f3,
-    f4,
-    f5,
+    aboutAndExpectations,
+    previousExperience,
     action,
     adminId = null,
     extraInfo = null,
@@ -88,10 +87,10 @@ async function buildContainer(
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
                 `### Пользователь: <@${userId}>\n` +
-                    `### 1. Никнейм\n${nameInput}\n` +
+                    `### 1. Никнейм\n${fullName}\n` +
                     `### 2. Возраст (ООС)\n${age}\n` +
-                    `### 3. Как узнали о семье и чего ждете?\n${f3}\n` +
-                    `### 4. Где ранее играли?\n${f4}`,
+                    `### 3. Как узнали о семье и чего ждете?\n${aboutAndExpectations}\n` +
+                    `### 4. Где ранее играли?\n${previousExperience}`,
             ),
         )
         .addSeparatorComponents(new SeparatorBuilder())
