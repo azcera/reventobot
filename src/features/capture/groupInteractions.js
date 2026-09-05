@@ -7,10 +7,7 @@ const {
   ActionRowBuilder,
   LabelBuilder,
 } = require("discord.js");
-const {
-  parseDateTime,
-  getMskTimeString,
-} = require("../../commands/utility/parseDateTime");
+const { parseDateTime, getMskTimeString } = require("../../utils/dateUtils");
 
 const {
   getFilteredOptions,
@@ -19,7 +16,7 @@ const {
 const {
   sendEphemeralWithAutoDelete,
   editReplyWithAutoDelete,
-} = require("../../commands/utility/autoDelete");
+} = require("../../utils/autoDelete");
 
 async function showGroupSelect(interaction) {
   await interaction
@@ -34,11 +31,10 @@ async function showGroupSelect(interaction) {
   const row = new ActionRowBuilder().addComponents(selectMenu);
 
   const message = await editReplyWithAutoDelete(interaction, {
-      content:
-        "Пожалуйста, выберите цель создания группы из списка ниже (меню активно 1 минуту):",
-      components: [row],
-    })
-    .catch(console.error);
+    content:
+      "Пожалуйста, выберите цель создания группы из списка ниже (меню активно 1 минуту):",
+    components: [row],
+  }).catch(console.error);
 
   if (!message) return;
 

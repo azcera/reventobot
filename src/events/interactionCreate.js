@@ -5,7 +5,10 @@ const captInteractions = require("./handlers/captInteractions");
 const archiveInteractions = require("./handlers/archiveInteractions");
 const moveAllInteractions = require("./handlers/moveAllInteractions");
 const inviteCandidate = require("./handlers/inviteCandidate");
-const inviteAdmin = require("./handlers/inviteAdmin");
+const {
+  handleModerationButton,
+} = require("../features/invite/inviteModeration");
+const { handleVoiceSelect } = require("../features/invite/inviteVoiceSelect");
 
 module.exports = (client) => {
   client.on("interactionCreate", async (interaction) => {
@@ -56,7 +59,7 @@ module.exports = (client) => {
       if (customId === "move_all_channel")
         return await moveAllInteractions.handleMoveAllSelect(interaction);
       if (customId.startsWith("invite_select_voice_"))
-        return await inviteAdmin.handleVoiceSelect(interaction);
+        return await handleVoiceSelect(interaction);
     }
 
     // buttons
@@ -65,7 +68,7 @@ module.exports = (client) => {
       if (customId === "open_invite_modal")
         return await inviteCandidate.showModal(interaction);
       if (customId.startsWith("invite_"))
-        return await inviteAdmin.handleButtons(interaction);
+        return await handleModerationButton(interaction);
 
       if (customId === "capt_edit_time_trigger") {
         return await captInteractions.handleInlineEditTimeButton(interaction);

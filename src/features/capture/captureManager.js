@@ -6,11 +6,11 @@ const {
   ButtonStyle,
   ContainerBuilder,
   SeparatorBuilder,
-  ChannelType 
+  ChannelType,
 } = require("discord.js");
 require("dotenv").config();
 
-const pool = require("./db.js"); 
+const pool = require("../../services/database.js");
 
 const PLUS_CHANNEL = process.env.PLUS_CHANNEL_ID;
 

@@ -7,9 +7,13 @@ const {
 const express = require("express");
 const path = require("node:path");
 const fs = require("node:fs");
-const { buildWebContainer } = require("./src/services/containerService"); // Импорт нашего сервиса
 require("dotenv").config();
 
+// Импорты сервисов
+const { buildWebContainer } = require("./src/services/containerService");
+const loadCommands = require("./src/utils/loadCommands");
+
+// --- ИНИЦИАЛИЗАЦИЯ DISCORD КЛИЕНТА ---
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,37 +26,34 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Код загрузки команд
-const foldersPath = path.join(__dirname, "src/commands");
-if (fs.existsSync(foldersPath)) {
-  const commandFiles = fs
-    .readdirSync(foldersPath)
-    .filter((file) => file.endsWith(".js"));
-  for (const file of commandFiles) {
-    const filePath = path.join(foldersPath, file);
-    const command = require(filePath);
-    if ("data" in command && "execute" in command) {
-      client.commands.set(command.data.name, command);
-    } else if ("name" in command && "execute" in command) {
-      client.commands.set(command.name, command);
-    }
-  }
+// --- ЗАГРУЗКА КОМАНД (Рекурсивная: ищет во всех подпапках src/commands/) ---
+const commandsPath = path.join(__dirname, "src/commands");
+if (fs.existsSync(commandsPath)) {
+  loadCommands(client, commandsPath);
+} else {
+  console.warn("⚠️ Папка с командами не найдена:", commandsPath);
 }
 
-// Загрузка ивентов
+// --- ЗАГРУЗКА СОБЫТИЙ (только верхний уровень src/events/) ---
+// Файлы в подпапке handlers/ не являются событиями, они импортируются внутри самих событий
 const eventsPath = path.join(__dirname, "src/events");
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs
     .readdirSync(eventsPath)
     .filter((file) => file.endsWith(".js"));
+
   for (const file of eventFiles) {
-    const filePath = path.join(eventsPath, file);
-    require(filePath)(client);
-    console.log(`[Events] Эвент ${file} загружен.`);
+    try {
+      const filePath = path.join(eventsPath, file);
+      require(filePath)(client);
+      console.log(`✅ Загружено событие: ${file}`);
+    } catch (error) {
+      console.error(`❌ Ошибка загрузки события ${file}:`, error.message);
+    }
   }
 }
 
-// --- НАСТРОЙКА WEB СЕРВЕРА ---
+// --- НАСТРОЙКА WEB СЕРВЕРА (Express) ---
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -61,7 +62,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Лаконичный эндпоинт API
+// API эндпоинт для отправки контейнеров с веб-интерфейса
 app.post("/api/send-container", async (req, res) => {
   try {
     const { channelId } = req.body;
@@ -72,15 +73,12 @@ app.post("/api/send-container", async (req, res) => {
 
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel) {
-      return res
-        .status(404)
-        .json({ error: "Канал не найден или у бота нет к нему прав" });
+      return res.status(404).json({
+        error: "Канал не найден или у бота нет к нему прав",
+      });
     }
 
-    // Собираем payload через вынесенный сервис
     const messagePayload = buildWebContainer(req.body);
-
-    // Публикуем в текстовый канал
     await channel.send(messagePayload);
 
     res.json({ success: true });
@@ -90,30 +88,41 @@ app.post("/api/send-container", async (req, res) => {
   }
 });
 
-const server = app.listen(3000, () =>
-  console.log("Server is running on port 3000"),
-);
+const server = app.listen(3000, () => {
+  console.log("🌐 Web server is running on port 3000");
+});
 
-// Отключение
+// --- GRACEFUL SHUTDOWN (корректное завершение работы) ---
 const shutdown = () => {
+  console.log("\n🛑 Получен сигнал остановки. Завершаю работу...");
   client.destroy();
-  server.close(() => process.exit(0));
+  server.close(() => {
+    console.log("✅ Сервер остановлен.");
+    process.exit(0);
+  });
 };
+
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
-// Запуск Discord
+// --- ЗАПУСК DISCORD КЛИЕНТА ---
+// Задержка 5 секунд нужна, чтобы Express успел подняться и Replit не перезапускал процесс
 setTimeout(() => {
   client
     .login(process.env.TOKEN)
-    .then(() => console.log("Discord login successful!"))
-    .catch((err) => console.error("Discord login error:", err));
+    .then(() => console.log("✅ Discord login successful!"))
+    .catch((err) => console.error("❌ Discord login error:", err));
 }, 5000);
 
+// --- ОБРАБОТКА ОШИБОК ---
 client.on("error", (error) => {
   console.error("Произошла ошибка клиента Discord:", error);
 });
 
 process.on("unhandledRejection", (error) => {
   console.error("Необработанное исключение (Promise Rejection):", error);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Необработанное исключение (Uncaught Exception):", error);
 });

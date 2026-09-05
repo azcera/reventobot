@@ -9,9 +9,7 @@ const {
   parseDateTime,
   getDiscordTimestamp,
 } = require("../../commands/utility/parseDateTime");
-const {
-  sendEphemeralWithAutoDelete,
-} = require("../../commands/utility/autoDelete");
+const { sendEphemeralWithAutoDelete } = require("../../utils/autoDelete");
 const naborManager = require("../../commands/utility/naborManager");
 const ADMIN_ROLES = process.env.ADMIN_ROLES
   ? process.env.ADMIN_ROLES.split(",")
