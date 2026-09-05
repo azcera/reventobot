@@ -206,39 +206,26 @@ async function handleButtons(interaction) {
     }
 
     if (actionType === "interview") {
+        // 1. Ищем подходящие голосовые каналы
         const voiceChannels = interaction.guild.channels.cache.filter(
-            (c) => c.type === ChannelType.GuildVoice && c.name.includes("📞"),
+            (c) => c.type === ChannelType.GuildVoice && c.name.includes("📞"), // Убедитесь, что эмодзи совпадает с вашими каналами
         );
+
         if (voiceChannels.size === 0) {
             return interaction.reply({
-                content: "❌ Нет подходящих голосовых каналов.",
+                content:
+                    "❌ Нет подходящих голосовых каналов для собеседования.",
                 flags: [MessageFlags.Ephemeral],
             });
         }
 
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-        const disabledContainer = await buildContainer(
-            targetUserId,
-            appData.full_name,
-            appData.age,
-            appData.field3,
-            appData.field4,
-            appData.field5,
-            "отправления",
-            null,
-            null,
-            true,
-        );
-
-        const mainMessage = interaction.message;
-        await mainMessage
-            .edit({ components: [disabledContainer.toJSON()] })
-            .catch(() => {});
-
+        // 2. Создаем меню выбора канала
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`invite_select_voice_${targetUserId}`)
-            .setPlaceholder("Выберите голосовой канал");
+            .setPlaceholder("Выберите комнату для кандидата");
+
         voiceChannels.forEach((c) =>
             selectMenu.addOptions(
                 new StringSelectMenuOptionBuilder()
@@ -250,20 +237,46 @@ async function handleButtons(interaction) {
         const response = await interaction.editReply({
             content: "Выберите комнату для кандидата (меню активно 1 минуту):",
             components: [new ActionRowBuilder().addComponents(selectMenu)],
-            withResponse: true,
         });
 
-        setTimeout(async () => {
-            const checkStatus = await db.query(
-                "SELECT * FROM family_applications WHERE user_id = $1",
-                [targetUserId],
-            );
-            if (checkStatus.rows.length === 0) return;
+        // 3. Создаем сборщик (collector) для обработки выбора
+        const collector = interaction.channel.createMessageComponentCollector({
+            filter: (i) =>
+                i.user.id === interaction.user.id &&
+                i.customId === `invite_select_voice_${targetUserId}`,
+            time: 60000, // 1 минута на выбор
+            max: 1,
+        });
 
-            if (response?.resource?.message) {
-                await response.resource.message.delete().catch(() => {});
+        collector.on("collect", async (menuInteraction) => {
+            const chosenChannelId = menuInteraction.values[0];
+            const targetMember = await interaction.guild.members
+                .fetch(targetUserId)
+                .catch(() => null);
+
+            // Пытаемся переместить участника
+            if (targetMember) {
+                try {
+                    await targetMember.voice.setChannel(chosenChannelId);
+                    await menuInteraction.reply({
+                        content: `✅ Кандидат <@${targetUserId}> перемещен в канал. Теперь вы можете принять или отклонить заявку.`,
+                        flags: [MessageFlags.Ephemeral],
+                    });
+                } catch (err) {
+                    await menuInteraction.reply({
+                        content: `⚠️ Не удалось переместить участника. Возможно, он не в голосовом канале или у бота нет прав.`,
+                        flags: [MessageFlags.Ephemeral],
+                    });
+                }
+            } else {
+                await menuInteraction.reply({
+                    content: "❌ Участник не найден на сервере.",
+                    flags: [MessageFlags.Ephemeral],
+                });
             }
 
+            // 4. ВОЗВРАЩАЕМ КНОПКИ В АКТИВНОЕ СОСТОЯНИЕ (false = включено)
+            // Это позволяет админу нажать "Принять" или "Отклонить" позже
             const enabledContainer = await buildContainer(
                 targetUserId,
                 appData.full_name,
@@ -274,19 +287,48 @@ async function handleButtons(interaction) {
                 "отправления",
                 null,
                 null,
-                false,
+                false, // <-- false означает, что кнопки активны
             );
 
-            await mainMessage
+            await interaction.message
                 .edit({ components: [enabledContainer.toJSON()] })
                 .catch(() => {});
-            await interaction.channel
-                .send({
-                    content: `⚠️ Время выбора комнаты истекло.`,
-                })
-                .catch(() => {});
-        }, 60000);
-        return;
+
+            // Удаляем сообщение с меню выбора, чтобы не засорять чат
+            await response.delete().catch(() => {});
+        });
+
+        collector.on("end", async (collected) => {
+            // Если время вышло, но админ НЕ выбрал канал
+            if (collected.size === 0) {
+                await response.delete().catch(() => {});
+
+                // Все равно возвращаем кнопки в активное состояние! Заявка НЕ удаляется.
+                const enabledContainer = await buildContainer(
+                    targetUserId,
+                    appData.full_name,
+                    appData.age,
+                    appData.field3,
+                    appData.field4,
+                    appData.field5,
+                    "отправления",
+                    null,
+                    null,
+                    false,
+                );
+                await interaction.message
+                    .edit({ components: [enabledContainer.toJSON()] })
+                    .catch(() => {});
+
+                await interaction.channel
+                    .send({
+                        content: `⏳ Время выбора комнаты истекло.`,
+                    })
+                    .catch(() => {});
+            }
+        });
+
+        return; // Завершаем обработку, не удаляя ничего из БД
     }
 }
 module.exports = handleButtons;

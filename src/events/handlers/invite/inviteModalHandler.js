@@ -1,6 +1,14 @@
-const { MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder } = require("discord.js");
+const {
+    MessageFlags,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SeparatorBuilder,
+} = require("discord.js");
 const db = require("../../../commands/utility/db.js");
-const { logAction, buildContainer } = require("../../../commands/utility/inviteUtils");
+const {
+    logAction,
+    buildContainer,
+} = require("../../../commands/utility/inviteUtils");
 
 async function submitRejectModal(interaction) {
     const targetUserId = interaction.customId.split("_")[3];
