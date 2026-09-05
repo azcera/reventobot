@@ -1,6 +1,19 @@
-const { MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder } = require("discord.js");
+const {
+    MessageFlags,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SeparatorBuilder,
+} = require("discord.js");
 const db = require("../../../commands/utility/db.js");
-const { isApplicationMod, logAction, buildContainer } = require("../../../commands/utility/inviteUtils");
+const {
+    isApplicationMod,
+    logAction,
+    buildContainer,
+} = require("../../../commands/utility/inviteUtils");
+
+// 👇 ИМПОРТИРУЕМ MAP С ТАЙМЕРАМИ (путь "./handleButtons" актуален, если файлы в одной папке)
+const handleButtons = require("./inviteButtonHandler.js");
+const interviewTimeouts = handleButtons.interviewTimeouts;
 
 async function handleVoiceSelect(interaction) {
     if (!isApplicationMod(interaction.member)) {
@@ -13,6 +26,12 @@ async function handleVoiceSelect(interaction) {
     const targetUserId = interaction.customId.split("_")[3];
     const voiceChannelId = interaction.values[0];
 
+    // 👇 ОТМЕНЯЕМ ТАЙМЕР, ТАК КАК КОМНАТА УЖЕ ВЫБРАНА
+    if (interviewTimeouts && interviewTimeouts.has(targetUserId)) {
+        clearTimeout(interviewTimeouts.get(targetUserId));
+        interviewTimeouts.delete(targetUserId);
+    }
+
     const res = await db.query(
         "SELECT * FROM family_applications WHERE user_id = $1",
         [targetUserId],
@@ -22,6 +41,7 @@ async function handleVoiceSelect(interaction) {
             content: "❌ Заявка не найдена.",
             flags: [MessageFlags.Ephemeral],
         });
+
     const appData = res.rows[0];
 
     await interaction.channel.send({
