@@ -12,8 +12,13 @@ const {
 } = require("../../../commands/utility/inviteUtils");
 
 async function handleVoiceSelect(interaction) {
+    // 1. СРАЗУ резервируем ответ, чтобы избежать ошибок при повторных нажатиях или медленной сети
+    await interaction
+        .deferReply({ flags: [MessageFlags.Ephemeral] })
+        .catch(() => {});
+
     if (!isApplicationMod(interaction.member)) {
-        return interaction.reply({
+        return interaction.followUp({
             content: "❌ Недостаточно прав.",
             flags: [MessageFlags.Ephemeral],
         });
@@ -26,16 +31,21 @@ async function handleVoiceSelect(interaction) {
         "SELECT * FROM family_applications WHERE user_id = $1",
         [targetUserId],
     );
-    if (res.rows.length === 0)
-        return interaction.reply({
-            content: "❌ Заявка не найдена.",
+    if (res.rows.length === 0) {
+        return interaction.followUp({
+            content:
+                "❌ Заявка не найдена (возможно, она уже была обработана).",
             flags: [MessageFlags.Ephemeral],
         });
+    }
     const appData = res.rows[0];
 
-    await interaction.channel.send({
-        content: `> 📢 <@${targetUserId}>, вы были вызваны на обзвон.\n> Администратор: <@${interaction.user.id}>!\n> Голосовой канал: <#${voiceChannelId}>`,
-    });
+    // Отправляем сообщение в канал заявки (НЕ эфемерное, чтобы все видели)
+    await interaction.channel
+        .send({
+            content: `> 📢 <@${targetUserId}>, вы были вызваны на обзвон.\n> Администратор: <@${interaction.user.id}>!\n> Голосовой канал: <#${voiceChannelId}>`,
+        })
+        .catch(console.error);
 
     const targetUser = await interaction.client.users
         .fetch(targetUserId)
@@ -54,6 +64,7 @@ async function handleVoiceSelect(interaction) {
                     `> Голосовой канал: <#${voiceChannelId}>\n> Дата события: <t:${Math.floor(Date.now() / 1000)}:F>`,
                 ),
             );
+
         await targetUser
             .send({
                 components: [container.toJSON()],
@@ -75,7 +86,8 @@ async function handleVoiceSelect(interaction) {
     );
     await logAction(interaction.guild, logContainer);
 
-    return interaction.reply({
+    // 2. Используем followUp, так как deferReply уже был вызван в начале функции
+    return interaction.followUp({
         content: "✅ Кандидат успешно вызван на обзвон!",
         flags: [MessageFlags.Ephemeral],
     });

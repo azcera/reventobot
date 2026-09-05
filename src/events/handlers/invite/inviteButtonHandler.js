@@ -59,172 +59,196 @@ async function handleButtons(interaction) {
     }
 
     if (actionType === "accept") {
-        // Получаем объект пользователя и участника сервера
-        const targetMember = await interaction.guild.members
-            .fetch(targetUserId)
-            .catch(() => null);
+        // 1. СРАЗУ отвечаем на взаимодействие, чтобы Discord не считал его "зависшим" (Unknown interaction)
+        await interaction
+            .deferReply({ flags: [MessageFlags.Ephemeral] })
+            .catch(() => {});
 
-        if (targetMember) {
-            const roleId = String(process.env.AUTO_ROLE).trim();
-            await targetMember.roles
-                .add(roleId)
-                .catch((err) =>
-                    console.error(
-                        `[Role Error] Не удалось выдать роль ${roleId}:`,
-                        err,
-                    ),
-                );
-        }
+        try {
+            const targetMember = await interaction.guild.members
+                .fetch(targetUserId)
+                .catch(() => null);
+            if (targetMember) {
+                // Используем MAIN_ROLE_ID, если он есть, иначе fallback на AUTO_ROLE
+                const roleId = String(
+                    process.env.MAIN_ROLE_ID || process.env.AUTO_ROLE,
+                ).trim();
+                await targetMember.roles.add(roleId).catch(console.error);
+            }
 
-        const targetUser = await interaction.client.users
-            .fetch(targetUserId)
-            .catch(() => null);
-        if (targetUser) {
-            const container = new ContainerBuilder()
-                .setAccentColor(0x2ecc71)
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(
-                        `### Одобрение заявки\nВаша заявка в ${interaction.guild.name} одобрена!!`,
-                    ),
-                )
-                .addSeparatorComponents(new SeparatorBuilder())
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(
-                        `> Дата одобрения: <t:${Math.floor(Date.now() / 1000)}:F>`,
-                    ),
+            const targetUser = await interaction.client.users
+                .fetch(targetUserId)
+                .catch(() => null);
+            if (targetUser) {
+                const container = new ContainerBuilder()
+                    .setAccentColor(0x2ecc71)
+                    .addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent(
+                            `### Одобрение заявки\nВаша заявка в ${interaction.guild.name} одобрена!`,
+                        ),
+                    )
+                    .addSeparatorComponents(new SeparatorBuilder())
+                    .addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent(
+                            `> Дата одобрения: <t:${Math.floor(Date.now() / 1000)}:F>`,
+                        ),
+                    );
+
+                await targetUser
+                    .send({
+                        components: [container.toJSON()],
+                        flags: [MessageFlags.IsComponentsV2],
+                    })
+                    .catch(() => {});
+            }
+
+            const logContainer = await buildContainer(
+                targetUserId,
+                appData.full_name,
+                appData.age,
+                appData.field3,
+                appData.field4,
+                appData.field5,
+                "принятия",
+                interaction.user.id,
+            );
+            await logAction(interaction.guild, logContainer);
+
+            // Удаляем из БД
+            await db.query(
+                "DELETE FROM family_applications WHERE user_id = $1",
+                [targetUserId],
+            );
+
+            const additionalRolesRaw = process.env.FAMILY_ADDITIONAL_ROLES;
+            const additionalRoles = additionalRolesRaw
+                ? additionalRolesRaw
+                      .split(",")
+                      .map((r) => r.trim())
+                      .filter(Boolean)
+                : [];
+
+            // Если доп. ролей нет, просто удаляем канал и завершаем
+            if (additionalRoles.length === 0 || !targetMember) {
+                await interaction.followUp({
+                    content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален.`,
+                    flags: [MessageFlags.Ephemeral],
+                });
+                setTimeout(
+                    () => interaction.channel.delete().catch(console.error),
+                    2000,
                 );
-            await targetUser
-                .send({
-                    components: [container.toJSON()],
-                    flags: [MessageFlags.IsComponentsV2],
+                return; // ВАЖНО: прерываем выполнение, чтобы не идти дальше
+            }
+
+            // Если есть доп. роли, показываем меню
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`invite_select_additional_${targetUserId}`)
+                .setPlaceholder("Выберите дополнительную роль для выдачи");
+
+            additionalRoles.forEach((roleId, index) => {
+                const role = interaction.guild.roles.cache.get(roleId);
+                selectMenu.addOptions(
+                    new StringSelectMenuOptionBuilder()
+                        .setLabel(
+                            role
+                                ? `${index + 1}️⃣ ${role.name}`
+                                : `Роль (${roleId})`,
+                        )
+                        .setValue(roleId),
+                );
+            });
+
+            await interaction.followUp({
+                content: `✅ Заявка <@${targetUserId}> одобрена! Выберите роль (активно 30 сек):`,
+                components: [new ActionRowBuilder().addComponents(selectMenu)],
+                flags: [MessageFlags.Ephemeral],
+            });
+
+            const collector =
+                interaction.channel.createMessageComponentCollector({
+                    filter: (i) =>
+                        i.user.id === interaction.user.id &&
+                        i.customId ===
+                            `invite_select_additional_${targetUserId}`,
+                    time: 30000,
+                    max: 1,
+                });
+
+            collector.on("collect", async (menuInteraction) => {
+                await menuInteraction.deferUpdate(); // Отвечаем на меню, чтобы не было ошибки
+                const chosenRoleId = menuInteraction.values[0];
+                if (targetMember)
+                    await targetMember.roles
+                        .add(chosenRoleId)
+                        .catch(console.error);
+
+                await interaction.channel.send({
+                    content: `✅ Роль <@&${chosenRoleId}> выдана участнику <@${targetUserId}>!`,
+                });
+                setTimeout(
+                    () => interaction.channel.delete().catch(console.error),
+                    1500,
+                );
+            });
+
+            collector.on("end", async (collected) => {
+                if (collected.size === 0) {
+                    // Если роль не выбрали, все равно удаляем канал, так как заявка уже одобрена и удалена из БД
+                    setTimeout(
+                        () => interaction.channel.delete().catch(console.error),
+                        1500,
+                    );
+                }
+            });
+        } catch (error) {
+            console.error("Ошибка при принятии заявки:", error);
+            await interaction
+                .followUp({
+                    content: "❌ Произошла ошибка при обработке заявки.",
+                    flags: [MessageFlags.Ephemeral],
                 })
                 .catch(() => {});
         }
-
-        const logContainer = await buildContainer(
-            targetUserId,
-            appData.full_name,
-            appData.age,
-            appData.field3,
-            appData.field4,
-            appData.field5,
-            "принятия",
-            interaction.user.id,
-        );
-        await logAction(interaction.guild, logContainer);
-
-        await db.query("DELETE FROM family_applications WHERE user_id = $1", [
-            targetUserId,
-        ]);
-
-        // --- НОВЫЙ ФУНКЦИОНАЛ: ВЫДАЧА ДОПОЛНИТЕЛЬНОЙ РОЛИ ---
-        const additionalRolesRaw = process.env.FAMILY_ADDITIONAL_ROLES;
-        const additionalRoles = additionalRolesRaw
-            ? additionalRolesRaw
-                  .split(",")
-                  .map((r) => r.trim())
-                  .filter(Boolean)
-            : [];
-
-        if (additionalRoles.length === 0 || !targetMember) {
-            await interaction.reply({
-                content: `✅ Заявка <@${targetUserId}> одобрена!`,
-                flags: [MessageFlags.Ephemeral],
-            });
-            return setTimeout(
-                () => interaction.channel.delete().catch(() => {}),
-                5000,
-            );
-        }
-
-        // Строим селект-меню с ролями
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`invite_select_additional_${targetUserId}`)
-            .setPlaceholder("Выберите дополнительную роль для выдачи");
-        const rolesIndex = ["1️⃣", "2️⃣"];
-        additionalRoles.forEach((roleId, index) => {
-            const role = interaction.guild.roles.cache.get(roleId);
-            selectMenu.addOptions(
-                new StringSelectMenuOptionBuilder()
-                    .setLabel(
-                        role
-                            ? `${rolesIndex[index]} ${role.name}`
-                            : `Роль (${roleId})`,
-                    )
-                    .setValue(roleId),
-            );
-        });
-
-        // Отправляем эфемерный ответ (видит только этот админ) с компонентом меню
-        const response = await interaction.reply({
-            content: `✅ Заявка <@${targetUserId}> одобрена! Выберите роль для выдачи (активно 30 секунд):`,
-            components: [new ActionRowBuilder().addComponents(selectMenu)],
-            flags: [MessageFlags.Ephemeral],
-            withResponse: true,
-        });
-
-        let isRoleGiven = false;
-
-        const collector = interaction.channel.createMessageComponentCollector({
-            filter: (i) =>
-                i.user.id === interaction.user.id &&
-                i.customId === `invite_select_additional_${targetUserId}`,
-            time: 30000,
-            max: 1,
-        });
-
-        collector.on("collect", async (menuInteraction) => {
-            isRoleGiven = true;
-            const chosenRoleId = menuInteraction.values[0];
-
-            await targetMember.roles
-                .add(chosenRoleId)
-                .catch((err) =>
-                    console.error(
-                        `[Additional Role Error] Не удалось выдать доп. роль ${chosenRoleId}:`,
-                        err,
-                    ),
-                );
-
-            await menuInteraction.reply({
-                content: `✅ Роль <@&${chosenRoleId}> успешно выдана участнику <@${targetUserId}>!`,
-                flags: [MessageFlags.Ephemeral],
-            });
-
-            // Удаляем канал сразу после успешного выбора
-            interaction.channel.delete().catch(() => {});
-        });
-
-        collector.on("end", async () => {
-            if (!isRoleGiven) {
-                if (response?.resource?.message) {
-                    await response.resource.message.delete().catch(() => {});
-                }
-                interaction.channel.delete().catch(() => {});
-            }
-        });
     }
 
     if (actionType === "interview") {
-        // 1. Ищем подходящие голосовые каналы
         const voiceChannels = interaction.guild.channels.cache.filter(
-            (c) => c.type === ChannelType.GuildVoice && c.name.includes("📞"), // Убедитесь, что эмодзи совпадает с вашими каналами
+            (c) => c.type === ChannelType.GuildVoice && c.name.includes("📞"),
         );
-
         if (voiceChannels.size === 0) {
             return interaction.reply({
-                content:
-                    "❌ Нет подходящих голосовых каналов для собеседования.",
+                content: "❌ Нет подходящих голосовых каналов.",
                 flags: [MessageFlags.Ephemeral],
             });
         }
 
-        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+        // 1. СРАЗУ отключаем кнопку "Вызвать на обзвон" на оригинальном сообщении
+        const mainMessage = interaction.message;
+        const updatedComponents = mainMessage.components.map((row) => {
+            const newRow = new ActionRowBuilder();
+            row.components.forEach((comp) => {
+                if (
+                    comp.type === 2 &&
+                    comp.customId === `interview_${targetUserId}`
+                ) {
+                    newRow.addComponents(
+                        new ButtonBuilder(comp).setDisabled(true),
+                    );
+                } else {
+                    newRow.addComponents(comp);
+                }
+            });
+            return newRow;
+        });
+        await mainMessage
+            .edit({ components: updatedComponents })
+            .catch(() => {});
 
-        // 2. Создаем меню выбора канала
+        // 2. Показываем меню выбора канала
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`invite_select_voice_${targetUserId}`)
-            .setPlaceholder("Выберите комнату для кандидата");
+            .setPlaceholder("Выберите голосовой канал");
 
         voiceChannels.forEach((c) =>
             selectMenu.addOptions(
@@ -234,112 +258,65 @@ async function handleButtons(interaction) {
             ),
         );
 
-        const response = await interaction.editReply({
+        await interaction.reply({
             content: "Выберите комнату для кандидата (меню активно 1 минуту):",
             components: [new ActionRowBuilder().addComponents(selectMenu)],
+            flags: [MessageFlags.Ephemeral],
         });
 
-        // 3. Создаем сборщик (collector) для обработки выбора
+        // 3. Собираем выбор
         const collector = interaction.channel.createMessageComponentCollector({
             filter: (i) =>
                 i.user.id === interaction.user.id &&
                 i.customId === `invite_select_voice_${targetUserId}`,
-            time: 60000, // 1 минута на выбор
+            time: 60000,
             max: 1,
         });
 
         collector.on("collect", async (menuInteraction) => {
-            const chosenChannelId = menuInteraction.values[0];
-            const targetMember = await interaction.guild.members
-                .fetch(targetUserId)
-                .catch(() => null);
-
-            // Пытаемся переместить участника
-            if (targetMember) {
-                try {
-                    await targetMember.voice.setChannel(chosenChannelId);
-                    await menuInteraction.reply({
-                        content: `✅ Кандидат <@${targetUserId}> перемещен в канал. Теперь вы можете принять или отклонить заявку.`,
-                        flags: [MessageFlags.Ephemeral],
-                    });
-                } catch (err) {
-                    await menuInteraction.reply({
-                        content: `⚠️ Не удалось переместить участника. Возможно, он не в голосовом канале или у бота нет прав.`,
-                        flags: [MessageFlags.Ephemeral],
-                    });
-                }
-            } else {
-                await menuInteraction.reply({
-                    content: "❌ Участник не найден на сервере.",
-                    flags: [MessageFlags.Ephemeral],
-                });
-            }
-
-            // 4. ОТКЛЮЧАЕМ ТОЛЬКО КНОПКУ "ВЫЗВАТЬ НА ОБЗВОН"
-            // Получаем текущее сообщение и его компоненты
-            const mainMessage = interaction.message;
-            const components = mainMessage.components;
-
-            // Проходим по всем ActionRow и отключаем кнопку с customId, содержащим "interview"
-            const updatedComponents = components.map((row) => {
-                const updatedRow = ActionRowBuilder.from(row);
-                const updatedButtons = row.components.map((component) => {
-                    if (
-                        component.type === 2 &&
-                        component.customId &&
-                        component.customId.includes(`interview_${targetUserId}`)
-                    ) {
-                        // Отключаем только кнопку "вызвать на обзвон"
-                        const disabledButton =
-                            ButtonBuilder.from(component).setDisabled(true);
-                        return disabledButton;
-                    }
-                    return component;
-                });
-                updatedRow.setComponents(updatedButtons);
-                return updatedRow;
+            // Просто подтверждаем выбор, основная логика отправки логов и ЛС уже в handleVoiceSelect
+            await menuInteraction.reply({
+                content: "✅ Кандидат вызван! Кнопка обзвона деактивирована.",
+                flags: [MessageFlags.Ephemeral],
             });
-
-            // Редактируем сообщение с обновленными компонентами
-            await mainMessage
-                .edit({ components: updatedComponents })
-                .catch(() => {});
-
-            // Удаляем сообщение с меню выбора
-            await response.delete().catch(() => {});
+            await interaction.deleteReply().catch(() => {}); // Удаляем сообщение с меню выбора
         });
 
         collector.on("end", async (collected) => {
-            // Если время вышло, но админ НЕ выбрал канал
             if (collected.size === 0) {
-                await response.delete().catch(() => {});
-
-                // Все равно возвращаем кнопки в активное состояние! Заявка НЕ удаляется.
-                const enabledContainer = await buildContainer(
-                    targetUserId,
-                    appData.full_name,
-                    appData.age,
-                    appData.field3,
-                    appData.field4,
-                    appData.field5,
-                    "отправления",
-                    null,
-                    null,
-                    false,
+                // Время вышло. Возвращаем кнопку "Обзвон" в активное состояние!
+                const reEnabledComponents = mainMessage.components.map(
+                    (row) => {
+                        const newRow = new ActionRowBuilder();
+                        row.components.forEach((comp) => {
+                            if (
+                                comp.type === 2 &&
+                                comp.customId === `interview_${targetUserId}`
+                            ) {
+                                newRow.addComponents(
+                                    new ButtonBuilder(comp).setDisabled(false),
+                                );
+                            } else {
+                                newRow.addComponents(comp);
+                            }
+                        });
+                        return newRow;
+                    },
                 );
-                await interaction.message
-                    .edit({ components: [enabledContainer.toJSON()] })
+                await mainMessage
+                    .edit({ components: reEnabledComponents })
                     .catch(() => {});
 
-                await interaction.channel
-                    .send({
-                        content: `⏳ Время выбора комнаты истекло.`,
+                // ИСПРАВЛЕНИЕ 1: Сообщение видно ТОЛЬКО администратору (Ephemeral)
+                await interaction
+                    .followUp({
+                        content: `⏳ Время выбора комнаты истекло. Кнопка вызова снова активна.`,
+                        flags: [MessageFlags.Ephemeral],
                     })
                     .catch(() => {});
             }
         });
-
-        return; // Завершаем обработку, не удаляя ничего из БД
+        return;
     }
 }
 module.exports = handleButtons;
