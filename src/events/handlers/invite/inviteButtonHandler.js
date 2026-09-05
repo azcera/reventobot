@@ -19,9 +19,6 @@ const {
     buildContainer,
 } = require("../../../commands/utility/inviteUtils");
 
-// 👇 СОЗДАЕМ MAP ДЛЯ ХРАНЕНИЯ ТАЙМЕРОВ ОБЗВОНА
-const interviewTimeouts = new Map();
-
 async function handleButtons(interaction) {
     if (!isApplicationMod(interaction.member)) {
         return interaction.reply({
@@ -35,39 +32,15 @@ async function handleButtons(interaction) {
         "SELECT * FROM family_applications WHERE user_id = $1",
         [targetUserId],
     );
-
     if (res.rows.length === 0) {
         return interaction.reply({
             content: "❌ Данные о заявке не найдены.",
             flags: [MessageFlags.Ephemeral],
         });
     }
-
     const appData = res.rows[0];
 
     if (actionType === "reject") {
-        // 👇 ОТМЕНЯЕМ ТАЙМЕР ОБЗВОНА, ЕСЛИ ОН БЫЛ
-        if (interviewTimeouts.has(targetUserId)) {
-            clearTimeout(interviewTimeouts.get(targetUserId));
-            interviewTimeouts.delete(targetUserId);
-        }
-        // 👇 СРАЗУ БЛОКИРУЕМ КНОПКИ, чтобы нельзя было нажать повторно
-        const disabledContainer = await buildContainer(
-            targetUserId,
-            appData.full_name,
-            appData.age,
-            appData.field3,
-            appData.field4,
-            appData.field5,
-            "отклонения",
-            null,
-            null,
-            true,
-        );
-        await interaction.message
-            .edit({ components: [disabledContainer.toJSON()] })
-            .catch(() => {});
-
         const modal = new ModalBuilder()
             .setCustomId(`invite_modal_reject_${targetUserId}`)
             .setTitle("Причина отклонения");
@@ -81,35 +54,16 @@ async function handleButtons(interaction) {
                     .setRequired(true),
             );
         modal.addLabelComponents(inputLabel);
+
         return interaction.showModal(modal);
     }
 
     if (actionType === "accept") {
-        // 👇 ОТМЕНЯЕМ ТАЙМЕР ОБЗВОНА
-        if (interviewTimeouts.has(targetUserId)) {
-            clearTimeout(interviewTimeouts.get(targetUserId));
-            interviewTimeouts.delete(targetUserId);
-        }
-        // 👇 СРАЗУ БЛОКИРУЕМ КНОПКИ
-        const disabledContainer = await buildContainer(
-            targetUserId,
-            appData.full_name,
-            appData.age,
-            appData.field3,
-            appData.field4,
-            appData.field5,
-            "принятия",
-            interaction.user.id,
-            null,
-            true,
-        );
-        await interaction.message
-            .edit({ components: [disabledContainer.toJSON()] })
-            .catch(() => {});
-
+        // Получаем объект пользователя и участника сервера
         const targetMember = await interaction.guild.members
             .fetch(targetUserId)
             .catch(() => null);
+
         if (targetMember) {
             const roleId = String(process.env.AUTO_ROLE).trim();
             await targetMember.roles
@@ -158,10 +112,12 @@ async function handleButtons(interaction) {
             interaction.user.id,
         );
         await logAction(interaction.guild, logContainer);
+
         await db.query("DELETE FROM family_applications WHERE user_id = $1", [
             targetUserId,
         ]);
 
+        // --- НОВЫЙ ФУНКЦИОНАЛ: ВЫДАЧА ДОПОЛНИТЕЛЬНОЙ РОЛИ ---
         const additionalRolesRaw = process.env.FAMILY_ADDITIONAL_ROLES;
         const additionalRoles = additionalRolesRaw
             ? additionalRolesRaw
@@ -175,21 +131,13 @@ async function handleButtons(interaction) {
                 content: `✅ Заявка <@${targetUserId}> одобрена!`,
                 flags: [MessageFlags.Ephemeral],
             });
-            // 👇 ДОБАВЛЯЕМ ВЫВОД ОШИБКИ, если канал не удалится (например, из-за прав)
             return setTimeout(
-                () =>
-                    interaction.channel
-                        .delete()
-                        .catch((err) =>
-                            console.error(
-                                "[Channel Delete Error] Не удалось удалить канал:",
-                                err,
-                            ),
-                        ),
+                () => interaction.channel.delete().catch(() => {}),
                 5000,
             );
         }
 
+        // Строим селект-меню с ролями
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`invite_select_additional_${targetUserId}`)
             .setPlaceholder("Выберите дополнительную роль для выдачи");
@@ -207,6 +155,7 @@ async function handleButtons(interaction) {
             );
         });
 
+        // Отправляем эфемерный ответ (видит только этот админ) с компонентом меню
         const response = await interaction.reply({
             content: `✅ Заявка <@${targetUserId}> одобрена! Выберите роль для выдачи (активно 30 секунд):`,
             components: [new ActionRowBuilder().addComponents(selectMenu)],
@@ -215,6 +164,7 @@ async function handleButtons(interaction) {
         });
 
         let isRoleGiven = false;
+
         const collector = interaction.channel.createMessageComponentCollector({
             filter: (i) =>
                 i.user.id === interaction.user.id &&
@@ -226,6 +176,7 @@ async function handleButtons(interaction) {
         collector.on("collect", async (menuInteraction) => {
             isRoleGiven = true;
             const chosenRoleId = menuInteraction.values[0];
+
             await targetMember.roles
                 .add(chosenRoleId)
                 .catch((err) =>
@@ -234,32 +185,22 @@ async function handleButtons(interaction) {
                         err,
                     ),
                 );
+
             await menuInteraction.reply({
                 content: `✅ Роль <@&${chosenRoleId}> успешно выдана участнику <@${targetUserId}>!`,
                 flags: [MessageFlags.Ephemeral],
             });
-            interaction.channel
-                .delete()
-                .catch((err) =>
-                    console.error(
-                        "[Channel Delete Error] Не удалось удалить канал:",
-                        err,
-                    ),
-                );
+
+            // Удаляем канал сразу после успешного выбора
+            interaction.channel.delete().catch(() => {});
         });
 
         collector.on("end", async () => {
             if (!isRoleGiven) {
-                if (response?.resource?.message)
+                if (response?.resource?.message) {
                     await response.resource.message.delete().catch(() => {});
-                interaction.channel
-                    .delete()
-                    .catch((err) =>
-                        console.error(
-                            "[Channel Delete Error] Не удалось удалить канал:",
-                            err,
-                        ),
-                    );
+                }
+                interaction.channel.delete().catch(() => {});
             }
         });
     }
@@ -268,13 +209,15 @@ async function handleButtons(interaction) {
         const voiceChannels = interaction.guild.channels.cache.filter(
             (c) => c.type === ChannelType.GuildVoice && c.name.includes("📞"),
         );
-        if (voiceChannels.size === 0)
+        if (voiceChannels.size === 0) {
             return interaction.reply({
                 content: "❌ Нет подходящих голосовых каналов.",
                 flags: [MessageFlags.Ephemeral],
             });
+        }
 
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
         const disabledContainer = await buildContainer(
             targetUserId,
             appData.full_name,
@@ -287,6 +230,7 @@ async function handleButtons(interaction) {
             null,
             true,
         );
+
         const mainMessage = interaction.message;
         await mainMessage
             .edit({ components: [disabledContainer.toJSON()] })
@@ -309,17 +253,17 @@ async function handleButtons(interaction) {
             withResponse: true,
         });
 
-        // 👇 СОХРАНЯЕМ ID ТАЙМЕРА В MAP
-        const timeoutId = setTimeout(async () => {
-            interviewTimeouts.delete(targetUserId); // Чистим Map при срабатывании
+        setTimeout(async () => {
             const checkStatus = await db.query(
                 "SELECT * FROM family_applications WHERE user_id = $1",
                 [targetUserId],
             );
             if (checkStatus.rows.length === 0) return;
 
-            if (response?.resource?.message)
+            if (response?.resource?.message) {
                 await response.resource.message.delete().catch(() => {});
+            }
+
             const enabledContainer = await buildContainer(
                 targetUserId,
                 appData.full_name,
@@ -332,19 +276,17 @@ async function handleButtons(interaction) {
                 null,
                 false,
             );
+
             await mainMessage
                 .edit({ components: [enabledContainer.toJSON()] })
                 .catch(() => {});
             await interaction.channel
-                .send({ content: `⚠️ Время выбора комнаты истекло.` })
+                .send({
+                    content: `⚠️ Время выбора комнаты истекло.`,
+                })
                 .catch(() => {});
         }, 60000);
-
-        interviewTimeouts.set(targetUserId, timeoutId);
         return;
     }
 }
-
-// 👇 ЭКСПОРТИРУЕМ ФУНКЦИЮ И MAP, чтобы использовать в другом файле
 module.exports = handleButtons;
-module.exports.interviewTimeouts = interviewTimeouts;
