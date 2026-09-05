@@ -4,12 +4,12 @@ const {
   TextDisplayBuilder,
   SeparatorBuilder,
 } = require("discord.js");
-const db = require("../../../commands/utility/db.js");
+const db = require("../../services/database");
 const {
   isApplicationMod,
   logAction,
   buildContainer,
-} = require("../../../commands/utility/inviteUtils");
+} = require("../../features/invite/inviteUtils");
 
 async function handleVoiceSelect(interaction) {
   // 1. СРАЗУ резервируем ответ, чтобы избежать ошибок "InteractionAlreadyReplied"

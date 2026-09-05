@@ -1,10 +1,10 @@
 const { MessageFlags } = require("discord.js");
-const naborManager = require("../commands/utility/naborManager");
-const groupInteractions = require("./handlers/groupInteractions");
-const captInteractions = require("./handlers/captInteractions");
-const archiveInteractions = require("./handlers/archiveInteractions");
-const moveAllInteractions = require("./handlers/moveAllInteractions");
-const inviteCandidate = require("./handlers/inviteCandidate");
+const captureManager = require("../features/capture/captureManager");
+const groupInteractions = require("../features/capture/groupInteractions");
+const captureInteractions = require("../features/capture/captureInteractions");
+const archiveInteractions = require("../features/archive/archiveInteractions");
+const moveAllInteractions = require("../features/moveAll/moveAllInteractions");
+const inviteApplication = require("../features/invite/inviteApplication");
 const {
   handleModerationButton,
 } = require("../features/invite/inviteModeration");
@@ -36,7 +36,7 @@ module.exports = (client) => {
       interaction.isButton() &&
       ["capt_join", "capt_leave"].includes(interaction.customId)
     ) {
-      return await naborManager.handleButton(interaction);
+      return await captureManager.handleButton(interaction);
     }
 
     if (
@@ -66,22 +66,24 @@ module.exports = (client) => {
 
     if (interaction.isButton()) {
       if (customId === "open_invite_modal")
-        return await inviteCandidate.showModal(interaction);
+        return await inviteApplication.showModal(interaction);
       if (customId.startsWith("invite_"))
         return await handleModerationButton(interaction);
 
       if (customId === "capt_edit_time_trigger") {
-        return await captInteractions.handleInlineEditTimeButton(interaction);
+        return await captureInteractions.handleInlineEditTimeButton(
+          interaction,
+        );
       }
 
       if (customId.startsWith("capt_")) {
-        return await captInteractions.handleAutoCaptButton(interaction);
+        return await captureInteractions.handleAutoCaptButton(interaction);
       }
 
       if (customId === "group")
         return await groupInteractions.showGroupSelect(interaction);
       if (customId === "capt")
-        return await captInteractions.showCaptModal(interaction);
+        return await captureInteractions.showCaptModal(interaction);
 
       if (customId === "moveall")
         return await moveAllInteractions.showMoveAllSelect(interaction);
@@ -95,17 +97,17 @@ module.exports = (client) => {
 
     if (interaction.isModalSubmit()) {
       if (customId === "modal_inline_edit_time") {
-        return await captInteractions.submitInlineEditTimeModal(interaction);
+        return await captureInteractions.submitInlineEditTimeModal(interaction);
       }
 
       if (customId === "invite_modal_submit")
-        return await inviteCandidate.submitModal(interaction);
+        return await inviteApplication.submitModal(interaction);
       if (customId.startsWith("invite_modal_reject_"))
         return await inviteAdmin.submitRejectModal(interaction);
       if (customId.startsWith("modal_group_"))
         return await groupInteractions.submitGroupModal(interaction);
       if (interaction.customId === "modal_capt")
-        return await captInteractions.submitCaptModal(interaction);
+        return await captureInteractions.submitCaptModal(interaction);
     }
   });
 };

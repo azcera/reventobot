@@ -1,5 +1,5 @@
 const { MessageFlags } = require("discord.js");
-const { getNavigationContainer } = require("./utility/getNavigationContainer");
+const { getNavigationContainer } = require("./navigationBuilder");
 require("dotenv").config();
 
 module.exports = {

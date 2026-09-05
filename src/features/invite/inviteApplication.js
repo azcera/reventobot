@@ -8,11 +8,11 @@ const {
   LabelBuilder,
 } = require("discord.js");
 const db = require("../../services/database.js");
-const { buildContainer } = require("../../commands/utility/inviteUtils");
+const { buildContainer } = require("./inviteUtils");
 const {
   sendEphemeralWithAutoDelete,
   editReplyWithAutoDelete,
-} = require("../../utils/autoDelete.js");
+} = require("../../utils/autoDelete");
 
 const ADMIN_ROLES = process.env.ADMIN_ROLES
   ? process.env.ADMIN_ROLES.split(",")

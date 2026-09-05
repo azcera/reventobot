@@ -5,12 +5,9 @@ const {
   MessageFlags,
   LabelBuilder,
 } = require("discord.js");
-const {
-  parseDateTime,
-  getDiscordTimestamp,
-} = require("../../commands/utility/parseDateTime");
+const { parseDateTime, getDiscordTimestamp } = require("../../utils/dateUtils");
 const { sendEphemeralWithAutoDelete } = require("../../utils/autoDelete");
-const naborManager = require("../../commands/utility/naborManager");
+const captureManager = require("../../features/capture/captureManager");
 const ADMIN_ROLES = process.env.ADMIN_ROLES
   ? process.env.ADMIN_ROLES.split(",")
   : [];
@@ -87,7 +84,7 @@ async function submitCaptModal(interaction) {
     content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
   });
   try {
-    await naborManager.sendNabor(
+    await captureManager.sendNabor(
       interaction,
       discordTimestamp,
       target,
@@ -147,7 +144,7 @@ async function handleAutoCaptButton(interaction) {
   });
 
   try {
-    await naborManager.sendNabor(
+    await captureManager.sendNabor(
       interaction,
       discordTimestamp,
       `капт против ${target}`,

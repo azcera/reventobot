@@ -12,7 +12,7 @@ const { parseDateTime, getMskTimeString } = require("../../utils/dateUtils");
 const {
   getFilteredOptions,
   optionsMap,
-} = require("../../commands/utility/groupOptions");
+} = require("../../features/capture/groupOptions");
 const {
   sendEphemeralWithAutoDelete,
   editReplyWithAutoDelete,

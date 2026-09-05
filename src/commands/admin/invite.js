@@ -13,17 +13,17 @@ const {
   ButtonStyle,
 } = require("discord.js");
 const path = require("path");
-const { replyWithAutoDelete } = require("../commands/utility/autoDelete");
+const { replyWithAutoDelete } = require("../../utils/autoDelete");
 
-const inviteCandidate = require("../events/handlers/inviteCandidate");
-const FORM_FIELDS = inviteCandidate.MODAL_FIELDS;
+const inviteApplication = require("../../features/invite/inviteApplication");
+const FORM_FIELDS = inviteApplication.MODAL_FIELDS;
 
 module.exports = {
   name: "invite",
   description: "Создает сообщение для канала заявок",
   async execute(message, args) {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return replyWithAutoDelete(
+      return await replyWithAutoDelete(
         message,
         "У вас нет прав для использования этой команды!",
       );

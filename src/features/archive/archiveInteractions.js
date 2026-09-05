@@ -1,5 +1,5 @@
 const { MessageFlags } = require("discord.js");
-const { createChannel } = require("../../commands/utility/createChannel");
+const { createChannel } = require("../../utils/channelUtils");
 
 async function cancelArchive(interaction) {
   return await interaction.message

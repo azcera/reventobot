@@ -1,5 +1,7 @@
 const { MessageFlags, ChannelType } = require("discord.js");
-const { getNavigationContainer } = require("./getNavigationContainer");
+const {
+  getNavigationContainer,
+} = require("../commands/admin/navigationBuilder");
 require("dotenv").config();
 const parentChannelId = process.env.PARENT_CHANNEL_ID;
 

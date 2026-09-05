@@ -15,13 +15,13 @@ const {
 const {
   sendEphemeralWithAutoDelete,
   followUpEphemeralWithAutoDelete,
-} = require("../../../commands/utility/autoDelete.js");
-const db = require("../../../commands/utility/db.js");
+} = require("../../utils/autoDelete.js");
+const db = require("../../services/database.js");
 const {
   isApplicationMod,
   logAction,
   buildContainer,
-} = require("../../../commands/utility/inviteUtils");
+} = require("../../features/invite/inviteUtils.js");
 
 async function handleModerationButton(interaction) {
   if (!isApplicationMod(interaction.member)) {
