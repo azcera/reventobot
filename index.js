@@ -126,4 +126,3 @@ process.on("unhandledRejection", (error) => {
 process.on("uncaughtException", (error) => {
   console.error("Необработанное исключение (Uncaught Exception):", error);
 });
-
