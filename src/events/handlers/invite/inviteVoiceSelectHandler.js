@@ -12,7 +12,7 @@ const {
 } = require("../../../commands/utility/inviteUtils");
 
 async function handleVoiceSelect(interaction) {
-    // 1. СРАЗУ резервируем ответ, чтобы избежать ошибок при повторных нажатиях или медленной сети
+    // 1. СРАЗУ резервируем ответ, чтобы избежать ошибок "InteractionAlreadyReplied"
     await interaction
         .deferReply({ flags: [MessageFlags.Ephemeral] })
         .catch(() => {});

@@ -131,14 +131,15 @@ async function handleButtons(interaction) {
             // Если доп. ролей нет, просто удаляем канал и завершаем
             if (additionalRoles.length === 0 || !targetMember) {
                 await interaction.followUp({
-                    content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален.`,
+                    content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален через 2 секунды.`,
                     flags: [MessageFlags.Ephemeral],
                 });
+
                 setTimeout(
                     () => interaction.channel.delete().catch(console.error),
                     2000,
                 );
-                return; // ВАЖНО: прерываем выполнение, чтобы не идти дальше
+                return; // Обязательно прерываем выполнение здесь
             }
 
             // Если есть доп. роли, показываем меню
@@ -223,27 +224,25 @@ async function handleButtons(interaction) {
             });
         }
 
-        // 1. СРАЗУ отключаем кнопку "Вызвать на обзвон" на оригинальном сообщении
+        // 1. СРАЗУ делаем кнопку неактивной, используя встроенную логику buildContainer
+        const disabledContainer = await buildContainer(
+            targetUserId,
+            appData.full_name,
+            appData.age,
+            appData.field3,
+            appData.field4,
+            appData.field5,
+            "отправления",
+            null,
+            null,
+            true, // <-- 10-й аргумент: isInterviewDisabled = true (кнопка станет серой)
+        );
+
         const mainMessage = interaction.message;
-        const updatedComponents = mainMessage.components.map((row) => {
-            const newRow = new ActionRowBuilder();
-            row.components.forEach((comp) => {
-                if (
-                    comp.type === 2 &&
-                    comp.customId === `interview_${targetUserId}`
-                ) {
-                    newRow.addComponents(
-                        new ButtonBuilder(comp).setDisabled(true),
-                    );
-                } else {
-                    newRow.addComponents(comp);
-                }
-            });
-            return newRow;
-        });
+        // Обновляем сообщение новыми компонентами
         await mainMessage
-            .edit({ components: updatedComponents })
-            .catch(() => {});
+            .edit({ components: [disabledContainer] })
+            .catch(console.error);
 
         // 2. Показываем меню выбора канала
         const selectMenu = new StringSelectMenuBuilder()
@@ -264,7 +263,7 @@ async function handleButtons(interaction) {
             flags: [MessageFlags.Ephemeral],
         });
 
-        // 3. Собираем выбор
+        // 3. Собираем выбор администратора
         const collector = interaction.channel.createMessageComponentCollector({
             filter: (i) =>
                 i.user.id === interaction.user.id &&
@@ -274,40 +273,33 @@ async function handleButtons(interaction) {
         });
 
         collector.on("collect", async (menuInteraction) => {
-            // Просто подтверждаем выбор, основная логика отправки логов и ЛС уже в handleVoiceSelect
             await menuInteraction.reply({
                 content: "✅ Кандидат вызван! Кнопка обзвона деактивирована.",
                 flags: [MessageFlags.Ephemeral],
             });
-            await interaction.deleteReply().catch(() => {}); // Удаляем сообщение с меню выбора
+            await interaction.deleteReply().catch(() => {}); // Удаляем сообщение с меню выбора, чтобы не мешало
         });
 
         collector.on("end", async (collected) => {
             if (collected.size === 0) {
-                // Время вышло. Возвращаем кнопку "Обзвон" в активное состояние!
-                const reEnabledComponents = mainMessage.components.map(
-                    (row) => {
-                        const newRow = new ActionRowBuilder();
-                        row.components.forEach((comp) => {
-                            if (
-                                comp.type === 2 &&
-                                comp.customId === `interview_${targetUserId}`
-                            ) {
-                                newRow.addComponents(
-                                    new ButtonBuilder(comp).setDisabled(false),
-                                );
-                            } else {
-                                newRow.addComponents(comp);
-                            }
-                        });
-                        return newRow;
-                    },
+                // Время вышло. Возвращаем кнопку "Обзвон" в активное состояние
+                const enabledContainer = await buildContainer(
+                    targetUserId,
+                    appData.full_name,
+                    appData.age,
+                    appData.field3,
+                    appData.field4,
+                    appData.field5,
+                    "отправления",
+                    null,
+                    null,
+                    false, // <-- 10-й аргумент: isInterviewDisabled = false (кнопка снова активна)
                 );
                 await mainMessage
-                    .edit({ components: reEnabledComponents })
-                    .catch(() => {});
+                    .edit({ components: [enabledContainer] })
+                    .catch(console.error);
 
-                // ИСПРАВЛЕНИЕ 1: Сообщение видно ТОЛЬКО администратору (Ephemeral)
+                // ИСПРАВЛЕНИЕ: Сообщение видно ТОЛЬКО администратору (Ephemeral)
                 await interaction
                     .followUp({
                         content: `⏳ Время выбора комнаты истекло. Кнопка вызова снова активна.`,
