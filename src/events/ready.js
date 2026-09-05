@@ -1,81 +1,20 @@
 const { Events } = require("discord.js");
-const { TelegramClient } = require("telegram");
-const { StringSession } = require("telegram/sessions");
 const { NewMessage } = require("telegram/events");
 const path = require("path");
-const readline = require("readline"); // Добавляем readline для четкого ввода
+const { initTelegramClient } = require("../services/telegramService");
 
-const apiId = Number(process.env.TG_API_ID);
-const apiHash = process.env.TG_API_HASH;
 const majesticBotUsername = "MajesticRolePlayBot";
 const discordChannelId = process.env.CAPT_INFO_CHANNEL_ID;
-
-// Если сессии нет, создаем пустую. Если есть - используем её.
-const stringSession = new StringSession(process.env.TG_SESSION || "");
-
 const processedCapts = new Map();
-
-// Настраиваем readline специально для стабильной работы в Replit
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
-const promptConsole = (query) => {
-  return new Promise((resolve) => {
-    console.log(`\n${"=".repeat(60)}`);
-    console.log(`❓ ${query}`);
-    console.log(
-      `👉 (СРОЧНО: Кликните мышкой в это черное окно консоли, введите ответ и нажмите Enter)`,
-    );
-    console.log(`${"=".repeat(60)}\n`);
-    rl.question("", (answer) => {
-      resolve(answer.trim());
-    });
-  });
-};
 
 module.exports = (client) => {
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`✅ Готово! Вход как ${readyClient.user.tag}`);
 
-    console.log("🔄 Запуск Telegram клиента...");
-    const tgClient = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 5,
-      useWSS: false, // Отключаем WebSocket для большей стабильности TCP в Replit
-    });
-
     try {
-      await tgClient.start({
-        phoneNumber: async () =>
-          await promptConsole(
-            "Введите номер телефона (с кодом страны, без +, например 79959868231):",
-          ),
-        password: async () =>
-          await promptConsole(
-            "Введите 2FA пароль (если он у вас включен, иначе просто нажмите Enter):",
-          ),
-        phoneCode: async () =>
-          await promptConsole("Введите 5-значный код из приложения Telegram:"),
-        onError: (err) => console.error("❌ Ошибка Telegram:", err),
-      });
-
-      console.log("✅ Успешно подключено к Telegram!");
-
-      // Если сессии не было в .env, выводим новую
-      if (!process.env.TG_SESSION) {
-        const newSession = tgClient.session.save();
-        console.log("\n🔥 🔥 🔥 ВАЖНО: СКОПИРУЙТЕ СТРОКУ НИЖЕ 🔥 🔥 🔥");
-        console.log(newSession);
-        console.log(
-          "🔥 🔥 🔥 И ВСТАВЬТЕ ЕЁ В SECRETS (или .env) КАК TG_SESSION 🔥 🔥 🔥\n",
-        );
-        console.log(
-          "После этого перезапустите бота, и код больше спрашиваться не будет!",
-        );
-      }
-
-      console.log("👂 Слушаю уведомления от MajesticRolePlayBot...");
+      // 🚀 Получаем уже авторизованный Telegram клиент из сервиса
+      const tgClient = await initTelegramClient();
+      console.log("👂 Слушаю уведомления от MajesticRolePlayBot...\n");
 
       tgClient.addEventHandler(async (event) => {
         try {
