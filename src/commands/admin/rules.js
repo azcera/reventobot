@@ -51,7 +51,7 @@ module.exports = {
         .reply("У вас нет прав для использования этой команды!")
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
-    const imagePath1 = path.join(__dirname, "..", "images", "rules.png");
+    const imagePath1 = path.join(__dirname, "..", "..", "images", "rules.png");
 
     const localImage1 = new AttachmentBuilder(imagePath1, {
       name: "rules.png",

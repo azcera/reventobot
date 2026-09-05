@@ -24,7 +24,7 @@ module.exports = {
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
 
-    const imagePath = path.join(__dirname, "..", "images", "panel.png");
+    const imagePath = path.join(__dirname, "..", "..", "images", "panel.png");
 
     const localImage = new AttachmentBuilder(imagePath, {
       name: "panel.png",

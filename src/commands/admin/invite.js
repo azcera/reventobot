@@ -30,8 +30,20 @@ module.exports = {
     }
 
     // 1. Подготовка изображений
-    const imagePath1 = path.join(__dirname, "..", "images", "invites.png");
-    const imagePath2 = path.join(__dirname, "..", "images", "revento.png");
+    const imagePath1 = path.join(
+      __dirname,
+      "..",
+      "..",
+      "images",
+      "invites.png",
+    );
+    const imagePath2 = path.join(
+      __dirname,
+      "..",
+      "..",
+      "images",
+      "revento.png",
+    );
 
     const localImage1 = new AttachmentBuilder(imagePath1, {
       name: "invites.png",
