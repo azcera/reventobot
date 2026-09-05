@@ -206,4 +206,8 @@ class InviteCandidate {
     }
 }
 
-module.exports = new InviteCandidate();
+const inviteCandidateInstance = new InviteCandidate();
+
+inviteCandidateInstance.MODAL_FIELDS = MODAL_FIELDS;
+
+module.exports = inviteCandidateInstance;

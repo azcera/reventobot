@@ -13,24 +13,29 @@ const {
   ButtonStyle,
 } = require("discord.js");
 const path = require("path");
+const { replyWithAutoDelete } = require("../commands/utility/autoDelete");
+
+const inviteCandidate = require("../events/handlers/inviteCandidate");
+const FORM_FIELDS = inviteCandidate.MODAL_FIELDS;
 
 module.exports = {
   name: "invite",
-  description: "Создает сообщение для invite",
+  description: "Создает сообщение для канала заявок",
   async execute(message, args) {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return message
-        .reply("У вас нет прав для использования этой команды!")
-        .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
+      return replyWithAutoDelete(
+        message,
+        "У вас нет прав для использования этой команды!",
+      );
     }
+
+    // 1. Подготовка изображений
     const imagePath1 = path.join(__dirname, "..", "images", "invites.png");
+    const imagePath2 = path.join(__dirname, "..", "images", "revento.png");
 
     const localImage1 = new AttachmentBuilder(imagePath1, {
       name: "invites.png",
     });
-
-    const imagePath2 = path.join(__dirname, "..", "images", "revento.png");
-
     const localImage2 = new AttachmentBuilder(imagePath2, {
       name: "revento.png",
     });
@@ -47,6 +52,7 @@ module.exports = {
         .setDescription("REVENTO"),
     );
 
+    // 2. Кнопка подачи заявки
     const inviteButton = new SectionBuilder()
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
@@ -60,6 +66,7 @@ module.exports = {
           .setStyle(ButtonStyle.Primary),
       );
 
+    // 3. Сборка основной части контейнера
     const container = new ContainerBuilder()
       .addMediaGalleryComponents(inviteImage)
       .addTextDisplayComponents(
@@ -70,7 +77,7 @@ module.exports = {
       )
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          "Мы ставим большие амбиции, так-как Revento - это прежде всего семья, жаждущая побед. Перед нами стоит много преград и наша цель - их преодолеть. В составе адекватные ребята, которые также замотивированы на победу.",
+          "Мы ставим большие амбиции, так как Revento - это прежде всего семья, жаждущая побед. Перед нами стоит много преград и наша цель - их преодолеть. В составе адекватные ребята, которые также замотивированы на победу.",
         ),
       )
       .addSeparatorComponents(
@@ -84,7 +91,7 @@ module.exports = {
       )
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          "### • Опытный и отзывчивый старший состав, готовый делится опытом и помогать\n### • Семейный офис, большой склад на 16 тонн\n### • Богатый автопарк, вертолеты\n### • Много интересного контента - капты, рп-контент, контракты\n### • Зафулл на все семейные мероприятия",
+          "### • Опытный и отзывчивый старший состав, готовый делиться опытом и помогать\n### • Семейный офис, большой склад на 16 тонн\n### • Богатый автопарк, вертолеты\n### • Много интересного контента - капты, рп-контент, контракты\n### • Зафулл на все семейные мероприятия",
         ),
       )
       .addSeparatorComponents(
@@ -110,15 +117,30 @@ module.exports = {
       )
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent("## 📃 Форма заявки:"),
-      )
-      .addSeparatorComponents(
-        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
-      )
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          "### Никнейм без фамилии по форме (Имя | Статик)\n||Пример: Tony | 132961||\n### Возраст (ООС)\n||Пример: 18||\n### Как узнали о семье, чем заинтересовала?\n||Пример: узнал через маркет, вижу часто||\n### Где ранее играли (проекты, серверы, семьи)?\n||Пример: Revento, Sweet (maj), Gucci (5rp)||\n### Чего ждете от семьи, чем хотите заниматься?\n||Пример: хочу тулиться, развиваться||",
-        ),
-      )
+      );
+
+    // 🚀 4. ДИНАМИЧЕСКАЯ ГЕНЕРАЦИЯ ТЕКСТА ИЗ MODAL_FIELDS
+    // Цикл автоматически создаст ровно столько блоков, сколько полей в модалке (сейчас их 5)
+    FORM_FIELDS.forEach((field, index) => {
+      let fieldText = `### ${index + 1}. ${field.label}\n`;
+
+      if (field.description) {
+        fieldText += `> ${field.description}\n`;
+      }
+
+      fieldText += `> **Пример:** ||${field.placeholder}||`;
+
+      container
+        .addSeparatorComponents(
+          new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
+        )
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(fieldText),
+        );
+    });
+
+    // 5. Завершающая часть контейнера
+    container
       .addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
@@ -147,12 +169,14 @@ module.exports = {
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large),
       )
       .addSectionComponents(inviteButton);
+
+    // 6. Отправка и очистка команды
     await message.channel.send({
       flags: [MessageFlags.IsComponentsV2],
       components: [container],
       files: [localImage1, localImage2],
     });
 
-    return await message.delete().catch(() => {});
+    await message.delete().catch(() => {});
   },
 };
