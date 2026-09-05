@@ -97,8 +97,9 @@ let handleNameEdit = async (oldMember, newMember, channelName) => {
 	const splittedData = splitName(newMember.displayName)
 	if (!splittedData) return
 
-	const newMemberChannelName = `archive ${splittedData.name} ${splittedData.stat}`
-
+	const newMemberChannelName = ['archive', ...Object.values(splittedData)].join(
+		' '
+	)
 	let existingChannel = channels.find(channel => channel.name === channelName)
 
 	if (existingChannel) {

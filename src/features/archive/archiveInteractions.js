@@ -3,14 +3,23 @@ const { createChannel } = require('../../utils/channelUtils')
 const { replyWithAutoDelete } = require('../../utils/autoDelete')
 
 async function cancelArchive(interaction) {
-	return await interaction.message
-		.delete()
-		.catch(err => console.error('Ошибка удаления:', err))
+	try {
+		await interaction.deferUpdate()
+		await interaction.message.delete().catch(() => {})
+	} catch (err) {
+		console.error('Ошибка удаления:', err)
+	}
 }
 
 async function handleDynamicButtons(interaction) {
-	if (interaction.customId.startsWith('cancel-create')) {
-		return await interaction.message.delete().catch(() => {})
+	if (customId.startsWith('cancel_create')) {
+		try {
+			await interaction.deferUpdate()
+			await interaction.message.delete().catch(() => {})
+		} catch (err) {
+			console.error('❌ Ошибка при отмене создания архива:', err)
+		}
+		return
 	}
 
 	if (interaction.customId.startsWith('create_')) {
