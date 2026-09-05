@@ -74,7 +74,12 @@ module.exports = client => {
 				return await captureInteractions.handleInlineEditTimeButton(interaction)
 			}
 
-			if (customId.startsWith('capt_')) {
+			if (
+				customId.startsWith('capt_') &&
+				!['capt_join', 'capt_leave', 'capt_edit_time_trigger'].includes(
+					customId
+				)
+			) {
 				return await captureInteractions.handleAutoCaptButton(interaction)
 			}
 
@@ -94,7 +99,11 @@ module.exports = client => {
 		// modals
 
 		if (interaction.isModalSubmit()) {
-			if (customId === 'modal_inline_edit_time') {
+			if (customId === 'modal_capt') {
+				return await captureInteractions.submitCaptModal(interaction)
+			}
+
+			if (customId.startsWith('modal_inline_edit_time_')) {
 				return await captureInteractions.submitInlineEditTimeModal(interaction)
 			}
 
@@ -104,8 +113,6 @@ module.exports = client => {
 				return await inviteAdmin.submitRejectModal(interaction)
 			if (customId.startsWith('modal_group_'))
 				return await groupInteractions.submitGroupModal(interaction)
-			if (interaction.customId === 'modal_capt')
-				return await captureInteractions.submitCaptModal(interaction)
 		}
 	})
 }

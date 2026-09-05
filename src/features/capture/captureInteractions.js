@@ -1,318 +1,252 @@
 const {
+	ModalBuilder,
+	TextInputBuilder,
+	TextInputStyle,
 	MessageFlags,
-	ActionRowBuilder,
-	TextDisplayBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	ContainerBuilder,
-	SeparatorBuilder
+	LabelBuilder
 } = require('discord.js')
-require('dotenv').config()
+const { parseDateTime, getDiscordTimestamp } = require('../../utils/dateUtils')
+const { sendEphemeralWithAutoDelete } = require('../../utils/autoDelete')
+const captureManager = require('./captureManager')
+const db = require('../../services/database')
+const ADMIN_ROLES = process.env.ADMIN_ROLES
+	? process.env.ADMIN_ROLES.split(',')
+	: []
 
-const pool = require('../../services/database.js')
-const { replyWithAutoDelete } = require('../../utils/autoDelete.js')
+// 1. Показывает модалку для создания капта вручную
+async function showCaptModal(interaction) {
+	const modal = new ModalBuilder()
+		.setCustomId('modal_capt')
+		.setTitle('Создание реги')
 
-const PLUS_CHANNEL = process.env.PLUS_CHANNEL_ID
+	const timeLabel = new LabelBuilder()
+		.setLabel('Время проведения')
+		.setTextInputComponent(
+			new TextInputBuilder()
+				.setCustomId('capt_time')
+				.setPlaceholder('Например: 18:00 или 29.08.2026 18:00')
+				.setStyle(TextInputStyle.Short)
+				.setRequired(true)
+		)
+	const targetLabel = new LabelBuilder()
+		.setLabel('Цель проведения')
+		.setTextInputComponent(
+			new TextInputBuilder()
+				.setCustomId('capt_target')
+				.setPlaceholder('По умолчанию: КАПТ')
+				.setStyle(TextInputStyle.Short)
+				.setRequired(false)
+		)
+	const countLabel = new LabelBuilder()
+		.setLabel('Количество участников в основе')
+		.setTextInputComponent(
+			new TextInputBuilder()
+				.setCustomId('capt_count')
+				.setPlaceholder('По умолчанию: 20')
+				.setStyle(TextInputStyle.Short)
+				.setRequired(false)
+		)
 
-function buildCaptureMessage(
-	discordTimestamp,
-	mainList,
-	reserveList,
-	leftList,
-	target,
-	maxMain
-) {
-	const title = new TextDisplayBuilder().setContent(
-		`## 📢 Рега на ${target ?? 'капт'}!`
-	)
-	const time = new TextDisplayBuilder().setContent(
-		'## Время проведения: ' + discordTimestamp
-	)
+	modal.addLabelComponents(timeLabel, targetLabel, countLabel)
+	return await interaction.showModal(modal)
+}
 
-	const helpText = new TextDisplayBuilder().setContent(
-		'-# Нажмите на кнопку ниже, чтобы записаться на капт.'
-	)
+// 2. Обрабатывает сабмит ручной модалки
+async function submitCaptModal(interaction) {
+	const timeInput = interaction.fields.getTextInputValue('capt_time').trim()
+	const parsedDate = parseDateTime(timeInput)
 
-	const mainPlayersText =
-		mainList.length > 0
-			? mainList.map((id, index) => `${index + 1}. <@${id}>`).join('\n')
-			: 'Пусто'
-	const reservePlayersText =
-		reserveList.length > 0
-			? reserveList.map((id, index) => `${index + 1}. <@${id}>`).join('\n')
-			: 'Пусто'
-	const leftPlayersText =
-		leftList.length > 0
-			? leftList.map((id, index) => `• <@${id}>`).join('\n')
-			: 'Пусто'
-
-	const mainTitle = new TextDisplayBuilder().setContent(
-		`### 👥 Основной состав (${mainList.length}/${maxMain})\n${mainPlayersText}`
-	)
-	const reserveTitle = new TextDisplayBuilder().setContent(
-		`### 🤝 Резерв (${reserveList.length})\n${reservePlayersText}`
-	)
-	const leftTitle = new TextDisplayBuilder().setContent(
-		`### 🚪 Покинули набор (${leftList.length})\n${leftPlayersText}`
-	)
-
-	const containerComponent = new ContainerBuilder()
-
-	containerComponent.addTextDisplayComponents(title, time, helpText)
-
-	containerComponent
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(mainTitle)
-
-	if (reserveList.length > 0) {
-		containerComponent
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addTextDisplayComponents(reserveTitle)
+	if (!parsedDate || isNaN(parsedDate.getTime())) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content:
+				'❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.'
+		})
 	}
 
-	if (leftList.length > 0) {
-		containerComponent
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addTextDisplayComponents(leftTitle)
+	const discordTimestamp = getDiscordTimestamp(parsedDate)
+	let target =
+		interaction.fields.getTextInputValue('capt_target').trim() || 'капт'
+	let maxMain = 20
+
+	const countInput = interaction.fields.getTextInputValue('capt_count').trim()
+	if (countInput) {
+		const parsedCount = parseInt(countInput, 10)
+		if (!isNaN(parsedCount) && parsedCount > 0) {
+			maxMain = parsedCount
+		} else {
+			return await sendEphemeralWithAutoDelete(interaction, {
+				content:
+					'❌ Количество участников должно быть целым положительным числом.'
+			})
+		}
 	}
 
-	const buttonsRow = new ActionRowBuilder().addComponents(
-		new ButtonBuilder()
-			.setCustomId('capt_join')
-			.setLabel('✅ Принять')
-			.setStyle(ButtonStyle.Success),
-		new ButtonBuilder()
-			.setCustomId('capt_leave')
-			.setLabel('❌ Выйти')
-			.setStyle(ButtonStyle.Danger),
-		new ButtonBuilder()
-			.setCustomId('capt_edit_time_trigger')
-			.setLabel('✏️ Время')
-			.setStyle(ButtonStyle.Secondary)
+	await sendEphemeralWithAutoDelete(interaction, {
+		content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`
+	})
+
+	try {
+		await captureManager.sendCollection(
+			interaction,
+			discordTimestamp,
+			target,
+			maxMain
+		)
+	} catch (error) {
+		console.error('Ошибка при отправке набора:', error)
+	}
+}
+
+// 3. 🎯 АВТО-СОЗДАНИЕ капта по кнопке из Telegram (парсит время из customId)
+async function handleAutoCaptButton(interaction) {
+	const hasAdminRole = interaction.member.roles.cache.some(role =>
+		ADMIN_ROLES.includes(role.id)
 	)
 
-	return {
-		flags: MessageFlags.IsComponentsV2,
-		components: [containerComponent, buttonsRow]
+	if (!hasAdminRole) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ У вас нет необходимой роли для использования этой кнопки.'
+		})
+	}
+
+	// customId формат: capt_Enemy-Faction_DD-MM-YYYY-HH-MM
+	const customId = interaction.customId
+	const parts = customId.split('_')
+
+	if (parts.length < 3) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ Не удалось распознать данные из кнопки.'
+		})
+	}
+
+	const enemyRaw = parts[1]
+	const timeRaw = parts.slice(2).join('_')
+
+	const target = enemyRaw.replace(/-/g, ' ')
+	const timeInput = timeRaw.replace(/-/g, ' ')
+	const cleanTimeInput = timeInput.substring(0, 16)
+
+	let parsedDate = null
+	if (typeof parseDateTime === 'function') {
+		parsedDate = parseDateTime(cleanTimeInput)
+	}
+
+	if (!parsedDate || isNaN(parsedDate.getTime())) {
+		const dateMatch = cleanTimeInput.match(
+			/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/
+		)
+		if (dateMatch) {
+			const [, day, month, year, hours, minutes] = dateMatch
+			parsedDate = new Date(
+				`${year}-${month}-${day}T${hours}:${minutes}:00+03:00`
+			)
+		}
+	}
+
+	if (!parsedDate || isNaN(parsedDate.getTime())) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: `❌ Не удалось автоматически распознать формат времени: \`${timeInput}\`.`
+		})
+	}
+
+	const discordTimestamp = getDiscordTimestamp(parsedDate)
+	const maxMain = 20
+
+	await sendEphemeralWithAutoDelete(interaction, {
+		content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`
+	})
+
+	try {
+		await captureManager.sendCollection(
+			interaction,
+			discordTimestamp,
+			`капт против ${target}`,
+			maxMain
+		)
+	} catch (error) {
+		console.error('❌ Ошибка при отправке автоматического набора:', error)
+	}
+}
+
+// 4. Показывает модалку для редактирования времени
+async function handleInlineEditTimeButton(interaction) {
+	const hasAdminRole = interaction.member.roles.cache.some(role =>
+		ADMIN_ROLES.includes(role.id)
+	)
+
+	if (!hasAdminRole) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ У вас нет необходимой роли для изменения времени капта.'
+		})
+	}
+
+	const messageId = interaction.message.id
+	const modal = new ModalBuilder()
+		.setCustomId(`modal_inline_edit_time_${messageId}`)
+		.setTitle('Изменение времени капта')
+
+	const timeLabel = new LabelBuilder()
+		.setLabel('Новое время проведения')
+		.setTextInputComponent(
+			new TextInputBuilder()
+				.setCustomId('capt_new_time')
+				.setPlaceholder('Например: 18:00 или 29.08.2026 18:00')
+				.setStyle(TextInputStyle.Short)
+				.setRequired(true)
+		)
+
+	modal.addLabelComponents(timeLabel)
+	return await interaction.showModal(modal)
+}
+
+// 5. Обрабатывает сабмит модалки редактирования времени
+async function submitInlineEditTimeModal(interaction) {
+	const newTimeInput = interaction.fields
+		.getTextInputValue('capt_new_time')
+		.trim()
+	const parsedDate = parseDateTime(newTimeInput)
+
+	if (!parsedDate || isNaN(parsedDate.getTime())) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content:
+				'❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.'
+		})
+	}
+
+	const newDiscordTimestamp = getDiscordTimestamp(parsedDate)
+	const messageId = interaction.customId.replace('modal_inline_edit_time_', '')
+	const channelId = interaction.channelId
+
+	await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
+
+	try {
+		await db.query(
+			'UPDATE active_captures SET discord_timestamp = $1 WHERE message_id = $2',
+			[newDiscordTimestamp, messageId]
+		)
+
+		await captureManager.updateCollectionTime(
+			messageId,
+			channelId,
+			newDiscordTimestamp,
+			interaction.client
+		)
+
+		await interaction.editReply({
+			content: `✅ Время капта успешно изменено на: ${newDiscordTimestamp}`
+		})
+	} catch (error) {
+		console.error('[EditTime] Ошибка при обновлении времени капта:', error)
+		await interaction.editReply({
+			content: '❌ Произошла ошибка при обновлении времени.'
+		})
 	}
 }
 
 module.exports = {
-	buildCaptureMessage,
-
-	async sendCollection(
-		interaction,
-		discordTimestamp,
-		target = null,
-		maxMain = 20
-	) {
-		const guild = interaction.guild
-		const channel = guild.channels.cache.get(PLUS_CHANNEL)
-
-		const mainList = []
-		const reserveList = []
-		const leftList = []
-
-		const messageData = buildCaptureMessage(
-			discordTimestamp,
-			mainList,
-			reserveList,
-			leftList,
-			target,
-			maxMain
-		)
-		const message = await channel.send(messageData)
-		for (let i = 0; i < 3; i++) {
-			await channel.send({
-				content: `<@&${process.env.AUTO_ROLE}> рега выше`
-			})
-		}
-
-		try {
-			await pool.query(
-				`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, target, max_main)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				[
-					message.id,
-					discordTimestamp,
-					JSON.stringify(mainList),
-					JSON.stringify(reserveList),
-					JSON.stringify(leftList),
-					target,
-					maxMain
-				]
-			)
-		} catch (err) {
-			console.error('❌ Не удалось сохранить набор в БД:', err)
-		}
-	},
-
-	/**
-	 * Обновляет время в сообщении набора после редактирования
-	 * @param {string} messageId - ID сообщения в канале
-	 * @param {string} channelId - ID канала, где находится сообщение
-	 * @param {string} newTimestamp - Новый Discord timestamp
-	 * @param {Client} client - Discord клиент для поиска сообщения
-	 */
-	async updateCollectionTime(messageId, channelId, newTimestamp, client) {
-		// ✅ ИСПРАВЛЕНО: db.query → pool.query
-		const result = await pool.query(
-			'SELECT * FROM active_captures WHERE message_id = $1',
-			[messageId]
-		)
-
-		if (result.rows.length === 0) {
-			console.error('[UpdateTime] Набор не найден в БД')
-			return
-		}
-
-		const captureData = result.rows[0]
-
-		// ✅ ИСПРАВЛЕНО: правильный порядок аргументов (timestamp первым!)
-		const updatedMessageData = buildCaptureMessage(
-			newTimestamp,
-			JSON.parse(captureData.main_list || '[]'),
-			JSON.parse(captureData.reserve_list || '[]'),
-			JSON.parse(captureData.left_list || '[]'),
-			captureData.target,
-			captureData.max_main
-		)
-
-		// Ищем сообщение в канале (так как interaction.message может быть недоступно при submit модалки)
-		const channel = client.channels.cache.get(channelId)
-		if (!channel) {
-			console.error('[UpdateTime] Канал не найден')
-			return
-		}
-
-		try {
-			const message = await channel.messages.fetch(messageId)
-			// ✅ ИСПРАВЛЕНО: передаем весь объект, а не заворачиваем в components
-			await message.edit(updatedMessageData)
-		} catch (err) {
-			console.error('[UpdateTime] Не удалось обновить сообщение:', err)
-		}
-	},
-
-	async handleButton(interaction) {
-		if (!interaction.isButton()) return
-
-		const customId = interaction.customId
-
-		// ✅ ИСПРАВЛЕНО: убираем ранний return, чтобы обрабатывать и другие кнопки
-		if (
-			customId !== 'capt_join' &&
-			customId !== 'capt_leave' &&
-			customId !== 'capt_edit_time_trigger'
-		) {
-			return
-		}
-
-		// Обработка кнопки редактирования времени (просто отвечаем, чтобы избежать таймаута)
-		// Сама логика показа модалки находится в interactionCreate.js
-		if (customId === 'capt_edit_time_trigger') {
-			// Ничего не делаем здесь - обработка в interactionCreate
-			return
-		}
-
-		const messageId = interaction.message.id
-
-		let row
-		try {
-			const res = await pool.query(
-				'SELECT * FROM active_captures WHERE message_id = $1',
-				[messageId]
-			)
-			row = res.rows[0]
-		} catch (err) {
-			console.error('❌ Ошибка при поиске набора в БД:', err)
-		}
-
-		if (!row) {
-			return interaction.reply({
-				content: '❌ Данная регистрация устарела или неактивна.',
-				flags: [MessageFlags.Ephemeral]
-			})
-		}
-
-		const discordTimestamp = row.discord_timestamp
-		const target = row.target
-		const maxMain = row.max_main || 20
-
-		let mainList = row.main_list || []
-		let reserveList = row.reserve_list || []
-		let leftList = row.left_list || []
-
-		const userId = interaction.user.id
-
-		if (customId === 'capt_join') {
-			if (mainList.includes(userId) || reserveList.includes(userId)) {
-				return await replyWithAutoDelete(interaction, {
-					content: '❌ Вы уже записаны на капт!'
-				})
-			}
-
-			const leftIndex = leftList.indexOf(userId)
-			if (leftIndex !== -1) leftList.splice(leftIndex, 1)
-
-			if (mainList.length < maxMain) {
-				mainList.push(userId)
-			} else {
-				reserveList.push(userId)
-			}
-		} else if (customId === 'capt_leave') {
-			const mainIndex = mainList.indexOf(userId)
-			const reserveIndex = reserveList.indexOf(userId)
-
-			if (mainIndex === -1 && reserveIndex === -1) {
-				return await replyWithAutoDelete(interaction, {
-					content: '❌ Вас и так нет в списках.'
-				})
-			}
-
-			if (mainIndex !== -1) {
-				mainList.splice(mainIndex, 1)
-
-				if (reserveList.length > 0) {
-					const movingPlayer = reserveList.shift()
-					mainList.push(movingPlayer)
-				}
-			} else if (reserveIndex !== -1) {
-				reserveList.splice(reserveIndex, 1)
-			}
-
-			if (!leftList.includes(userId)) {
-				leftList.push(userId)
-			}
-		}
-
-		try {
-			await pool.query(
-				`UPDATE active_captures 
-         SET main_list = $1, reserve_list = $2, left_list = $3
-         WHERE message_id = $4`,
-				[
-					JSON.stringify(mainList),
-					JSON.stringify(reserveList),
-					JSON.stringify(leftList),
-					messageId
-				]
-			)
-		} catch (err) {
-			console.error('Не удалось обновить данные набора в БД:', err)
-			return await replyWithAutoDelete(interaction, {
-				content: '❌ Произошла ошибка базы данных при сохранении.'
-			})
-		}
-
-		const updatedMessageData = buildCaptureMessage(
-			discordTimestamp,
-			mainList,
-			reserveList,
-			leftList,
-			target,
-			maxMain
-		)
-		await interaction.update(updatedMessageData)
-	}
+	showCaptModal,
+	submitCaptModal,
+	handleAutoCaptButton,
+	handleInlineEditTimeButton,
+	submitInlineEditTimeModal
 }
