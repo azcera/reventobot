@@ -176,16 +176,18 @@ async function handleButtons(interaction) {
                 });
 
             collector.on("collect", async (menuInteraction) => {
-                await menuInteraction.deferUpdate(); // Отвечаем на меню, чтобы не было ошибки
+                await menuInteraction.deferUpdate(); // Подтверждаем выбор в меню
                 const chosenRoleId = menuInteraction.values[0];
                 if (targetMember)
                     await targetMember.roles
                         .add(chosenRoleId)
                         .catch(console.error);
 
-                await interaction.channel.send({
+                await menuInteraction.followUp({
                     content: `✅ Роль <@&${chosenRoleId}> выдана участнику <@${targetUserId}>!`,
+                    flags: [MessageFlags.Ephemeral],
                 });
+
                 setTimeout(
                     () => interaction.channel.delete().catch(console.error),
                     1500,
