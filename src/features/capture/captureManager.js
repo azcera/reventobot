@@ -148,44 +148,43 @@ module.exports = {
 		}
 	},
 
-	// Метод для обновления времени из модального окна
-	async updateCollectionTime(message, newTimestamp) {
-		let row
-		try {
-			const res = await pool.query(
-				'SELECT * FROM active_captures WHERE message_id = $1',
-				[message.id]
-			)
-			row = res.rows[0]
-		} catch (err) {
-			console.error('Ошибка при получении данных для изменения времени:', err)
-			return
-		}
+	/**
+	 * Обновляет время в сообщении набора после редактирования
+	 * @param {Interaction} interaction - Исходное взаимодействие (для получения message)
+	 * @param {string} newTimestamp - Новый Discord timestamp
+	 */
+	async updateCollectionTime(interaction, newTimestamp) {
+		const messageId = interaction.message.id
 
-		if (!row) return
-
-		// Сохраняем новое время в базу данных
-		try {
-			await pool.query(
-				'UPDATE active_captures SET discord_timestamp = $1 WHERE message_id = $2',
-				[newTimestamp, message.id]
-			)
-		} catch (err) {
-			console.error('Ошибка при обновлении времени в БД:', err)
-			return
-		}
-
-		// Перерисовываем сообщение с новыми данными
-		const updatedMessageData = buildCaptureMessage(
-			newTimestamp,
-			row.main_list || [],
-			row.reserve_list || [],
-			row.left_list || [],
-			row.target,
-			row.max_main || 20
+		// Получаем обновленные данные из БД
+		const result = await db.query(
+			'SELECT * FROM active_captures WHERE message_id = $1',
+			[messageId]
 		)
 
-		await message.edit(updatedMessageData).catch(console.error)
+		if (result.rows.length === 0) {
+			console.error('[UpdateTime] Набор не найден в БД')
+			return
+		}
+
+		const captureData = result.rows[0]
+
+		// Пересобираем сообщение с новым временем
+		// (Предполагается, что у вас есть функция buildCaptureMessage или аналог)
+		const newContainer = buildCaptureMessage(
+			captureData.target,
+			newTimestamp,
+			JSON.parse(captureData.main_list || '[]'),
+			JSON.parse(captureData.reserve_list || '[]'),
+			JSON.parse(captureData.left_list || '[]'),
+			captureData.max_main
+		)
+
+		// Обновляем сообщение
+		await interaction.message.edit({
+			components: [newContainer],
+			flags: [MessageFlags.IsComponentsV2]
+		})
 	},
 
 	async handleButton(interaction) {
