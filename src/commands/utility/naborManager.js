@@ -120,7 +120,7 @@ module.exports = {
     const message = await channel.send(messageData);
     for (let i = 0; i < 3; i++) {
       await channel.send({
-        content: `<@&${process.env.MENTIONED_ROLE}> рега выше`,
+        content: `<@&${process.env.AUTO_ROLE}> рега выше`,
       });
     }
 

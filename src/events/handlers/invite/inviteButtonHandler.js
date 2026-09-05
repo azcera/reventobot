@@ -275,26 +275,37 @@ async function handleButtons(interaction) {
                 });
             }
 
-            // 4. ВОЗВРАЩАЕМ КНОПКИ В АКТИВНОЕ СОСТОЯНИЕ (false = включено)
-            // Это позволяет админу нажать "Принять" или "Отклонить" позже
-            const enabledContainer = await buildContainer(
-                targetUserId,
-                appData.full_name,
-                appData.age,
-                appData.field3,
-                appData.field4,
-                appData.field5,
-                "отправления",
-                null,
-                null,
-                false, // <-- false означает, что кнопки активны
-            );
+            // 4. ОТКЛЮЧАЕМ ТОЛЬКО КНОПКУ "ВЫЗВАТЬ НА ОБЗВОН"
+            // Получаем текущее сообщение и его компоненты
+            const mainMessage = interaction.message;
+            const components = mainMessage.components;
 
-            await interaction.message
-                .edit({ components: [enabledContainer.toJSON()] })
+            // Проходим по всем ActionRow и отключаем кнопку с customId, содержащим "interview"
+            const updatedComponents = components.map((row) => {
+                const updatedRow = ActionRowBuilder.from(row);
+                const updatedButtons = row.components.map((component) => {
+                    if (
+                        component.type === 2 &&
+                        component.customId &&
+                        component.customId.includes(`interview_${targetUserId}`)
+                    ) {
+                        // Отключаем только кнопку "вызвать на обзвон"
+                        const disabledButton =
+                            ButtonBuilder.from(component).setDisabled(true);
+                        return disabledButton;
+                    }
+                    return component;
+                });
+                updatedRow.setComponents(updatedButtons);
+                return updatedRow;
+            });
+
+            // Редактируем сообщение с обновленными компонентами
+            await mainMessage
+                .edit({ components: updatedComponents })
                 .catch(() => {});
 
-            // Удаляем сообщение с меню выбора, чтобы не засорять чат
+            // Удаляем сообщение с меню выбора
             await response.delete().catch(() => {});
         });
 

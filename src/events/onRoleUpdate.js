@@ -68,7 +68,7 @@ let handleMakeRevento = async (oldMember, newMember, channelName) => {
 
     if (!existingChannel) {
       const messagesChannel = newMember.guild.channels.cache.get(
-        process.env.MESSAGES_CHANNEL_ID,
+        process.env.LOG_CHANNEL_ID,
       );
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()

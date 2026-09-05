@@ -22,7 +22,7 @@ function isApplicationMod(member) {
 // Централизованная отправка логов в аудит-канал
 
 async function logAction(guild, container) {
-    const logChannelId = process.env.LOG_INVITE_CHANNEL_ID;
+    const logChannelId = process.env.LOG_CHANNEL_ID;
     if (!logChannelId) return;
     const logChannel = guild.channels.cache.get(logChannelId);
     if (logChannel) {

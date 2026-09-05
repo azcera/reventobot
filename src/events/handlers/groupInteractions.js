@@ -149,7 +149,7 @@ async function submitGroupModal(interaction) {
     .catch(console.error);
   try {
     const pingChannelId = process.env.PING_CHANNEL_ID;
-    const mentionedRoleId = process.env.MENTIONED_ROLE;
+    const mentionedRoleId = process.env.AUTO_ROLE;
     if (!pingChannelId)
       return console.log("❌ В файле .env не указан PING_CHANNEL_ID");
 
