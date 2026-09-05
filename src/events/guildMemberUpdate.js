@@ -1,138 +1,127 @@
 const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  roleMention,
-} = require("discord.js");
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	roleMention
+} = require('discord.js')
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES.split(",");
-require("dotenv").config();
+const ADMIN_ROLES = process.env.ADMIN_ROLES.split(',')
+require('dotenv').config()
 
 function splitName(nickname) {
-  const splittedName = nickname.split(" | ");
-  if (splittedName.length < 2) return null;
+	const splittedName = nickname.split(' | ')
+	if (splittedName.length < 2) return null
 
-  const match = splittedName[0].match(/[A-Za-z]+/);
+	const match = splittedName[0].match(/[A-Za-z]+/)
 
-  return {
-    name: match
-      ? match[0].trim().toLowerCase()
-      : splittedName[0].trim().toLowerCase(),
-    stat: splittedName[1].trim(),
-  };
+	return {
+		name: match
+			? match[0].trim().toLowerCase()
+			: splittedName[0].trim().toLowerCase(),
+		stat: splittedName[1].trim()
+	}
 }
 
 let handleMakeAdmin = async (oldMember, newMember) => {
-  const oldHasAdmin = oldMember.roles.cache.filter((role) =>
-    ADMIN_ROLES.includes(role.id),
-  );
-  const newHasAdmin = newMember.roles.cache.filter((role) =>
-    ADMIN_ROLES.includes(role.id),
-  );
-  const addedRole = newHasAdmin.find((role) => !oldHasAdmin.has(role.id));
-  const removedRole = oldHasAdmin.find((role) => !newHasAdmin.has(role.id));
+	const oldHasAdmin = oldMember.roles.cache.filter(role =>
+		ADMIN_ROLES.includes(role.id)
+	)
+	const newHasAdmin = newMember.roles.cache.filter(role =>
+		ADMIN_ROLES.includes(role.id)
+	)
+	const addedRole = newHasAdmin.find(role => !oldHasAdmin.has(role.id))
+	const removedRole = oldHasAdmin.find(role => !newHasAdmin.has(role.id))
 
-  if (!addedRole && !removedRole) return;
+	if (!addedRole && !removedRole) return
 
-  const cleanName = newMember.displayName.replace(/^\[.*\]\s*/g, "").trim();
+	const cleanName = newMember.displayName.replace(/^\[.*\]\s*/g, '').trim()
 
-  let newPrefix = "";
+	let newPrefix = ''
 
-  if (addedRole) {
-    if (addedRole.id === ADMIN_ROLES[0]) {
-      newPrefix = "[𝐃𝐞𝐩] "; // dep
-    } else if (addedRole.id === ADMIN_ROLES[1]) {
-      newPrefix = "[𝐇𝐢𝐠𝐡] "; // high
-    } else if (addedRole.id === ADMIN_ROLES[2]) {
-      newPrefix = "[𝐑𝐞𝐜] "; // recruit
-    }
-  }
-  const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32);
+	if (addedRole) {
+		if (addedRole.id === ADMIN_ROLES[0]) {
+			newPrefix = '[𝐃𝐞𝐩] ' // dep
+		} else if (addedRole.id === ADMIN_ROLES[1]) {
+			newPrefix = '[𝐇𝐢𝐠𝐡] ' // high
+		} else if (addedRole.id === ADMIN_ROLES[2]) {
+			newPrefix = '[𝐑𝐞𝐜] ' // recruit
+		}
+	}
+	const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32)
 
-  if (newMember.displayName !== finalNickname && newMember.manageable) {
-    await newMember.setNickname(finalNickname);
-  }
-};
+	if (newMember.displayName !== finalNickname && newMember.manageable) {
+		await newMember.setNickname(finalNickname)
+	}
+}
 
 let handleMakeRevento = async (oldMember, newMember, channelName) => {
-  const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE);
-  const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE);
-  let parsedChannelName = channelName.replace(/-/g, " ");
+	const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE)
+	const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE)
+	let parsedChannelName = channelName.replace(/-/g, ' ')
 
-  if (!hadRoleBefore && hasRoleNow) {
-    const channels = newMember.guild.channels.cache;
+	if (!hadRoleBefore && hasRoleNow) {
+		const channels = newMember.guild.channels.cache
 
-    let existingChannel = channels.find(
-      (channel) => channel.name === parsedChannelName,
-    );
+		let existingChannel = channels.find(
+			channel => channel.name === parsedChannelName
+		)
 
-    if (!existingChannel) {
-      const messagesChannel = newMember.guild.channels.cache.get(
-        process.env.LOG_CHANNEL_ID,
-      );
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`create_${channelName}-${newMember.id}`)
-          .setLabel("Да")
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`cancel_create_${channelName}-${newMember.id}`)
-          .setLabel("Нет")
-          .setStyle(ButtonStyle.Danger),
-      );
+		if (!existingChannel) {
+			const messagesChannel = newMember.guild.channels.cache.get(
+				process.env.LOG_CHANNEL_ID
+			)
+			const row = new ActionRowBuilder().addComponents(
+				new ButtonBuilder()
+					.setCustomId(`create_${channelName}-${newMember.id}`)
+					.setLabel('Да')
+					.setStyle(ButtonStyle.Success),
+				new ButtonBuilder()
+					.setCustomId(`cancel_create_${channelName}-${newMember.id}`)
+					.setLabel('Нет')
+					.setStyle(ButtonStyle.Danger)
+			)
 
-      if (messagesChannel && messagesChannel.isTextBased()) {
-        messagesChannel.send({
-          content: `${ADMIN_ROLES.map((e) => roleMention(e))} Создать для <@${newMember.id}> архив - \`${channelName}\`?`,
-          components: [row],
-        });
-      }
-    }
-  }
-};
+			if (messagesChannel && messagesChannel.isTextBased()) {
+				messagesChannel.send({
+					content: `${ADMIN_ROLES.map(e => roleMention(e))} Создать для <@${newMember.id}> архив - \`${channelName}\`?`,
+					components: [row]
+				})
+			}
+		}
+	}
+}
 
 let handleNameEdit = async (oldMember, newMember, channelName) => {
-  if (oldMember.displayName === newMember.displayName) return;
-  const channels = newMember.guild.channels.cache;
-  const splittedData = splitName(newMember.displayName);
-  if (!splittedData) return;
+	if (oldMember.displayName === newMember.displayName) return
+	const channels = newMember.guild.channels.cache
+	const splittedData = splitName(newMember.displayName)
+	if (!splittedData) return
 
-  const newMemberChannelName = `archive ${splittedData.name} ${splittedData.stat}`;
+	const newMemberChannelName = `archive ${splittedData.name} ${splittedData.stat}`
 
-  let existingChannel = channels.find(
-    (channel) => channel.name === channelName,
-  );
+	let existingChannel = channels.find(channel => channel.name === channelName)
 
-  if (existingChannel) {
-    if (existingChannel.name !== newMemberChannelName) {
-      await existingChannel.setName(newMemberChannelName);
-    }
-  }
-};
+	if (existingChannel) {
+		if (existingChannel.name !== newMemberChannelName) {
+			await existingChannel.setName(newMemberChannelName)
+		}
+	}
+}
 
-module.exports = (client) => {
-  client.on("guildMemberUpdate", async (oldMember, newMember) => {
-    const displayName = oldMember.displayName;
-    const splittedData = splitName(displayName);
-    if (!splittedData) return;
+module.exports = client => {
+	client.on('guildMemberUpdate', async (oldMember, newMember) => {
+		const displayName = oldMember.displayName
+		const splittedData = splitName(displayName)
+		if (!splittedData) return
 
-    const channelName = `archive-${splittedData.name}-${splittedData.stat}`;
+		const channelName = `archive-${splittedData.name}-${splittedData.stat}`
 
-    try {
-      await handleMakeAdmin(oldMember, newMember);
-    } catch (error) {
-      console.error("❌ Ошибка MakeAdmin: ", error);
-    }
-
-    try {
-      await handleMakeRevento(oldMember, newMember, channelName);
-    } catch (error) {
-      console.error("❌ Ошибка MakeRevento: ", error);
-    }
-    try {
-      await handleNameEdit(oldMember, newMember, channelName);
-    } catch (error) {
-      console.error("❌ Ошибка NameEdit: ", error);
-    }
-  });
-};
+		try {
+			await handleMakeAdmin(oldMember, newMember)
+			await handleMakeRevento(oldMember, newMember, channelName)
+			await handleNameEdit(oldMember, newMember, channelName)
+		} catch (error) {
+			console.error('❌ Ошибка выполнения: ', error)
+		}
+	})
+}

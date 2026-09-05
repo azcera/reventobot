@@ -1,61 +1,59 @@
-const { MessageFlags } = require("discord.js");
-const { createChannel } = require("../../utils/channelUtils");
+const { MessageFlags } = require('discord.js')
+const { createChannel } = require('../../utils/channelUtils')
+const { replyWithAutoDelete } = require('../../utils/autoDelete')
 
 async function cancelArchive(interaction) {
-  return await interaction.message
-    .delete()
-    .catch((err) => console.error("Ошибка удаления:", err));
+	return await interaction.message
+		.delete()
+		.catch(err => console.error('Ошибка удаления:', err))
 }
 
 async function handleDynamicButtons(interaction) {
-  if (interaction.customId.startsWith("cancelcreate")) {
-    return await interaction.message.delete().catch(() => {});
-  }
+	if (interaction.customId.startsWith('cancel-create')) {
+		return await interaction.message.delete().catch(() => {})
+	}
 
-  if (interaction.customId.startsWith("create_")) {
-    const rawData = interaction.customId.replace("create_", "");
+	if (interaction.customId.startsWith('create_')) {
+		const rawData = interaction.customId.replace('create_', '')
 
-    const idMatch = rawData.match(/\d{17,19}$/);
-    const targetMemberID = idMatch ? idMatch[0] : null;
+		const idMatch = rawData.match(/\d{17,19}$/)
+		const targetMemberID = idMatch ? idMatch[0] : null
 
-    if (!targetMemberID) {
-      console.error(
-        `[Ошибка парсинга ID] Не удалось найти Snowflake в строке: ${rawData}`,
-      );
-      return await interaction.reply({
-        content: "❌ Ошибка: В кнопке не найден ID пользователя.",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+		if (!targetMemberID) {
+			console.error(`❌ Не удалось найти Snowflake в строке: ${rawData}`)
+			return await interaction.reply({
+				content: '❌ В кнопке не найден ID пользователя.',
+				flags: MessageFlags.Ephemeral
+			})
+		}
 
-    const rawChannelName = rawData.replace(`-${targetMemberID}`, "");
+		const rawChannelName = rawData.replace(`-${targetMemberID}`, '')
 
-    const cleanedChannelName = rawChannelName.replace(/-/g, " ");
+		const cleanedChannelName = rawChannelName.replace(/-/g, ' ')
 
-    const member = await interaction.guild.members
-      .fetch(targetMemberID)
-      .catch((err) => {
-        console.error(
-          `[Ошибка Fetch] Не удалось найти пользователя ${targetMemberID}:`,
-          err.message,
-        );
-        return null;
-      });
+		const member = await interaction.guild.members
+			.fetch(targetMemberID)
+			.catch(err => {
+				console.error(
+					`❌ Не удалось найти пользователя ${targetMemberID}:`,
+					err.message
+				)
+				return null
+			})
 
-    if (!member) {
-      return await interaction.reply({
-        content: "❌ Пользователь не найден на сервере.",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+		if (!member) {
+			return await replyWithAutoDelete(interaction, {
+				content: '❌ Пользователь не найден на сервере.'
+			})
+		}
 
-    await interaction.message.delete().catch(() => {});
+		await interaction.message.delete().catch(() => {})
 
-    return await createChannel(interaction, {
-      channelName: cleanedChannelName,
-      member,
-    });
-  }
+		return await createChannel(interaction, {
+			channelName: cleanedChannelName,
+			member
+		})
+	}
 }
 
-module.exports = { cancelArchive, handleDynamicButtons };
+module.exports = { cancelArchive, handleDynamicButtons }

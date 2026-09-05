@@ -1,25 +1,23 @@
-const { Pool } = require("pg");
+const { Pool } = require('pg')
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-    idleTimeoutMillis: 30000,
-});
+	connectionString: process.env.DATABASE_URL,
+	ssl: { rejectUnauthorized: false },
+	idleTimeoutMillis: 30000
+})
 
-pool.on("error", (err) => {
-    console.error(
-        "Непредвиденная ошибка на незанятом клиенте PostgreSQL:",
-        err,
-    );
-});
+pool.on('error', err => {
+	console.error('Непредвиденная ошибка на незанятом клиенте PostgreSQL:', err)
+})
 
-pool.query("SELECT NOW()")
-    .then(() => console.log("✅ Успешное подключение к пулу PostgreSQL"))
-    .catch((err) => console.error("❌ Ошибка подключения к пулу БД:", err));
+pool
+	.query('SELECT NOW()')
+	.then(() => console.log('✅ Успешное подключение к пулу PostgreSQL'))
+	.catch(err => console.error('❌ Ошибка подключения к пулу БД:', err))
 
 const initDb = async () => {
-    try {
-        await pool.query(`
+	try {
+		await pool.query(`
             CREATE TABLE IF NOT EXISTS family_applications (
                 user_id TEXT PRIMARY KEY,
                 channel_id TEXT NOT NULL,
@@ -30,9 +28,9 @@ const initDb = async () => {
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        `);
+        `)
 
-        await pool.query(`
+		await pool.query(`
             CREATE TABLE IF NOT EXISTS active_captures (
                 message_id TEXT PRIMARY KEY,
                 discord_timestamp TEXT,
@@ -42,17 +40,14 @@ const initDb = async () => {
                 target TEXT,
                 max_main INTEGER DEFAULT 20
             );
-        `);
+        `)
 
-        console.log("✅ Все таблицы БД успешно проверены и инициализированы.");
-    } catch (err) {
-        console.error(
-            "❌ Критическая ошибка при инициализации таблиц БД:",
-            err,
-        );
-    }
-};
+		console.log('✅ Все таблицы БД успешно проверены и инициализированы.')
+	} catch (err) {
+		console.error('❌ Критическая ошибка при инициализации таблиц БД:', err)
+	}
+}
 
-initDb();
+initDb()
 
-module.exports = pool;
+module.exports = pool

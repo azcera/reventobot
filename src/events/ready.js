@@ -1,167 +1,167 @@
-const { Events } = require("discord.js");
-const { NewMessage } = require("telegram/events");
-const path = require("path");
-const { initTelegramClient } = require("../services/telegramService");
+const { Events } = require('discord.js')
+const { NewMessage } = require('telegram/events')
+const path = require('path')
+const { initTelegramClient } = require('../services/telegramService')
 
-const majesticBotUsername = "MajesticRolePlayBot";
-const discordChannelId = process.env.CAPT_INFO_CHANNEL_ID;
-const processedCapts = new Map();
+const majesticBotUsername = 'MajesticRolePlayBot'
+const discordChannelId = process.env.CAPT_INFO_CHANNEL_ID
+const processedCaptures = new Map()
 
-module.exports = (client) => {
-  client.once(Events.ClientReady, async (readyClient) => {
-    console.log(`✅ Готово! Вход как ${readyClient.user.tag}`);
+module.exports = client => {
+	client.once(Events.ClientReady, async readyClient => {
+		console.log(`✅ Готово! Вход как ${readyClient.user.tag}`)
 
-    try {
-      // 🚀 Получаем уже авторизованный Telegram клиент из сервиса
-      const tgClient = await initTelegramClient();
-      console.log("👂 Слушаю уведомления от MajesticRolePlayBot...\n");
+		try {
+			// 🚀 Получаем уже авторизованный Telegram клиент из сервиса
+			const tgClient = await initTelegramClient()
+			console.log('👂 Слушаю уведомления от MajesticRolePlayBot...\n')
 
-      tgClient.addEventHandler(async (event) => {
-        try {
-          const message = event.message;
-          const sender = await message.getSender();
+			tgClient.addEventHandler(async event => {
+				try {
+					const message = event.message
+					const sender = await message.getSender()
 
-          if (
-            !sender ||
-            (sender.username !== majesticBotUsername &&
-              sender.id?.toString() !== majesticBotUsername)
-          )
-            return;
+					if (
+						!sender ||
+						(sender.username !== majesticBotUsername &&
+							sender.id?.toString() !== majesticBotUsername)
+					)
+						return
 
-          const text = message.text || "";
-          const isAttackMessage = /Ваша организация\s+.+?\s+напала на/i.test(
-            text,
-          );
-          const isDefendMessage = /На вашу организацию\s+.+?\s+напали/i.test(
-            text,
-          );
+					const text = message.text || ''
+					const isAttackMessage = /Ваша организация\s+.+?\s+напала на/i.test(
+						text
+					)
+					const isDefendMessage = /На вашу организацию\s+.+?\s+напали/i.test(
+						text
+					)
 
-          if (!isAttackMessage && !isDefendMessage) return;
+					if (!isAttackMessage && !isDefendMessage) return
 
-          let isAttack = isAttackMessage;
-          let attacker = "Неизвестно";
-          let defender = "Неизвестно";
+					let isAttack = isAttackMessage
+					let attacker = 'Неизвестно'
+					let defender = 'Неизвестно'
 
-          if (isAttack) {
-            const match = text.match(
-              /Ваша организация\s+([^\n]+?)\s+напала на\s+([^\n!]+)/i,
-            );
-            if (match) {
-              attacker = match[1].trim();
-              defender = match[2].trim();
-            }
-          } else {
-            const match = text.match(
-              /На вашу организацию\s+([^\n]+?)\s+напали\s+([^\n!]+)/i,
-            );
-            if (match) {
-              attacker = match[2].trim();
-              defender = match[1].trim();
-            }
-          }
+					if (isAttack) {
+						const match = text.match(
+							/Ваша организация\s+([^\n]+?)\s+напала на\s+([^\n!]+)/i
+						)
+						if (match) {
+							attacker = match[1].trim()
+							defender = match[2].trim()
+						}
+					} else {
+						const match = text.match(
+							/На вашу организацию\s+([^\n]+?)\s+напали\s+([^\n!]+)/i
+						)
+						if (match) {
+							attacker = match[2].trim()
+							defender = match[1].trim()
+						}
+					}
 
-          if (/нейтрал/i.test(attacker) || /нейтрал/i.test(defender)) return;
+					if (/нейтрал/i.test(attacker) || /нейтрал/i.test(defender)) return
 
-          const startTime = (
-            text.match(/Начало:\s*([^\n]+)/i)?.[1] || "Не указано"
-          ).trim();
-          const zoneName = (
-            text.match(/Название квадрата:\s*([^\n]+)/i)?.[1] || "Не указано"
-          ).trim();
-          const zoneNum = (
-            text.match(/Номер квадрата:\s*([^\n]+)/i)?.[1] || "Не указано"
-          ).trim();
-          const count = (
-            text.match(/Количество нападающих:\s*([^\n]+)/i)?.[1] ||
-            "Не указано"
-          ).trim();
+					const startTime = (
+						text.match(/Начало:\s*([^\n]+)/i)?.[1] || 'Не указано'
+					).trim()
+					const zoneName = (
+						text.match(/Название квадрата:\s*([^\n]+)/i)?.[1] || 'Не указано'
+					).trim()
+					const zoneNum = (
+						text.match(/Номер квадрата:\s*([^\n]+)/i)?.[1] || 'Не указано'
+					).trim()
+					const count = (
+						text.match(/Количество нападающих:\s*([^\n]+)/i)?.[1] ||
+						'Не указано'
+					).trim()
 
-          const captKey = `${attacker}_${defender}_${startTime}_${zoneNum}`
-            .toLowerCase()
-            .replace(/\s+/g, "");
+					const captKey = `${attacker}_${defender}_${startTime}_${zoneNum}`
+						.toLowerCase()
+						.replace(/\s+/g, '')
 
-          if (processedCapts.has(captKey)) return;
+					if (processedCaptures.has(captKey)) return
 
-          processedCapts.set(captKey, true);
-          setTimeout(() => {
-            processedCapts.delete(captKey);
-          }, 300000);
+					processedCaptures.set(captKey, true)
+					setTimeout(() => {
+						processedCaptures.delete(captKey)
+					}, 300000)
 
-          console.log(
-            `[Telegram] Обнаружен капт: ${attacker} vs ${defender} (Квадрат ${zoneNum})`,
-          );
+					console.log(
+						`[Telegram] Обнаружен капт: ${attacker} vs ${defender} (Квадрат ${zoneNum})`
+					)
 
-          const channel = await client.channels.fetch(discordChannelId);
-          if (!channel)
-            return console.error("[Discord] Канал для каптов не найден!");
+					const channel = await client.channels.fetch(discordChannelId)
+					if (!channel)
+						return console.error('[Discord] Канал для каптов не найден!')
 
-          const imagePath = path.join(__dirname, "..", "images", "capt.png");
-          const localImage = new (require("discord.js").AttachmentBuilder)(
-            imagePath,
-            { name: "capt.png" },
-          );
-          const captImage =
-            new (require("discord.js").MediaGalleryBuilder)().addItems(
-              new (require("discord.js").MediaGalleryItemBuilder)()
-                .setURL("attachment://capt.png")
-                .setDescription("CAPT"),
-            );
+					const imagePath = path.join(__dirname, '..', 'images', 'capt.png')
+					const localImage = new (require('discord.js').AttachmentBuilder)(
+						imagePath,
+						{ name: 'capt.png' }
+					)
+					const captImage =
+						new (require('discord.js').MediaGalleryBuilder)().addItems(
+							new (require('discord.js').MediaGalleryItemBuilder)()
+								.setURL('attachment://capt.png')
+								.setDescription('CAPT')
+						)
 
-          const enemyFaction = (isAttack ? defender : attacker).replace(
-            /\s+/g,
-            "-",
-          );
-          const cleanTime = startTime.replace(/\s+/g, "-");
+					const enemyFaction = (isAttack ? defender : attacker).replace(
+						/\s+/g,
+						'-'
+					)
+					const cleanTime = startTime.replace(/\s+/g, '-')
 
-          const actionRow =
-            new (require("discord.js").ActionRowBuilder)().addComponents(
-              new (require("discord.js").ButtonBuilder)()
-                .setCustomId(`capt_${enemyFaction}_${cleanTime}`)
-                .setLabel(
-                  isAttack
-                    ? "⚔️ Создать регу на АТАКУ ⚔️"
-                    : "🛡️ Создать регу на ЗАЩИТУ 🛡️",
-                )
-                .setStyle(
-                  isAttack
-                    ? require("discord.js").ButtonStyle.Success
-                    : require("discord.js").ButtonStyle.Primary,
-                ),
-            );
+					const actionRow =
+						new (require('discord.js').ActionRowBuilder)().addComponents(
+							new (require('discord.js').ButtonBuilder)()
+								.setCustomId(`capt_${enemyFaction}_${cleanTime}`)
+								.setLabel(
+									isAttack
+										? '⚔️ Создать регу на АТАКУ ⚔️'
+										: '🛡️ Создать регу на ЗАЩИТУ 🛡️'
+								)
+								.setStyle(
+									isAttack
+										? require('discord.js').ButtonStyle.Success
+										: require('discord.js').ButtonStyle.Primary
+								)
+						)
 
-          const container = new (require("discord.js").ContainerBuilder)()
-            .setAccentColor(isAttack ? 0x57f287 : 0x5865f2)
-            .addMediaGalleryComponents(captImage)
-            .addTextDisplayComponents(
-              new (require("discord.js").TextDisplayBuilder)().setContent(
-                isAttack ? "# ⚔️ КАПТ АТАКА ⚔️ " : "# 🛡️ КАПТ ЗАЩИТА 🛡️",
-              ),
-            )
-            .addSeparatorComponents(
-              new (require("discord.js").SeparatorBuilder)(),
-            )
-            .addTextDisplayComponents(
-              new (require("discord.js").TextDisplayBuilder)().setContent(
-                `> ### 🆚 Против: \`${isAttack ? defender : attacker}\`\n` +
-                  `> ### ⏰ Начало: \`${startTime}\`\n` +
-                  `> ### 🗺️ Квадрат: \`${zoneName} (${zoneNum})\`\n` +
-                  `> ### 👥 Кол-во врагов: \`${count}\`\n` +
-                  `> ### ||@everyone||`,
-              ),
-            )
-            .addActionRowComponents(actionRow);
+					const container = new (require('discord.js').ContainerBuilder)()
+						.setAccentColor(isAttack ? 0x57f287 : 0x5865f2)
+						.addMediaGalleryComponents(captImage)
+						.addTextDisplayComponents(
+							new (require('discord.js').TextDisplayBuilder)().setContent(
+								isAttack ? '# ⚔️ КАПТ АТАКА ⚔️ ' : '# 🛡️ КАПТ ЗАЩИТА 🛡️'
+							)
+						)
+						.addSeparatorComponents(
+							new (require('discord.js').SeparatorBuilder)()
+						)
+						.addTextDisplayComponents(
+							new (require('discord.js').TextDisplayBuilder)().setContent(
+								`> ### 🆚 Против: \`${isAttack ? defender : attacker}\`\n` +
+									`> ### ⏰ Начало: \`${startTime}\`\n` +
+									`> ### 🗺️ Квадрат: \`${zoneName} (${zoneNum})\`\n` +
+									`> ### 👥 Кол-во врагов: \`${count}\`\n` +
+									`> ### ||@everyone||`
+							)
+						)
+						.addActionRowComponents(actionRow)
 
-          await channel.send({
-            flags: [require("discord.js").MessageFlags.IsComponentsV2],
-            components: [container],
-            files: [localImage],
-          });
-        } catch (err) {
-          console.error("[Telegram Event Error]:", err);
-        }
-      }, new NewMessage({}));
-    } catch (error) {
-      console.error("❌ Критическая ошибка при запуске Telegram:", error);
-    }
-  });
-};
+					await channel.send({
+						flags: [require('discord.js').MessageFlags.IsComponentsV2],
+						components: [container],
+						files: [localImage]
+					})
+				} catch (err) {
+					console.error('[Telegram Event Error]:', err)
+				}
+			}, new NewMessage({}))
+		} catch (error) {
+			console.error('❌ Критическая ошибка при запуске Telegram:', error)
+		}
+	})
+}

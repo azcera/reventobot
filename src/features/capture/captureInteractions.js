@@ -1,158 +1,158 @@
 const {
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  MessageFlags,
-  LabelBuilder,
-} = require("discord.js");
-const { parseDateTime, getDiscordTimestamp } = require("../../utils/dateUtils");
-const { sendEphemeralWithAutoDelete } = require("../../utils/autoDelete");
-const captureManager = require("../../features/capture/captureManager");
+	ModalBuilder,
+	TextInputBuilder,
+	TextInputStyle,
+	MessageFlags,
+	LabelBuilder
+} = require('discord.js')
+const { parseDateTime, getDiscordTimestamp } = require('../../utils/dateUtils')
+const { sendEphemeralWithAutoDelete } = require('../../utils/autoDelete')
+const captureManager = require('../../features/capture/captureManager')
 const ADMIN_ROLES = process.env.ADMIN_ROLES
-  ? process.env.ADMIN_ROLES.split(",")
-  : [];
+	? process.env.ADMIN_ROLES.split(',')
+	: []
 
 async function showCaptModal(interaction) {
-  const modal = new ModalBuilder()
-    .setCustomId("modal_capt")
-    .setTitle("Создание реги");
+	const modal = new ModalBuilder()
+		.setCustomId('modal_capt')
+		.setTitle('Создание реги')
 
-  const timeLabel = new LabelBuilder()
-    .setLabel("Время проведения")
-    .setTextInputComponent(
-      new TextInputBuilder()
-        .setCustomId("capt_time")
-        .setPlaceholder("Например: 18:00 или 29.08.2026 18:00")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true),
-    );
-  const targetLabel = new LabelBuilder()
-    .setLabel("Цель проведения")
-    .setTextInputComponent(
-      new TextInputBuilder()
-        .setCustomId("capt_target")
-        .setPlaceholder("По умолчанию: КАПТ")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false),
-    );
-  const countLabel = new LabelBuilder()
-    .setLabel("Количество участников в основе")
-    .setTextInputComponent(
-      new TextInputBuilder()
-        .setCustomId("capt_count")
-        .setPlaceholder("По умолчанию: 20")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false),
-    );
+	const timeLabel = new LabelBuilder()
+		.setLabel('Время проведения')
+		.setTextInputComponent(
+			new TextInputBuilder()
+				.setCustomId('capt_time')
+				.setPlaceholder('Например: 18:00 или 29.08.2026 18:00')
+				.setStyle(TextInputStyle.Short)
+				.setRequired(true)
+		)
+	const targetLabel = new LabelBuilder()
+		.setLabel('Цель проведения')
+		.setTextInputComponent(
+			new TextInputBuilder()
+				.setCustomId('capt_target')
+				.setPlaceholder('По умолчанию: КАПТ')
+				.setStyle(TextInputStyle.Short)
+				.setRequired(false)
+		)
+	const countLabel = new LabelBuilder()
+		.setLabel('Количество участников в основе')
+		.setTextInputComponent(
+			new TextInputBuilder()
+				.setCustomId('capt_count')
+				.setPlaceholder('По умолчанию: 20')
+				.setStyle(TextInputStyle.Short)
+				.setRequired(false)
+		)
 
-  modal.addLabelComponents(timeLabel, targetLabel, countLabel);
-  return await interaction.showModal(modal);
+	modal.addLabelComponents(timeLabel, targetLabel, countLabel)
+	return await interaction.showModal(modal)
 }
 
 async function submitCaptModal(interaction) {
-  const timeInput = interaction.fields.getTextInputValue("capt_time").trim();
-  const parsedDate = parseDateTime(timeInput);
+	const timeInput = interaction.fields.getTextInputValue('capt_time').trim()
+	const parsedDate = parseDateTime(timeInput)
 
-  if (!parsedDate || isNaN(parsedDate.getTime())) {
-    return await sendEphemeralWithAutoDelete(interaction, {
-      content:
-        "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.",
-    });
-  }
+	if (!parsedDate || isNaN(parsedDate.getTime())) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content:
+				'❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.'
+		})
+	}
 
-  const discordTimestamp = getDiscordTimestamp(parsedDate);
+	const discordTimestamp = getDiscordTimestamp(parsedDate)
 
-  let target =
-    interaction.fields.getTextInputValue("capt_target").trim() ?? "капт";
-  let maxMain = 20;
+	let target =
+		interaction.fields.getTextInputValue('capt_target').trim() ?? 'капт'
+	let maxMain = 20
 
-  const countInput = interaction.fields.getTextInputValue("capt_count").trim();
+	const countInput = interaction.fields.getTextInputValue('capt_count').trim()
 
-  if (countInput) {
-    const parsedCount = parseInt(countInput, 10);
-    if (!isNaN(parsedCount) && parsedCount > 0) {
-      maxMain = parsedCount;
-    } else {
-      return await sendEphemeralWithAutoDelete(interaction, {
-        content:
-          "❌ Количество участников должно быть целым положительным числом.",
-      });
-    }
-  }
+	if (countInput) {
+		const parsedCount = parseInt(countInput, 10)
+		if (!isNaN(parsedCount) && parsedCount > 0) {
+			maxMain = parsedCount
+		} else {
+			return await sendEphemeralWithAutoDelete(interaction, {
+				content:
+					'❌ Количество участников должно быть целым положительным числом.'
+			})
+		}
+	}
 
-  await sendEphemeralWithAutoDelete(interaction, {
-    content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
-  });
-  try {
-    await captureManager.sendNabor(
-      interaction,
-      discordTimestamp,
-      target,
-      maxMain,
-    );
-  } catch (error) {
-    console.error("Ошибка при отправке набора:", error);
-  }
+	await sendEphemeralWithAutoDelete(interaction, {
+		content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`
+	})
+	try {
+		await captureManager.sendCollection(
+			interaction,
+			discordTimestamp,
+			target,
+			maxMain
+		)
+	} catch (error) {
+		console.error('Ошибка при отправке набора:', error)
+	}
 }
 
 async function handleAutoCaptButton(interaction) {
-  const hasAdminRole = interaction.member.roles.cache.some((role) =>
-    ADMIN_ROLES.includes(role.id),
-  );
+	const hasAdminRole = interaction.member.roles.cache.some(role =>
+		ADMIN_ROLES.includes(role.id)
+	)
 
-  if (!hasAdminRole) {
-    return await sendEphemeralWithAutoDelete(interaction, {
-      content: "❌ У вас нет необходимой роли для использования этой кнопки.",
-    });
-  }
+	if (!hasAdminRole) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ У вас нет необходимой роли для использования этой кнопки.'
+		})
+	}
 
-  const [, enemyRaw, timeRaw] = interaction.customId.split("_");
+	const [, enemyRaw, timeRaw] = interaction.customId.split('_')
 
-  const target = enemyRaw.replace(/-/g, " ");
-  const timeInput = timeRaw.replace(/-/g, " ");
+	const target = enemyRaw.replace(/-/g, ' ')
+	const timeInput = timeRaw.replace(/-/g, ' ')
 
-  const cleanTimeInput = timeInput.substring(0, 16);
+	const cleanTimeInput = timeInput.substring(0, 16)
 
-  let parsedDate = null;
-  if (typeof parseDateTime === "function") {
-    parsedDate = parseDateTime(cleanTimeInput);
-  }
+	let parsedDate = null
+	if (typeof parseDateTime === 'function') {
+		parsedDate = parseDateTime(cleanTimeInput)
+	}
 
-  if (!parsedDate || isNaN(parsedDate.getTime())) {
-    const dateMatch = cleanTimeInput.match(
-      /^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/,
-    );
-    if (dateMatch) {
-      const [, day, month, year, hours, minutes] = dateMatch;
-      parsedDate = new Date(
-        `${year}-${month}-${day}T${hours}:${minutes}:00+03:00`,
-      );
-    }
-  }
+	if (!parsedDate || isNaN(parsedDate.getTime())) {
+		const dateMatch = cleanTimeInput.match(
+			/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/
+		)
+		if (dateMatch) {
+			const [, day, month, year, hours, minutes] = dateMatch
+			parsedDate = new Date(
+				`${year}-${month}-${day}T${hours}:${minutes}:00+03:00`
+			)
+		}
+	}
 
-  if (!parsedDate || isNaN(parsedDate.getTime())) {
-    return await sendEphemeralWithAutoDelete(interaction, {
-      content: `❌ Не удалось автоматически распознать формат времени: \`${timeInput}\`.`,
-    });
-  }
+	if (!parsedDate || isNaN(parsedDate.getTime())) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: `❌ Не удалось автоматически распознать формат времени: \`${timeInput}\`.`
+		})
+	}
 
-  const discordTimestamp = getDiscordTimestamp(parsedDate);
-  const maxMain = 20;
+	const discordTimestamp = getDiscordTimestamp(parsedDate)
+	const maxMain = 20
 
-  await sendEphemeralWithAutoDelete(interaction, {
-    content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`,
-  });
+	await sendEphemeralWithAutoDelete(interaction, {
+		content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`
+	})
 
-  try {
-    await captureManager.sendNabor(
-      interaction,
-      discordTimestamp,
-      `капт против ${target}`,
-      maxMain,
-    );
-  } catch (error) {
-    console.error("❌ Ошибка при отправке автоматического набора:", error);
-  }
+	try {
+		await captureManager.sendCollection(
+			interaction,
+			discordTimestamp,
+			`капт против ${target}`,
+			maxMain
+		)
+	} catch (error) {
+		console.error('❌ Ошибка при отправке автоматического набора:', error)
+	}
 }
 
-module.exports = { showCaptModal, submitCaptModal, handleAutoCaptButton };
+module.exports = { showCaptModal, submitCaptModal, handleAutoCaptButton }

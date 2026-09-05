@@ -1,52 +1,96 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Discord UI Components v2 Constructor</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Discord UI Components v2 Constructor</title>
+		<link
+			rel="stylesheet"
+			href="style.css"
+		/>
+	</head>
+	<body>
+		<!-- ЛЕВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ И СБОРКА -->
+		<div class="panel">
+			<h2>Конструктор контейнеров v2</h2>
 
-  <!-- ЛЕВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ И СБОРКА -->
-  <div class="panel">
-    <h2>Конструктор контейнеров v2</h2>
-    
-    <label for="channelId">ID Текстового канала Discord:</label>
-    <input type="text" id="channelId" placeholder="Вставьте ID канала, куда бот отправит сообщение...">
-    
-    <div class="color-section">
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <label>Цвет боковой линии</label>
-        <input type="color" id="accentColor" value="#5865f2">
-      </div>
-      <div style="margin-left: auto;">
-        <label class="checkbox-container">
-          <input type="checkbox" id="noColor">
-          Без боковой полоски
-        </label>
-      </div>
-    </div>
-    
-    <label>Добавить элементы в контейнер:</label>
-    <div class="actions-bar">
-      <button class="btn-add blue" id="addTextBtn">+ Текст</button>
-      <button class="btn-add" id="addImageBtn">+ Картинку</button>
-      <button class="btn-add" id="addSeparatorBtn">+ Отступ</button>
-      <button class="btn-add grey" id="addSectionBtn">+ Секцию (кнопка справа)</button>
-    </div>
+			<label for="channelId">ID Текстового канала Discord:</label>
+			<input
+				type="text"
+				id="channelId"
+				placeholder="Вставьте ID канала, куда бот отправит сообщение..."
+			/>
 
-    <div id="itemsContainer" class="items-list"></div>
+			<div class="color-section">
+				<div style="display: flex; flex-direction: column; gap: 8px">
+					<label>Цвет боковой линии</label>
+					<input
+						type="color"
+						id="accentColor"
+						value="#5865f2"
+					/>
+				</div>
+				<div style="margin-left: auto">
+					<label class="checkbox-container">
+						<input
+							type="checkbox"
+							id="noColor"
+						/>
+						Без боковой полоски
+					</label>
+				</div>
+			</div>
 
-    <button class="btn-send" id="sendBtn">🚀 Опубликовать в Discord</button>
-  </div>
+			<label>Добавить элементы в контейнер:</label>
+			<div class="actions-bar">
+				<button
+					class="btn-add blue"
+					id="addTextBtn"
+				>
+					+ Текст
+				</button>
+				<button
+					class="btn-add"
+					id="addImageBtn"
+				>
+					+ Картинку
+				</button>
+				<button
+					class="btn-add"
+					id="addSeparatorBtn"
+				>
+					+ Отступ
+				</button>
+				<button
+					class="btn-add grey"
+					id="addSectionBtn"
+				>
+					+ Секцию (кнопка справа)
+				</button>
+			</div>
 
-  <!-- ПРАВАЯ ПАНЕЛЬ: ЖИВОЕ ПРЕВЬЮ -->
-  <div class="preview-panel">
-    <h2 style="width:100%">Живое превью контейнера</h2>
-    <div class="discord-container" id="discordPreview"></div>
-  </div>
+			<div
+				id="itemsContainer"
+				class="items-list"
+			></div>
 
-  <!-- Подключение логики -->
-  <script src="app.js"></script>
-</body>
+			<button
+				class="btn-send"
+				id="sendBtn"
+			>
+				🚀 Опубликовать в Discord
+			</button>
+		</div>
+
+		<!-- ПРАВАЯ ПАНЕЛЬ: ЖИВОЕ ПРЕВЬЮ -->
+		<div class="preview-panel">
+			<h2 style="width: 100%">Живое превью контейнера</h2>
+			<div
+				class="discord-container"
+				id="discordPreview"
+			></div>
+		</div>
+
+		<!-- Подключение логики -->
+		<script src="app.js"></script>
+	</body>
 </html>
