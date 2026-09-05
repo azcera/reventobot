@@ -12,6 +12,10 @@ const {
     LabelBuilder,
     SeparatorBuilder,
 } = require("discord.js");
+const {
+    sendEphemeralWithAutoDelete,
+    followUpEphemeralWithAutoDelete,
+} = require("../../../commands/utility/autoDelete.js");
 const db = require("../../../commands/utility/db.js");
 const {
     isApplicationMod,
@@ -130,16 +134,14 @@ async function handleButtons(interaction) {
 
             // Если доп. ролей нет, просто удаляем канал и завершаем
             if (additionalRoles.length === 0 || !targetMember) {
-                await interaction.followUp({
-                    content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален через 2 секунды.`,
-                    flags: [MessageFlags.Ephemeral],
+                await followUpEphemeralWithAutoDelete(interaction, {
+                    content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален.`,
                 });
-
                 setTimeout(
                     () => interaction.channel.delete().catch(console.error),
                     2000,
                 );
-                return; // Обязательно прерываем выполнение здесь
+                return;
             }
 
             // Если есть доп. роли, показываем меню

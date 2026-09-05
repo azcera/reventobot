@@ -16,10 +16,11 @@ const {
   getFilteredOptions,
   optionsMap,
 } = require("../../commands/utility/groupOptions");
+const {
+  sendEphemeralWithAutoDelete,
+} = require("../../commands/utility/autoDelete");
 
 async function showGroupSelect(interaction) {
-  // 1. Сразу говорим Discord, что мы обрабатываем запрос в фоновом режиме
-  // Это продлевает жизнь взаимодействия до 15 минут
   await interaction
     .deferReply({ flags: [MessageFlags.Ephemeral] })
     .catch(console.error);
@@ -126,27 +127,19 @@ async function submitGroupModal(interaction) {
 
   const parsedDate = parseDateTime(timeInput);
   if (!parsedDate || isNaN(parsedDate.getTime())) {
-    return await interaction.reply({
+    return await sendEphemeralWithAutoDelete(interaction, {
       content:
         "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.",
-      flags: [MessageFlags.Ephemeral],
     });
   }
 
   const mskTimeStr = getMskTimeString(parsedDate, -600);
   const mskTimeWith5MinStr = getMskTimeString(parsedDate, -300);
 
-  await interaction
-    .reply({
-      content: `✅ Группа создана!\nВремя: ${mskTimeStr}\nЦель: ${target}\nКод: ${code}`,
-      flags: [MessageFlags.Ephemeral],
-    })
-    .then(() => {
-      setTimeout(async () => {
-        await interaction.deleteReply().catch(() => {});
-      }, 60000);
-    })
-    .catch(console.error);
+  await sendEphemeralWithAutoDelete(interaction, {
+    content: `✅ Группа создана!\nВремя: ${mskTimeStr}\nЦель: ${target}\nКод: ${code}`,
+  });
+
   try {
     const pingChannelId = process.env.PING_CHANNEL_ID;
     const mentionedRoleId = process.env.AUTO_ROLE;

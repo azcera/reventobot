@@ -87,7 +87,11 @@ async function buildContainer(
         .addSeparatorComponents(new SeparatorBuilder())
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `### Пользователь: <@${userId}>\n### 1. Никнейм\n${nameInput}\n### 2. Возраст (ООС)\n${age}\n### 3. Как узнали о семье, чем заинтересовала?\n${f3}\n### 4. Где ранее играли (проекты, серверы, семьи)?\n${f4}\n### 5. Чего ждете от семьи, чем хотите заниматься?\n${f5}`,
+                `### Пользователь: <@${userId}>\n` +
+                    `### 1. Никнейм\n${nameInput}\n` +
+                    `### 2. Возраст (ООС)\n${age}\n` +
+                    `### 3. Как узнали о семье и чего ждете?\n${f3}\n` +
+                    `### 4. Где ранее играли?\n${f4}`,
             ),
         )
         .addSeparatorComponents(new SeparatorBuilder())

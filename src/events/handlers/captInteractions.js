@@ -9,8 +9,13 @@ const {
   parseDateTime,
   getDiscordTimestamp,
 } = require("../../commands/utility/parseDateTime");
+const {
+  sendEphemeralWithAutoDelete,
+} = require("../../commands/utility/autoDelete");
 const naborManager = require("../../commands/utility/naborManager");
-const ADMIN_ROLES = process.env.ADMIN_ROLES ? process.env.ADMIN_ROLES.split(",") : [];
+const ADMIN_ROLES = process.env.ADMIN_ROLES
+  ? process.env.ADMIN_ROLES.split(",")
+  : [];
 
 async function showCaptModal(interaction) {
   const modal = new ModalBuilder()
@@ -54,10 +59,9 @@ async function submitCaptModal(interaction) {
   const parsedDate = parseDateTime(timeInput);
 
   if (!parsedDate || isNaN(parsedDate.getTime())) {
-    return await interaction.reply({
+    return await sendEphemeralWithAutoDelete(interaction, {
       content:
         "❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.",
-      flags: [MessageFlags.Ephemeral],
     });
   }
 
@@ -74,25 +78,16 @@ async function submitCaptModal(interaction) {
     if (!isNaN(parsedCount) && parsedCount > 0) {
       maxMain = parsedCount;
     } else {
-      return await interaction.reply({
+      return await sendEphemeralWithAutoDelete(interaction, {
         content:
           "❌ Количество участников должно быть целым положительным числом.",
-        flags: [MessageFlags.Ephemeral],
       });
     }
   }
 
-  await interaction
-    .reply({
-      content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
-      flags: [MessageFlags.Ephemeral],
-    })
-    .then(() => {
-      setTimeout(async () => {
-        await interaction.deleteReply().catch(() => {});
-      }, 60000);
-    })
-    .catch(console.error);
+  await sendEphemeralWithAutoDelete(interaction, {
+    content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`,
+  });
   try {
     await naborManager.sendNabor(
       interaction,
@@ -111,9 +106,8 @@ async function handleAutoCaptButton(interaction) {
   );
 
   if (!hasAdminRole) {
-    return await interaction.reply({
+    return await sendEphemeralWithAutoDelete(interaction, {
       content: "❌ У вас нет необходимой роли для использования этой кнопки.",
-      flags: [MessageFlags.Ephemeral],
     });
   }
 
@@ -142,26 +136,17 @@ async function handleAutoCaptButton(interaction) {
   }
 
   if (!parsedDate || isNaN(parsedDate.getTime())) {
-    return await interaction.reply({
+    return await sendEphemeralWithAutoDelete(interaction, {
       content: `❌ Не удалось автоматически распознать формат времени: \`${timeInput}\`.`,
-      flags: [MessageFlags.Ephemeral],
     });
   }
 
   const discordTimestamp = getDiscordTimestamp(parsedDate);
   const maxMain = 20;
 
-  await interaction
-    .reply({
-      content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`,
-      flags: [MessageFlags.Ephemeral],
-    })
-    .then(() => {
-      setTimeout(async () => {
-        await interaction.deleteReply().catch(() => {});
-      }, 60000);
-    })
-    .catch(console.error);
+  await sendEphemeralWithAutoDelete(interaction, {
+    content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`,
+  });
 
   try {
     await naborManager.sendNabor(
