@@ -15,6 +15,7 @@ const { TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 const { NewMessage } = require("telegram/events");
 const path = require("path");
+const { IMAGES_PATH } = require("../..");
 
 const apiId = Number(process.env.TG_API_ID);
 const apiHash = process.env.TG_API_HASH;
@@ -146,7 +147,7 @@ module.exports = (client) => {
         if (!channel)
           return console.error("[Discord] Канал для каптов не найден!");
 
-        const imagePath = path.join(__dirname, "..", "images", "capt.png");
+        const imagePath = path.join(IMAGES_PATH, "capt.png");
 
         const localImage = new AttachmentBuilder(imagePath, {
           name: "capt.png",

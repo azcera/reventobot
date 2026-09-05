@@ -16,6 +16,7 @@ const path = require("path");
 const { replyWithAutoDelete } = require("../../utils/autoDelete");
 
 const inviteApplication = require("../../features/invite/inviteApplication");
+const { IMAGES_PATH } = require("../../..");
 const FORM_FIELDS = inviteApplication.MODAL_FIELDS;
 
 module.exports = {
@@ -30,20 +31,8 @@ module.exports = {
     }
 
     // 1. Подготовка изображений
-    const imagePath1 = path.join(
-      __dirname,
-      "..",
-      "..",
-      "images",
-      "invites.png",
-    );
-    const imagePath2 = path.join(
-      __dirname,
-      "..",
-      "..",
-      "images",
-      "revento.png",
-    );
+    const imagePath1 = path.join(IMAGES_PATH, "invites.png");
+    const imagePath2 = path.join(IMAGES_PATH, "revento.png");
 
     const localImage1 = new AttachmentBuilder(imagePath1, {
       name: "invites.png",

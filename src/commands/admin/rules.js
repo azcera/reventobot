@@ -9,6 +9,7 @@ const {
   AttachmentBuilder,
 } = require("discord.js");
 const path = require("path");
+const { IMAGES_PATH } = require("../../..");
 
 const rules = [
   {
@@ -51,9 +52,9 @@ module.exports = {
         .reply("У вас нет прав для использования этой команды!")
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
-    const imagePath1 = path.join(__dirname, "..", "..", "images", "rules.png");
+    const imagePath = path.join(IMAGES_PATH, "rules.png");
 
-    const localImage1 = new AttachmentBuilder(imagePath1, {
+    const localImage = new AttachmentBuilder(imagePath, {
       name: "rules.png",
     });
 
@@ -91,7 +92,7 @@ module.exports = {
     await message.channel.send({
       flags: MessageFlags.IsComponentsV2,
       components: [container],
-      files: [localImage1],
+      files: [localImage],
     });
 
     return await message.delete().catch(() => {});

@@ -13,6 +13,7 @@ const {
 } = require("discord.js");
 
 const path = require("path");
+const { IMAGES_PATH } = require("../../..");
 
 module.exports = {
   name: "panel",
@@ -24,7 +25,7 @@ module.exports = {
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
 
-    const imagePath = path.join(__dirname, "..", "..", "images", "panel.png");
+    const imagePath = path.join(IMAGES_PATH, "panel.png");
 
     const localImage = new AttachmentBuilder(imagePath, {
       name: "panel.png",
