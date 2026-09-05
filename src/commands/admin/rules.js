@@ -9,7 +9,7 @@ const {
   AttachmentBuilder,
 } = require("discord.js");
 const path = require("path");
-const { IMAGES_PATH } = require("../../..");
+const { IMAGES_PATH } = require("../../config/path");
 
 const rules = [
   {

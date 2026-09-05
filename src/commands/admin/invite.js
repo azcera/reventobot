@@ -16,7 +16,7 @@ const path = require("path");
 const { replyWithAutoDelete } = require("../../utils/autoDelete");
 
 const inviteApplication = require("../../features/invite/inviteApplication");
-const { IMAGES_PATH } = require("../../..");
+const { IMAGES_PATH } = require("../../config/path");
 const FORM_FIELDS = inviteApplication.MODAL_FIELDS;
 
 module.exports = {

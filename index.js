@@ -13,9 +13,6 @@ require("dotenv").config();
 const { buildWebContainer } = require("./src/services/containerService");
 const loadCommands = require("./src/utils/loadCommands");
 
-// PATH
-const IMAGES_PATH = path.join(__dirname, "src/images");
-
 // --- ИНИЦИАЛИЗАЦИЯ DISCORD КЛИЕНТА ---
 const client = new Client({
   intents: [
@@ -130,4 +127,3 @@ process.on("uncaughtException", (error) => {
   console.error("Необработанное исключение (Uncaught Exception):", error);
 });
 
-module.exports = { IMAGES_PATH };

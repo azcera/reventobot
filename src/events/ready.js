@@ -15,7 +15,7 @@ const { TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 const { NewMessage } = require("telegram/events");
 const path = require("path");
-const { IMAGES_PATH } = require("../..");
+const { IMAGES_PATH } = require("../config/path");
 
 const apiId = Number(process.env.TG_API_ID);
 const apiHash = process.env.TG_API_HASH;
