@@ -65,7 +65,26 @@ async function followUpEphemeralWithAutoDelete(
     }
 }
 
+async function editReplyWithAutoDelete(interaction, options, timeout = 60000) {
+    try {
+        const response = await interaction.editReply(options);
+
+        setTimeout(async () => {
+            try {
+                await interaction.deleteReply().catch(() => {});
+            } catch (err) {
+                // Сообщение уже удалено или недоступно
+            }
+        }, timeout);
+
+        return response;
+    } catch (error) {
+        console.error("[AutoDelete] Ошибка editReply:", error);
+    }
+}
+
 module.exports = {
     sendEphemeralWithAutoDelete,
     followUpEphemeralWithAutoDelete,
+    editReplyWithAutoDelete,
 };

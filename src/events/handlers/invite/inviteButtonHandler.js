@@ -25,9 +25,8 @@ const {
 
 async function handleButtons(interaction) {
     if (!isApplicationMod(interaction.member)) {
-        return interaction.reply({
+        return await sendEphemeralWithAutoDelete(interaction, {
             content: "❌ У вас нет прав для управления заявками!",
-            flags: [MessageFlags.Ephemeral],
         });
     }
 
@@ -37,9 +36,8 @@ async function handleButtons(interaction) {
         [targetUserId],
     );
     if (res.rows.length === 0) {
-        return interaction.reply({
+        return await sendEphemeralWithAutoDelete(interaction, {
             content: "❌ Данные о заявке не найдены.",
-            flags: [MessageFlags.Ephemeral],
         });
     }
     const appData = res.rows[0];
@@ -162,10 +160,9 @@ async function handleButtons(interaction) {
                 );
             });
 
-            await interaction.followUp({
+            await followUpEphemeralWithAutoDelete(interaction, {
                 content: `✅ Заявка <@${targetUserId}> одобрена! Выберите роль (активно 30 сек):`,
                 components: [new ActionRowBuilder().addComponents(selectMenu)],
-                flags: [MessageFlags.Ephemeral],
             });
 
             const collector =
@@ -206,12 +203,9 @@ async function handleButtons(interaction) {
             });
         } catch (error) {
             console.error("Ошибка при принятии заявки:", error);
-            await interaction
-                .followUp({
-                    content: "❌ Произошла ошибка при обработке заявки.",
-                    flags: [MessageFlags.Ephemeral],
-                })
-                .catch(() => {});
+            await followUpEphemeralWithAutoDelete(interaction, {
+                content: "❌ Произошла ошибка при обработке заявки.",
+            });
         }
     }
 
@@ -220,9 +214,8 @@ async function handleButtons(interaction) {
             (c) => c.type === ChannelType.GuildVoice && c.name.includes("📞"),
         );
         if (voiceChannels.size === 0) {
-            return interaction.reply({
+            return sendEphemeralWithAutoDelete(interaction, {
                 content: "❌ Нет подходящих голосовых каналов.",
-                flags: [MessageFlags.Ephemeral],
             });
         }
 
@@ -259,10 +252,9 @@ async function handleButtons(interaction) {
             ),
         );
 
-        await interaction.reply({
+        await sendEphemeralWithAutoDelete(interaction, {
             content: "Выберите комнату для кандидата (меню активно 1 минуту):",
             components: [new ActionRowBuilder().addComponents(selectMenu)],
-            flags: [MessageFlags.Ephemeral],
         });
 
         // 3. Собираем выбор администратора
@@ -275,9 +267,8 @@ async function handleButtons(interaction) {
         });
 
         collector.on("collect", async (menuInteraction) => {
-            await menuInteraction.reply({
+            await sendEphemeralWithAutoDelete(menuInteraction, {
                 content: "✅ Кандидат вызван! Кнопка обзвона деактивирована.",
-                flags: [MessageFlags.Ephemeral],
             });
             await interaction.deleteReply().catch(() => {}); // Удаляем сообщение с меню выбора, чтобы не мешало
         });
@@ -302,12 +293,9 @@ async function handleButtons(interaction) {
                     .catch(console.error);
 
                 // ИСПРАВЛЕНИЕ: Сообщение видно ТОЛЬКО администратору (Ephemeral)
-                await interaction
-                    .followUp({
-                        content: `⏳ Время выбора комнаты истекло. Кнопка вызова снова активна.`,
-                        flags: [MessageFlags.Ephemeral],
-                    })
-                    .catch(() => {});
+                await followUpEphemeralWithAutoDelete(interaction, {
+                    content: `⏳ Время выбора комнаты истекло. Кнопка вызова снова активна.`,
+                });
             }
         });
         return;

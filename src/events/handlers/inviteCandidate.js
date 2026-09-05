@@ -9,9 +9,14 @@ const {
 } = require("discord.js");
 const db = require("../../commands/utility/db.js");
 const { buildContainer } = require("../../commands/utility/inviteUtils");
-const { sendEphemeralWithAutoDelete } = require("../../commands/utility/autoDelete.js");
+const {
+    sendEphemeralWithAutoDelete,
+    editReplyWithAutoDelete,
+} = require("../../commands/utility/autoDelete.js");
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES ? process.env.ADMIN_ROLES.split(",") : [];
+const ADMIN_ROLES = process.env.ADMIN_ROLES
+    ? process.env.ADMIN_ROLES.split(",")
+    : [];
 
 // 🎯 КОНФИГУРАЦИЯ ПОЛЕЙ МОДАЛЬНОГО ОКНА
 const MODAL_FIELDS = [
@@ -65,7 +70,8 @@ const MODAL_FIELDS = [
         customId: "invite_info",
         label: "Как узнали о семье и чего ждете?",
         description: "Расскажите, как вы узнали о нас и ваши ожидания",
-        placeholder: "узнал через маркет, хочу развиваться и участвовать в жизни семьи",
+        placeholder:
+            "узнал через маркет, хочу развиваться и участвовать в жизни семьи",
         style: TextInputStyle.Paragraph,
         required: true,
         validate: () => null, // Любой ввод
@@ -85,7 +91,7 @@ class InviteCandidate {
     async showModal(interaction) {
         const checkActive = await db.query(
             "SELECT * FROM family_applications WHERE user_id = $1",
-            [interaction.user.id]
+            [interaction.user.id],
         );
 
         if (checkActive.rows.length > 0) {
@@ -107,7 +113,7 @@ class InviteCandidate {
                         .setCustomId(field.customId)
                         .setPlaceholder(field.placeholder)
                         .setStyle(field.style)
-                        .setRequired(field.required)
+                        .setRequired(field.required),
                 );
 
             if (field.description) {
@@ -125,7 +131,9 @@ class InviteCandidate {
         // 🔄 Автоматическое извлечение значений
         const values = {};
         MODAL_FIELDS.forEach((field) => {
-            values[field.customId] = interaction.fields.getTextInputValue(field.customId).trim();
+            values[field.customId] = interaction.fields
+                .getTextInputValue(field.customId)
+                .trim();
         });
 
         // 🔄 Автоматическая валидация
@@ -133,7 +141,9 @@ class InviteCandidate {
             if (field.validate) {
                 const error = field.validate(values[field.customId]);
                 if (error) {
-                    return sendEphemeralWithAutoDelete(interaction, { content: error });
+                    return sendEphemeralWithAutoDelete(interaction, {
+                        content: error,
+                    });
                 }
             }
         }
@@ -169,7 +179,7 @@ class InviteCandidate {
                         PermissionFlagsBits.ViewChannel,
                         PermissionFlagsBits.SendMessages,
                     ],
-                })
+                }),
             );
 
             const cleanName = fullName.replace("| ", "").trim().toLowerCase();
@@ -193,7 +203,7 @@ class InviteCandidate {
                     info, // field3 теперь = как узнали + чего ждете
                     history, // field4 = где ранее играли
                     "", // field5 теперь пустой (объединен с field3)
-                ]
+                ],
             );
 
             const container = await buildContainer(
@@ -203,7 +213,7 @@ class InviteCandidate {
                 info,
                 history,
                 "",
-                "отправления"
+                "отправления",
             );
 
             await channel.send({
@@ -211,12 +221,12 @@ class InviteCandidate {
                 flags: [MessageFlags.IsComponentsV2],
             });
 
-            return interaction.editReply({
+            return await editReplyWithAutoDelete({
                 content: `✅ Ваша заявка зарегистрирована! <#${channel.id}>`,
             });
         } catch (error) {
             console.error("[InviteCandidate] Ошибка создания заявки:", error);
-            return interaction.editReply({
+            return await editReplyWithAutoDelete({
                 content: "❌ Произошла ошибка при создании заявки.",
             });
         }

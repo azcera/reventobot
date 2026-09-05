@@ -19,7 +19,7 @@ module.exports = {
   description: "Создает кнопки админ-панели",
   async execute(message, args) {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return message
+      return await message
         .reply("У вас нет прав для использования этой команды!")
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }

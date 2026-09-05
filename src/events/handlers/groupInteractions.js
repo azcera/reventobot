@@ -18,6 +18,7 @@ const {
 } = require("../../commands/utility/groupOptions");
 const {
   sendEphemeralWithAutoDelete,
+  editReplyWithAutoDelete,
 } = require("../../commands/utility/autoDelete");
 
 async function showGroupSelect(interaction) {
@@ -32,8 +33,7 @@ async function showGroupSelect(interaction) {
 
   const row = new ActionRowBuilder().addComponents(selectMenu);
 
-  const message = await interaction
-    .editReply({
+  const message = await editReplyWithAutoDelete({
       content:
         "Пожалуйста, выберите цель создания группы из списка ниже (меню активно 1 минуту):",
       components: [row],
