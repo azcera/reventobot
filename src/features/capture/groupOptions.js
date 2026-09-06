@@ -19,6 +19,11 @@ const optionsMap = {
 	tainiki6: { icon: '🪙', target: 'ТАЙНИКИ', time: '22:00' }
 }
 
+/**
+ * Возвращает 3 ближайших события из optionsMap + опцию «other».
+ * Считает относительно текущего времени МСК.
+ * @returns {StringSelectMenuOptionBuilder[]}
+ */
 function getFilteredOptions() {
 	const nowMSK = new Date(
 		new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' })

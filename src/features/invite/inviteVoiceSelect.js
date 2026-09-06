@@ -76,9 +76,8 @@ async function handleVoiceSelect(interaction) {
 		targetUserId,
 		appData.full_name,
 		appData.age,
-		appData.field3,
-		appData.field4,
-		appData.field5,
+		appData.about_and_expectations,
+		appData.previous_experience,
 		'обзвона',
 		interaction.user.id,
 		voiceChannelId

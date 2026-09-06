@@ -13,7 +13,10 @@ const ADMIN_ROLES = process.env.ADMIN_ROLES
 	? process.env.ADMIN_ROLES.split(',')
 	: []
 
-// 1. Показывает модалку для создания капта вручную
+/**
+ * Показывает модалку ручного создания реги (время, цель, maxMain).
+ * @param {ButtonInteraction} interaction
+ */
 async function showCaptModal(interaction) {
 	const modal = new ModalBuilder()
 		.setCustomId('modal_capt')
@@ -51,7 +54,10 @@ async function showCaptModal(interaction) {
 	return await interaction.showModal(modal)
 }
 
-// 2. Обрабатывает сабмит ручной модалки
+/**
+ * Валидирует время/цель/кол-во и вызывает captureManager.sendCollection.
+ * @param {ModalSubmitInteraction} interaction
+ */
 async function submitCaptModal(interaction) {
 	const timeInput = interaction.fields.getTextInputValue('capt_time').trim()
 	const parsedDate = parseDateTime(timeInput)
@@ -97,7 +103,11 @@ async function submitCaptModal(interaction) {
 	}
 }
 
-// 3. 🎯 АВТО-СОЗДАНИЕ капта по кнопке из Telegram (парсит время из customId)
+/**
+ * Авто-создание капта по кнопке из Telegram-сообщения.
+ * Парсит enemy + time из customId, проверяет админ-роль.
+ * @param {ButtonInteraction} interaction
+ */
 async function handleAutoCaptButton(interaction) {
 	const hasAdminRole = interaction.member.roles.cache.some(role =>
 		ADMIN_ROLES.includes(role.id)
@@ -168,7 +178,10 @@ async function handleAutoCaptButton(interaction) {
 	}
 }
 
-// 4. Показывает модалку для редактирования времени
+/**
+ * Показывает модалку изменения времени существующего набора.
+ * @param {ButtonInteraction} interaction
+ */
 async function handleInlineEditTimeButton(interaction) {
 	const hasAdminRole = interaction.member.roles.cache.some(role =>
 		ADMIN_ROLES.includes(role.id)
@@ -199,7 +212,10 @@ async function handleInlineEditTimeButton(interaction) {
 	return await interaction.showModal(modal)
 }
 
-// 5. Обрабатывает сабмит модалки редактирования времени
+/**
+ * Сохраняет новое время в БД и вызывает updateCollectionTime.
+ * @param {ModalSubmitInteraction} interaction
+ */
 async function submitInlineEditTimeModal(interaction) {
 	const newTimeInput = interaction.fields
 		.getTextInputValue('capt_new_time')

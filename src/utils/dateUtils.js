@@ -1,3 +1,8 @@
+/**
+ * Парсит «ЧЧ:ММ» или «ДД.ММ.ГГГГ ЧЧ:ММ» в Date (с учётом МСК → UTC).
+ * @param {string} inputString
+ * @returns {Date|null}
+ */
 function parseDateTime(inputString) {
 	const dateTimeRegex = /^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})$/
 	const timeOnlyRegex = /^(\d{2}):(\d{2})$/
@@ -39,6 +44,12 @@ function parseDateTime(inputString) {
 	return targetDate
 }
 
+/**
+ * Возвращает строку времени МСК с опциональным offset в секундах.
+ * @param {Date} parsedDate
+ * @param {number} [offsetSeconds=0]
+ * @returns {string}
+ */
 function getMskTimeString(parsedDate, offsetSeconds = 0) {
 	const targetDate = new Date(parsedDate.getTime() + offsetSeconds * 1000)
 
@@ -49,6 +60,11 @@ function getMskTimeString(parsedDate, offsetSeconds = 0) {
 	})
 }
 
+/**
+ * Возвращает Discord-timestamp `<t:...:t>`.
+ * @param {Date} parsedDate
+ * @returns {string}
+ */
 function getDiscordTimestamp(parsedDate) {
 	if (!parsedDate || isNaN(parsedDate.getTime())) return 'Неизвестное время'
 

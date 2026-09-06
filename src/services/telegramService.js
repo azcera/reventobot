@@ -21,13 +21,14 @@ const promptConsole = query => {
 }
 
 /**
- * Инициализирует и авторизует Telegram клиент
- * @returns {Promise<TelegramClient>} Готовый к работе клиент Telegram
+ * Инициализирует TelegramClient.
+ * Если TG_SESSION валидна — использует её, иначе запускает QR-авторизацию.
+ * @returns {Promise<TelegramClient>}
  */
 async function initTelegramClient() {
 	// Автоматически берем ваши API данные
-	const apiId = Number(process.env.TG_API_ID) || 25984937
-	const apiHash = process.env.TG_API_HASH || 'ca79edeb3041ffb1ec655fa00de11af1'
+	const apiId = Number(process.env.TG_API_ID)
+	const apiHash = process.env.TG_API_HASH
 
 	// Валидация сохраненной сессии
 	let rawSession = (process.env.TG_SESSION || '')

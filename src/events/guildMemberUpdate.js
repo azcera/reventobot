@@ -5,8 +5,11 @@ const {
 	roleMention
 } = require('discord.js')
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES.split(',')
-require('dotenv').config()
+const ADMIN_ROLES = process.env.ADMIN_ROLES
+	? process.env.ADMIN_ROLES.split(',')
+			.map(r => r.trim())
+			.filter(Boolean)
+	: []
 
 function splitName(nickname) {
 	const splittedName = nickname.split(' | ')

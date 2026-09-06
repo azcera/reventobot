@@ -18,6 +18,11 @@ const {
 	editReplyWithAutoDelete
 } = require('../../utils/autoDelete')
 
+/**
+ * Показывает select-меню с ближайшими 3 событиями + «Другое».
+ * Создаёт collector на 60 сек.
+ * @param {ButtonInteraction} interaction
+ */
 async function showGroupSelect(interaction) {
 	await interaction
 		.deferReply({ flags: [MessageFlags.Ephemeral] })
@@ -60,6 +65,10 @@ async function showGroupSelect(interaction) {
 	})
 }
 
+/**
+ * Показывает модалку (время/цель/код) в зависимости от выбранного значения.
+ * @param {StringSelectMenuInteraction} interaction
+ */
 async function showGroupModal(interaction) {
 	const selectedTarget = interaction.values[0]
 
@@ -107,6 +116,10 @@ async function showGroupModal(interaction) {
 	return await interaction.showModal(modal)
 }
 
+/**
+ * Валидирует время, считает МСК-время −10 и −5 мин, пингует роль 3 раза.
+ * @param {ModalSubmitInteraction} interaction
+ */
 async function submitGroupModal(interaction) {
 	const selectedValue = interaction.customId.replace('modal_group_', '')
 	let timeInput, target

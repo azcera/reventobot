@@ -1,3 +1,9 @@
+/**
+ * Префиксная команда !ping.
+ * Отправляет «Ping ...», измеряет latency по createdTimestamp и редактирует сообщение.
+ * @param {Message} message
+ * @param {string[]} args
+ */
 module.exports = {
 	name: 'ping',
 	description: 'Пингует бота',

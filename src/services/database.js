@@ -3,7 +3,9 @@ const { Pool } = require('pg')
 const pool = new Pool({
 	connectionString: process.env.DATABASE_URL,
 	ssl: { rejectUnauthorized: false },
-	idleTimeoutMillis: 30000
+	max: 20,
+	idleTimeoutMillis: 30000,
+	connectionTimeoutMillis: 10000
 })
 
 pool.on('error', err => {
@@ -50,4 +52,8 @@ const initDb = async () => {
 
 initDb()
 
+/**
+ * Создаёт пул PostgreSQL, инициализирует таблицы family_applications и active_captures.
+ * Экспортирует pool.
+ */
 module.exports = pool

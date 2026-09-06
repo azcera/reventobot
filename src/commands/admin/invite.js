@@ -19,6 +19,13 @@ const inviteApplication = require('../../features/invite/inviteApplication')
 const { IMAGES_PATH } = require('../../config/path')
 const FORM_FIELDS = inviteApplication.MODAL_FIELDS
 
+/**
+ * Команда !invite (только Administrator).
+ * Собирает большой ContainerBuilder с описанием семьи, требованиями и формой заявки
+ * (поля берутся динамически из MODAL_FIELDS). Прикрепляет 2 изображения и кнопку «Подать заявку».
+ * @param {Message} message
+ * @param {string[]} args
+ */
 module.exports = {
 	name: 'invite',
 	description: 'Создает сообщение для канала заявок',

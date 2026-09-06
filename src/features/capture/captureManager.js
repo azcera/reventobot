@@ -261,80 +261,92 @@ async function handleButton(interaction) {
 		return
 
 	const messageId = interaction.message.id
-
-	let row
-	try {
-		const res = await pool.query(
-			'SELECT * FROM active_captures WHERE message_id = $1',
-			[messageId]
-		)
-		row = res.rows[0]
-	} catch (err) {
-		console.error('Ошибка при поиске набора в БД:', err)
-	}
-
-	if (!row) {
-		return interaction.reply({
-			content: '❌ Данная регистрация устарела или неактивна.',
-			flags: [MessageFlags.Ephemeral]
-		})
-	}
-
-	const discordTimestamp = row.discord_timestamp
-	const target = row.target
-	const maxMain = row.max_main || 20
-
-	let mainList = row.main_list || []
-	let reserveList = row.reserve_list || []
-	let leftList = row.left_list || []
-
 	const userId = interaction.user.id
 
-	if (interaction.customId === 'capt_join') {
-		if (mainList.includes(userId) || reserveList.includes(userId)) {
-			return interaction.reply({
-				content: 'Вы уже записаны на капт!',
-				flags: [MessageFlags.Ephemeral]
-			})
-		}
-
-		const leftIndex = leftList.indexOf(userId)
-		if (leftIndex !== -1) leftList.splice(leftIndex, 1)
-
-		if (mainList.length < maxMain) {
-			mainList.push(userId)
-		} else {
-			reserveList.push(userId)
-		}
-	} else if (interaction.customId === 'capt_leave') {
-		const mainIndex = mainList.indexOf(userId)
-		const reserveIndex = reserveList.indexOf(userId)
-
-		if (mainIndex === -1 && reserveIndex === -1) {
-			return interaction.reply({
-				content: 'Вас и так нет в списках.',
-				flags: [MessageFlags.Ephemeral]
-			})
-		}
-
-		if (mainIndex !== -1) {
-			mainList.splice(mainIndex, 1)
-
-			if (reserveList.length > 0) {
-				const movingPlayer = reserveList.shift()
-				mainList.push(movingPlayer)
+	const safeParse = (data, fallback = []) => {
+		if (Array.isArray(data)) return data
+		if (typeof data === 'string') {
+			try {
+				return JSON.parse(data)
+			} catch {
+				return fallback
 			}
-		} else if (reserveIndex !== -1) {
-			reserveList.splice(reserveIndex, 1)
 		}
-
-		if (!leftList.includes(userId)) {
-			leftList.push(userId)
-		}
+		return fallback
 	}
 
+	const client = await pool.connect()
 	try {
-		await pool.query(
+		await client.query('BEGIN')
+
+		const res = await client.query(
+			'SELECT * FROM active_captures WHERE message_id = $1 FOR UPDATE',
+			[messageId]
+		)
+		const row = res.rows[0]
+
+		if (!row) {
+			await client.query('ROLLBACK')
+			return interaction.reply({
+				content: '❌ Данная регистрация устарела или неактивна.',
+				flags: [MessageFlags.Ephemeral]
+			})
+		}
+
+		const discordTimestamp = row.discord_timestamp
+		const target = row.target
+		const maxMain = row.max_main || 20
+
+		let mainList = safeParse(row.main_list, [])
+		let reserveList = safeParse(row.reserve_list, [])
+		let leftList = safeParse(row.left_list, [])
+
+		if (interaction.customId === 'capt_join') {
+			if (mainList.includes(userId) || reserveList.includes(userId)) {
+				await client.query('ROLLBACK')
+				return interaction.reply({
+					content: 'Вы уже записаны на капт!',
+					flags: [MessageFlags.Ephemeral]
+				})
+			}
+
+			const leftIndex = leftList.indexOf(userId)
+			if (leftIndex !== -1) leftList.splice(leftIndex, 1)
+
+			if (mainList.length < maxMain) {
+				mainList.push(userId)
+			} else {
+				reserveList.push(userId)
+			}
+		} else if (interaction.customId === 'capt_leave') {
+			const mainIndex = mainList.indexOf(userId)
+			const reserveIndex = reserveList.indexOf(userId)
+
+			if (mainIndex === -1 && reserveIndex === -1) {
+				await client.query('ROLLBACK')
+				return interaction.reply({
+					content: 'Вас и так нет в списках.',
+					flags: [MessageFlags.Ephemeral]
+				})
+			}
+
+			if (mainIndex !== -1) {
+				mainList.splice(mainIndex, 1)
+
+				if (reserveList.length > 0) {
+					const movingPlayer = reserveList.shift()
+					mainList.push(movingPlayer)
+				}
+			} else if (reserveIndex !== -1) {
+				reserveList.splice(reserveIndex, 1)
+			}
+
+			if (!leftList.includes(userId)) {
+				leftList.push(userId)
+			}
+		}
+
+		await client.query(
 			`UPDATE active_captures 
          SET main_list = $1, reserve_list = $2, left_list = $3
          WHERE message_id = $4`,
@@ -345,23 +357,32 @@ async function handleButton(interaction) {
 				messageId
 			]
 		)
-	} catch (err) {
-		console.error('Не удалось обновить данные набора в БД:', err)
-		return interaction.reply({
-			content: '❌ Произошла ошибка базы данных при сохранении.',
-			flags: [MessageFlags.Ephemeral]
-		})
-	}
 
-	const updatedMessageData = buildCaptureMessage(
-		discordTimestamp,
-		mainList,
-		reserveList,
-		leftList,
-		target,
-		maxMain
-	)
-	await interaction.update(updatedMessageData)
+		await client.query('COMMIT')
+
+		const updatedMessageData = buildCaptureMessage(
+			discordTimestamp,
+			mainList,
+			reserveList,
+			leftList,
+			target,
+			maxMain
+		)
+		await interaction.update(updatedMessageData)
+	} catch (err) {
+		await client.query('ROLLBACK').catch(() => {})
+		console.error('Ошибка при обработке кнопки капта:', err)
+		if (!interaction.replied && !interaction.deferred) {
+			return interaction
+				.reply({
+					content: '❌ Произошла ошибка базы данных при сохранении.',
+					flags: [MessageFlags.Ephemeral]
+				})
+				.catch(() => {})
+		}
+	} finally {
+		client.release()
+	}
 }
 module.exports = {
 	buildCaptureMessage,

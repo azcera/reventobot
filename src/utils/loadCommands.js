@@ -2,9 +2,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 /**
- * Рекурсивно загружает все команды
- * @param {Client} client - Экземпляр Discord клиента
- * @param {string} directory - Путь к папке с командами
+ * Рекурсивно загружает все команды из папки (поддержка prefix и slash).
+ * @param {Client} client
+ * @param {string} directory
  */
 function loadCommands(client, directory) {
 	const files = fs.readdirSync(directory)

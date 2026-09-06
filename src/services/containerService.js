@@ -11,6 +11,11 @@ const {
 	MessageFlags
 } = require('discord.js')
 
+/**
+ * Собирает ContainerBuilder из данных, пришедших с веб-интерфейса (text/separator/image/section).
+ * @param {{noColor?: boolean, accentColor?: string, items: Array}} data
+ * @returns {{flags, components}}
+ */
 function buildWebContainer(data) {
 	const { noColor, accentColor, items } = data
 	const container = new ContainerBuilder()

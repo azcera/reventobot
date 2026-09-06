@@ -75,7 +75,15 @@ const MODAL_FIELDS = [
 	}
 ]
 
+/**
+ * Класс-обработчик заявок кандидата.
+ * Содержит MODAL_FIELDS с валидаторами.
+ */
 class InviteCandidate {
+	/**
+	 * Проверяет, нет ли уже активной заявки, показывает модалку с 5 полями.
+	 * @param {ButtonInteraction} interaction
+	 */
 	async showModal(interaction) {
 		const checkActive = await db.query(
 			'SELECT * FROM family_applications WHERE user_id = $1',
@@ -111,11 +119,10 @@ class InviteCandidate {
 
 	/**
 	 * Обрабатывает отправку модального окна заявки.
-	 * Валидирует 5 полей, создает приватный канал, записывает данные в БД
+	 * Валидирует 5 полей, создаёт приватный канал, записывает данные в БД
 	 * и отправляет контейнер с кнопками модерации.
-	 * @param {ChatInputCommandInteraction} interaction
+	 * @param {ModalSubmitInteraction} interaction
 	 */
-
 	async submitModal(interaction) {
 		const values = {}
 		MODAL_FIELDS.forEach(field => {

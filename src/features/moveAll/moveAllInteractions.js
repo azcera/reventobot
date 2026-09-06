@@ -80,27 +80,29 @@ async function handleMoveAllSelect(interaction) {
 			channel.type === ChannelType.GuildVoice && channel.id !== targetChannelId
 	)
 
-	let movedCount = 0
-	let failedCount = 0
-
-	// ✅ ИСПРАВЛЕНО: Добавляем try/catch для всего цикла
 	try {
-		for (const [_, channel] of otherVoiceChannels) {
-			for (const [_, member] of channel.members) {
-				try {
-					await member.voice.setChannel(targetChannel)
-					movedCount++
-				} catch (error) {
-					console.error(
-						`❌ Не удалось переместить ${member.user.tag}:`,
-						error.message
-					)
-					failedCount++
-				}
+		const movePromises = []
+		for (const channel of otherVoiceChannels.values()) {
+			for (const member of channel.members.values()) {
+				movePromises.push(
+					member.voice
+						.setChannel(targetChannel)
+						.then(() => 'ok')
+						.catch(error => {
+							console.error(
+								`❌ Не удалось переместить ${member.user.tag}:`,
+								error.message
+							)
+							return 'fail'
+						})
+				)
 			}
 		}
 
-		// ✅ ИСПРАВЛЕНО: Показываем результат с информацией о неудачах
+		const results = await Promise.all(movePromises)
+		const movedCount = results.filter(r => r === 'ok').length
+		const failedCount = results.filter(r => r === 'fail').length
+
 		let resultMessage = `✅ Успешно перемещено участников: **${movedCount}**`
 		if (failedCount > 0) {
 			resultMessage += `\n⚠️ Не удалось переместить: **${failedCount}**`

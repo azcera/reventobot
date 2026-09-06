@@ -83,6 +83,24 @@ async function editReplyWithAutoDelete(interaction, options, timeout = 60000) {
 	}
 }
 
+/**
+ * Удаляет обычное сообщение через указанное время.
+ * @param {Message} message
+ * @param {number} [timeout=5000]
+ */
+async function sendWithAutoDelete(message, timeout = 5000) {
+	setTimeout(() => {
+		message.delete().catch(() => {})
+	}, timeout)
+	return message
+}
+
+/**
+ * Отвечает на обычное сообщение и автоматически удаляет ответ.
+ * @param {Message} originalMessage
+ * @param {string|Object} content
+ * @param {number} [timeout=5000]
+ */
 async function replyWithAutoDelete(originalMessage, content, timeout = 5000) {
 	try {
 		const reply = await originalMessage.reply(content)
@@ -96,5 +114,6 @@ module.exports = {
 	sendEphemeralWithAutoDelete,
 	followUpEphemeralWithAutoDelete,
 	editReplyWithAutoDelete,
-	replyWithAutoDelete
+	replyWithAutoDelete,
+	sendWithAutoDelete
 }

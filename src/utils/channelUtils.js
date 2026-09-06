@@ -5,6 +5,13 @@ const {
 require('dotenv').config()
 const parentChannelId = process.env.PARENT_CHANNEL_ID
 
+/**
+ * Создаёт приватную ветку (Private Thread) внутри PARENT_CHANNEL_ID,
+ * добавляет member, отправляет навигационный контейнер.
+ * @param {Interaction|Guild} interactionOrGuild
+ * @param {{channelName: string, member: GuildMember}}
+ * @returns {Promise<ThreadChannel>}
+ */
 async function createChannel(interactionOrGuild, { channelName, member }) {
 	const guild = interactionOrGuild.guild || interactionOrGuild
 	const isInteraction = !!interactionOrGuild.reply

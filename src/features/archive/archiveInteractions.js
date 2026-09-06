@@ -2,6 +2,10 @@ const { MessageFlags } = require('discord.js')
 const { createChannel } = require('../../utils/channelUtils')
 const { replyWithAutoDelete } = require('../../utils/autoDelete')
 
+/**
+ * Обрабатывает кнопку «Нет» (cancel) — просто удаляет сообщение.
+ * @param {ButtonInteraction} interaction
+ */
 async function cancelArchive(interaction) {
 	try {
 		await interaction.deferUpdate()
@@ -11,6 +15,11 @@ async function cancelArchive(interaction) {
 	}
 }
 
+/**
+ * Обрабатывает кнопки create_ / cancel_create_ для создания архив-канала.
+ * Парсит userId и имя канала из customId, вызывает createChannel.
+ * @param {ButtonInteraction} interaction
+ */
 async function handleDynamicButtons(interaction) {
 	const customId = interaction.customId
 	if (customId.startsWith('cancel_create')) {

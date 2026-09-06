@@ -48,6 +48,12 @@ const navigationButtons = [
 	}
 ]
 
+/**
+ * Собирает ContainerBuilder с категориями и Link-кнопками навигации.
+ * @param {string|null} text - опциональный заголовок сверху
+ * @param {boolean} isMentionHere - добавлять ли ||@here||
+ * @returns {ContainerBuilder}
+ */
 function getNavigationContainer(text = null, isMentionHere = true) {
 	const container = new ContainerBuilder()
 

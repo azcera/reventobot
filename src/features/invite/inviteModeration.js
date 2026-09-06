@@ -108,9 +108,8 @@ async function handleModerationButton(interaction) {
 				targetUserId,
 				appData.full_name,
 				appData.age,
-				appData.field3,
-				appData.field4,
-				appData.field5,
+				appData.about_and_expectations,
+				appData.previous_experience,
 				'принятия',
 				interaction.user.id
 			)
@@ -217,19 +216,21 @@ async function handleModerationButton(interaction) {
 			targetUserId,
 			appData.full_name,
 			appData.age,
-			appData.field3,
-			appData.field4,
-			appData.field5,
+			appData.about_and_expectations,
+			appData.previous_experience,
 			'отправления',
 			null,
 			null,
-			true // <-- 10-й аргумент: isInterviewDisabled = true (кнопка станет серой)
+			true // isInterviewDisabled = true (кнопка станет серой)
 		)
 
 		const mainMessage = interaction.message
 		// Обновляем сообщение новыми компонентами
 		await mainMessage
-			.edit({ components: [disabledContainer] })
+			.edit({
+				components: [disabledContainer.toJSON()],
+				flags: [MessageFlags.IsComponentsV2]
+			})
 			.catch(console.error)
 
 		// 2. Показываем меню выбора канала
@@ -271,16 +272,18 @@ async function handleModerationButton(interaction) {
 					targetUserId,
 					appData.full_name,
 					appData.age,
-					appData.field3,
-					appData.field4,
-					appData.field5,
+					appData.about_and_expectations,
+					appData.previous_experience,
 					'отправления',
 					null,
 					null,
-					false // <-- 10-й аргумент: isInterviewDisabled = false (кнопка снова активна)
+					false // isInterviewDisabled = false (кнопка снова активна)
 				)
 				await mainMessage
-					.edit({ components: [enabledContainer] })
+					.edit({
+						components: [enabledContainer.toJSON()],
+						flags: [MessageFlags.IsComponentsV2]
+					})
 					.catch(console.error)
 
 				// ИСПРАВЛЕНИЕ: Сообщение видно ТОЛЬКО администратору (Ephemeral)

@@ -15,6 +15,12 @@ const {
 const path = require('path')
 const { IMAGES_PATH } = require('../../config/path')
 
+/**
+ * Команда !panel (Administrator).
+ * Создаёт админ-панель с тремя кнопками: групп, капт, move-all + изображение.
+ * @param {Message} message
+ * @param {string[]} args
+ */
 module.exports = {
 	name: 'panel',
 	description: 'Создает кнопки админ-панели',

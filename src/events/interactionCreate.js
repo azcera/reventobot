@@ -9,6 +9,7 @@ const {
 	handleModerationButton
 } = require('../features/invite/inviteModeration')
 const { handleVoiceSelect } = require('../features/invite/inviteVoiceSelect')
+const submitRejectModal = require('../features/invite/inviteModalHandler')
 
 module.exports = client => {
 	client.on('interactionCreate', async interaction => {
@@ -110,7 +111,7 @@ module.exports = client => {
 			if (customId === 'invite_modal_submit')
 				return await inviteApplication.submitModal(interaction)
 			if (customId.startsWith('invite_modal_reject_'))
-				return await inviteAdmin.submitRejectModal(interaction)
+				return await submitRejectModal(interaction)
 			if (customId.startsWith('modal_group_'))
 				return await groupInteractions.submitGroupModal(interaction)
 		}

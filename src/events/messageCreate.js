@@ -2,6 +2,11 @@ require('dotenv').config()
 
 const PREFIX = '!'
 
+/**
+ * Обработчик префиксных команд (!ping, !invite и т.д.).
+ * Парсит args и вызывает command.execute(message, args).
+ * @param {Client} client
+ */
 module.exports = client => {
 	client.on('messageCreate', async message => {
 		if (message.author.bot) return

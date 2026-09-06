@@ -43,6 +43,12 @@ const rules = [
 	}
 ]
 
+/**
+ * Команда !rules (Administrator).
+ * Собирает контейнер со всеми правилами семьи (4 раздела) и картинкой.
+ * @param {Message} message
+ * @param {string[]} args
+ */
 module.exports = {
 	name: 'rules',
 	description: 'Создает сообщение для rules',
