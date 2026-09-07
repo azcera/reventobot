@@ -4,26 +4,13 @@ const {
 	ButtonStyle,
 	roleMention
 } = require('discord.js')
+const { parseDisplayName } = require('../utils/parseDisplayName')
 
 const ADMIN_ROLES = process.env.ADMIN_ROLES
 	? process.env.ADMIN_ROLES.split(',')
 			.map(r => r.trim())
 			.filter(Boolean)
 	: []
-
-function splitName(nickname) {
-	const splittedName = nickname.split(' | ')
-	if (splittedName.length < 2) return null
-
-	const match = splittedName[0].match(/[A-Za-z]+/)
-
-	return {
-		name: match
-			? match[0].trim().toLowerCase()
-			: splittedName[0].trim().toLowerCase(),
-		stat: splittedName[1].trim()
-	}
-}
 
 let handleMakeAdmin = async (oldMember, newMember) => {
 	const oldHasAdmin = oldMember.roles.cache.filter(role =>
@@ -97,12 +84,15 @@ let handleMakeRevento = async (oldMember, newMember, channelName) => {
 let handleNameEdit = async (oldMember, newMember, channelName) => {
 	if (oldMember.displayName === newMember.displayName) return
 	const channels = newMember.guild.channels.cache
-	const splittedData = splitName(newMember.displayName)
-	if (!splittedData) return
+	const parsedData = parseDisplayName(newMember.displayName)
+	if (!parsedData) return
 
-	const newMemberChannelName = ['archive', ...Object.values(splittedData)].join(
-		' '
-	)
+	const newMemberChannelName = [
+		'archive',
+		parsedData.memberName.toLowerCase(),
+		parsedData.memberStatic.toLowerCase()
+	].join(' ')
+
 	let existingChannel = channels.find(channel => channel.name === channelName)
 
 	if (existingChannel) {
@@ -115,10 +105,14 @@ let handleNameEdit = async (oldMember, newMember, channelName) => {
 module.exports = client => {
 	client.on('guildMemberUpdate', async (oldMember, newMember) => {
 		const displayName = oldMember.displayName
-		const splittedData = splitName(displayName)
-		if (!splittedData) return
+		const parsedData = parseDisplayName(displayName)
+		if (!parsedData) return
 
-		const channelName = `archive-${splittedData.name}-${splittedData.stat}`
+		const channelName = [
+			'archive',
+			parsedData.memberName.toLowerCase(),
+			parsedData.memberStatic.toLowerCase()
+		].join('-')
 
 		try {
 			await handleMakeAdmin(oldMember, newMember)
