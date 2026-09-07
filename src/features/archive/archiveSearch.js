@@ -27,7 +27,7 @@ async function findArchive(interaction) {
 		// 3. Формируем имя канала (теперь без ошибок undefined)
 		const searchingChannelName = [
 			'archive',
-			name.toLowerCase(),
+			memberName.toLowerCase(),
 			memberStatic.toLowerCase()
 		].join(' ')
 
