@@ -1,5 +1,4 @@
 const { Client, ButtonInteraction, MessageFlags } = require('discord.js')
-const { followUpEphemeralWithAutoDelete } = require('../../utils/autoDelete')
 const { parseDisplayName } = require('../../utils/parseDisplayName')
 
 /**
@@ -7,16 +6,28 @@ const { parseDisplayName } = require('../../utils/parseDisplayName')
  * @param {ButtonInteraction} interaction
  */
 async function findArchive(interaction) {
+	await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
+
 	try {
-		await interaction.deferUpdate()
 		const member = interaction.member
 		const guild = interaction.guild
 
-		const { memberName, memberStatic } = parseDisplayName(member.displayName)
+		let parsed
+		try {
+			parsed = parseDisplayName(member.displayName)
+		} catch (parseError) {
+			return await interaction.followUp({
+				content: `❌ Не удалось найти архив: ваш никнейм на сервере имеет неверный формат.`,
+				flags: [MessageFlags.Ephemeral]
+			})
+		}
 
+		const { memberName, memberStatic } = parsed
+
+		// 3. Формируем имя канала (теперь без ошибок undefined)
 		const searchingChannelName = [
 			'archive',
-			memberName.toLowerCase(),
+			name.toLowerCase(),
 			memberStatic.toLowerCase()
 		].join(' ')
 
@@ -26,8 +37,8 @@ async function findArchive(interaction) {
 
 		if (!searchingChannel) {
 			try {
-				await guild.channels.fetch()
-				searchingChannel = guild.channels.cache.find(
+				const fetchedChannels = await guild.channels.fetch()
+				searchingChannel = fetchedChannels.find(
 					ch => ch.name === searchingChannelName
 				)
 			} catch (error) {
@@ -37,7 +48,7 @@ async function findArchive(interaction) {
 
 		if (searchingChannel) {
 			return await interaction.followUp({
-				content: `Ваш архив - <#${searchingChannel}>`,
+				content: `Ваш архив - <#${searchingChannel.id}>`,
 				flags: [MessageFlags.Ephemeral]
 			})
 		} else {
@@ -47,7 +58,14 @@ async function findArchive(interaction) {
 			})
 		}
 	} catch (err) {
-		console.error('❌ Ошибка: ', err)
+		console.error('❌ Ошибка при поиске архива: ', err)
+
+		try {
+			await interaction.followUp({
+				content: '❌ Произошла внутренняя ошибка при поиске архива.',
+				flags: [MessageFlags.Ephemeral]
+			})
+		} catch (_) {}
 	}
 }
 

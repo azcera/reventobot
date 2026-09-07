@@ -4,14 +4,14 @@
  * @param {string} memberNickname
  */
 function parseDisplayName(memberNickname) {
-	if (!memberName.includes('|')) {
+	if (!memberNickname.includes('|')) {
 		throw new Error('❌ Переданный никнейм имеет неверный формат')
 	}
 
-	let [memberName, memberStatic] = memberName.split('|')
+	let [memberName, memberStatic] = memberNickname.split('|')
 
-	static = static.trim()
-	name = name.replace(/^\[.*\]\s+/g, '').trim()
+	memberStatic = memberStatic.trim()
+	memberName = memberName.replace(/^\[.*\]\s+/g, '').trim()
 
 	return { memberName, memberStatic }
 }
