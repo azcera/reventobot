@@ -9,13 +9,13 @@ async function findArchive(interaction) {
 		await interaction.deferUpdate()
 		const member = interaction.member
 
-		let [memberName, memberStatic] = member.displayName.split('|')
+		let [name, static] = member.displayName.split('|')
 
-		memberStatic = memberStatic.trim()
-		memberName = memberName.replace(/^\[.*\]\s+/g, '').trim()
+		static = static.trim()
+		name = name.replace(/^\[.*\]\s+/g, '').trim()
 		const guild = interaction.guild
 
-		const searchingChannelName = `archive ${memberName.toLowerCase()} ${memberStatic.toLowerCase()}`
+		const searchingChannelName = `archive ${name.toLowerCase()} ${static.toLowerCase()}`
 		let searchingChannel = guild.channels.cache.find(
 			ch => ch.name === searchingChannelName
 		)
