@@ -17,7 +17,7 @@ async function findArchive(interaction) {
 
 		const searchingChannelName = `archive ${memberName.toLowerCase()} ${memberStatic.toLowerCase()}`
 		let searchingChannel = guild.channels.cache.find(
-			ch => ch.name === searchingChannel
+			ch => ch.name === searchingChannelName
 		)
 
 		if (!searchingChannel) {
