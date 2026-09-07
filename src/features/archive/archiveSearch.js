@@ -1,4 +1,6 @@
 const { Client, ButtonInteraction, MessageFlags } = require('discord.js')
+const { followUpEphemeralWithAutoDelete } = require('../../utils/autoDelete')
+const { parseDisplayName } = require('../../utils/parseDisplayName')
 
 /**
  * Ищет канал-архив для пользователя, нажавшего кнопку archive_find
@@ -8,14 +10,16 @@ async function findArchive(interaction) {
 	try {
 		await interaction.deferUpdate()
 		const member = interaction.member
-
-		let [name, static] = member.displayName.split('|')
-
-		static = static.trim()
-		name = name.replace(/^\[.*\]\s+/g, '').trim()
 		const guild = interaction.guild
 
-		const searchingChannelName = `archive ${name.toLowerCase()} ${static.toLowerCase()}`
+		const { memberName, memberStatic } = parseDisplayName(member.displayName)
+
+		const searchingChannelName = [
+			'archive',
+			memberName.toLowerCase(),
+			memberStatic.toLowerCase()
+		].join(' ')
+
 		let searchingChannel = guild.channels.cache.find(
 			ch => ch.name === searchingChannelName
 		)
@@ -24,18 +28,21 @@ async function findArchive(interaction) {
 			try {
 				await guild.channels.fetch()
 				searchingChannel = guild.channels.cache.find(
-					ch => ch.name === searchingChannel
+					ch => ch.name === searchingChannelName
 				)
 			} catch (error) {
-				console.error('Не удалось загрузить каналы сервера:', error)
+				console.error('❌ Не удалось загрузить каналы сервера:', error)
 			}
 		}
 
 		if (searchingChannel) {
-			console.log(`Канал найден! Его ID: ${searchingChannel.id}`)
+			return await interaction.followUp({
+				content: `Ваш архив - <#${searchingChannel}>`,
+				flags: [MessageFlags.Ephemeral]
+			})
 		} else {
 			return await interaction.followUp({
-				content: `❌ Для вас нет созданного архива. Название канала: \`${searchingChannelName}\``,
+				content: `❌ Для вас нет созданного архива.`,
 				flags: [MessageFlags.Ephemeral]
 			})
 		}
