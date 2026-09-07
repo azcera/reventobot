@@ -12,7 +12,7 @@ async function findArchive(interaction) {
 		const [memberName, memberStatic] = member.displayName.split('|')
 
 		memberStatic.trim()
-		memberName.replace(/^\[.*\]/, '').trim()
+		memberName.replace(/^\[.*\]\s+/g, '').trim()
 		const guild = interaction.guild
 
 		const searchingChannelName = `archive ${memberName.toLowerCase()} ${memberStatic.toLowerCase()}`
@@ -34,7 +34,7 @@ async function findArchive(interaction) {
 		if (searchingChannel) {
 			console.log(`Канал найден! Его ID: ${searchingChannel.id}`)
 		} else {
-			return await interaction.channel.send({
+			return await interaction.reply({
 				content: `❌ Для вас нет созданного архива. Название канала: \`${searchingChannelName}\``,
 				flags: [MessageFlags.Ephemeral]
 			})
