@@ -13,13 +13,27 @@ async function findArchive(interaction) {
 
 		memberStatic.trim()
 		memberName.replace(/^\[.*\]/, '').trim()
+		const guild = interaction.guild
 
 		const searchingChannelName = `archive ${memberName.toLowerCase()} ${memberStatic.toLowerCase()}`
-		const searchingChannel = interaction.guild.channels.cache.find(
+		let searchingChannel = guild.channels.cache.find(
 			ch => ch.name === searchingChannel
 		)
 
 		if (!searchingChannel) {
+			try {
+				await guild.channels.fetch()
+				searchingChannel = guild.channels.cache.find(
+					ch => ch.name === searchingChannel
+				)
+			} catch (error) {
+				console.error('Не удалось загрузить каналы сервера:', error)
+			}
+		}
+
+		if (searchingChannel) {
+			console.log(`Канал найден! Его ID: ${searchingChannel.id}`)
+		} else {
 			return await interaction.channel.send({
 				content: `❌ Для вас нет созданного архива. Название канала: \`${searchingChannelName}\``,
 				flags: [MessageFlags.Ephemeral]
