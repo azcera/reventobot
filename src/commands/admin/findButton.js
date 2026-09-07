@@ -55,12 +55,8 @@ module.exports = {
 
 			const row = new ActionRowBuilder().addComponents(searchButton)
 
-			const components = lastMessage.components.forEach(c =>
-				c.addActionRowComponents(row)
-			)
-
 			await lastMessage.edit({
-				components: [components],
+				components: [...lastMessage.components, row],
 				flags: [MessageFlags.IsComponentsV2]
 			})
 		} catch (error) {
