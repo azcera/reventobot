@@ -11,7 +11,7 @@ const {
 	SeparatorBuilder,
 	MessageFlags
 } = require('discord.js')
-const { NewMessage } = require('telegram/events')
+const { NewMessage } = require('teleproto/events')
 const path = require('path')
 const { initTelegramClient } = require('../services/telegramService')
 

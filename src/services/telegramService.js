@@ -1,5 +1,5 @@
-const { TelegramClient } = require('telegram')
-const { StringSession } = require('telegram/sessions')
+const { TelegramClient } = require('teleproto')
+const { StringSession } = require('teleproto/sessions')
 const qrcode = require('qrcode-terminal') // Рисует QR в консоли
 const readline = require('readline')
 

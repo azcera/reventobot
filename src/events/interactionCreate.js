@@ -10,6 +10,7 @@ const {
 } = require('../features/invite/inviteModeration')
 const { handleVoiceSelect } = require('../features/invite/inviteVoiceSelect')
 const submitRejectModal = require('../features/invite/inviteModalHandler')
+const { findArchive } = require('../features/archive/archiveSearch')
 
 module.exports = client => {
 	client.on('interactionCreate', async interaction => {
@@ -93,6 +94,7 @@ module.exports = client => {
 				return await moveAllInteractions.showMoveAllSelect(interaction)
 			if (customId === 'cancel')
 				return await archiveInteractions.cancelArchive(interaction)
+			if (customId === 'archive_find') return await findArchive(interaction)
 			if (customId.includes('_'))
 				return await archiveInteractions.handleDynamicButtons(interaction)
 		}
