@@ -55,20 +55,16 @@ module.exports = {
 
 			const row = new ActionRowBuilder().addComponents(searchButton)
 
-			const container = lastMessage.components[0]
-			container.addActionRowComponents(row)
+			const components = lastMessage.components.forEach(c =>
+				c.addActionRowComponents(row)
+			)
 
 			await lastMessage.edit({
-				components: [row],
+				components: [components],
 				flags: [MessageFlags.IsComponentsV2]
 			})
 		} catch (error) {
 			console.error('Ошибка при работе с сообщением:', error)
 		}
-
-		return await message.channel.send({
-			flags: [MessageFlags.IsComponentsV2],
-			components: [getNavigationContainer(null, false)]
-		})
 	}
 }
