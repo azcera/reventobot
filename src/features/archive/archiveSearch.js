@@ -34,7 +34,7 @@ async function findArchive(interaction) {
 		if (searchingChannel) {
 			console.log(`Канал найден! Его ID: ${searchingChannel.id}`)
 		} else {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: `❌ Для вас нет созданного архива. Название канала: \`${searchingChannelName}\``,
 				flags: [MessageFlags.Ephemeral]
 			})

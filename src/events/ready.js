@@ -15,7 +15,7 @@ const { NewMessage } = require('teleproto/events')
 const path = require('path')
 const { initTelegramClient } = require('../services/telegramService')
 
-const majesticBotUsername = 'MajesticRolePlayBot'
+const MAJESTIC_BOT_ID = '6204267987'
 const discordChannelId = process.env.CAPT_INFO_CHANNEL_ID
 const processedCaptures = new Map()
 
@@ -35,14 +35,11 @@ module.exports = client => {
 			tgClient.addEventHandler(async event => {
 				try {
 					const message = event.message
-					const sender = await message.getSender()
+					if (!message) return
 
-					if (
-						!sender ||
-						(sender.username !== majesticBotUsername &&
-							sender.id?.toString() !== majesticBotUsername)
-					)
-						return
+					// Быстрая и безопасная проверка по ID (без getSender)
+					const senderId = message.senderId?.toString()
+					if (senderId !== MAJESTIC_BOT_ID) return
 
 					const text = message.text || ''
 					const isAttackMessage = ATTACK_RE.test(text)
