@@ -59,10 +59,21 @@ let handleMakeAdmin = async (oldMember, newMember) => {
  * @param {GuildMember} newMember
  * @param {string} channelName
  */
-let handleMakeRevento = async (oldMember, newMember, channelName) => {
+let handleMakeRevento = async (oldMember, newMember) => {
 	const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE)
 	const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE)
-	let parsedChannelName = channelName.replace(/-/g, ' ')
+
+	const displayName = newMember.displayName
+	const parsedData = parseDisplayName(displayName)
+	if (!parsedData) return
+
+	const channelName = [
+		('archive',
+		parsedData.memberName.toLowerCase(),
+		parsedData.memberStatic.toLowerCase())
+	].join('-')
+
+	const parsedChannelName = channelName.replace(/-/g, ' ')
 
 	if (!hadRoleBefore && hasRoleNow) {
 		const channels = newMember.guild.channels.cache
@@ -168,21 +179,9 @@ module.exports = client => {
 		 *
 		 */
 		async (oldMember, newMember) => {
-			const displayName = oldMember.displayName
-			const parsedData = parseDisplayName(displayName)
-			if (!parsedData) return
-
 			try {
 				await handleMakeAdmin(oldMember, newMember)
-				await handleMakeRevento(
-					oldMember,
-					newMember,
-					[
-						'archive',
-						parsedData.memberName.toLowerCase(),
-						parsedData.memberStatic.toLowerCase()
-					].join('-')
-				)
+				await handleMakeRevento(oldMember, newMember)
 				await handleNameEdit(oldMember, newMember)
 			} catch (error) {
 				console.error('❌ Ошибка выполнения: ', error)
