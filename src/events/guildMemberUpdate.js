@@ -63,43 +63,48 @@ let handleMakeRevento = async (oldMember, newMember) => {
 	const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE)
 	const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE)
 
-	const displayName = newMember.displayName
-	const parsedData = parseDisplayName(displayName)
-	if (!parsedData) return
-
-	const channelName = [
-		('archive',
-		parsedData.memberName.toLowerCase(),
-		parsedData.memberStatic.toLowerCase())
-	].join('-')
-
-	const parsedChannelName = channelName.replace(/-/g, ' ')
-
 	if (!hadRoleBefore && hasRoleNow) {
+		const parsedData = parseDisplayName(newMember.displayName)
+		if (!parsedData) return
+
+		const threadName = [
+			'archive',
+			parsedData.memberName.toLowerCase(),
+			parsedData.memberStatic.toLowerCase()
+		].join(' ') // пробелы, как у твоих веток
+
 		const channels = newMember.guild.channels.cache
 
-		let existingChannel = channels.find(
-			channel => channel.name === parsedChannelName
+		const existingThread = channels.find(
+			channel =>
+				channel.isThread() &&
+				channel.parentId === process.env.PARENT_CHANNEL_ID &&
+				channel.name === threadName
 		)
 
-		if (!existingChannel) {
+		if (!existingThread) {
 			const messagesChannel = newMember.guild.channels.cache.get(
 				process.env.LOG_CHANNEL_ID
 			)
+
 			const row = new ActionRowBuilder().addComponents(
 				new ButtonBuilder()
-					.setCustomId(`create_${channelName}-${newMember.id}`)
+					.setCustomId(
+						`create_${threadName.replace(/ /g, '-')}-${newMember.id}`
+					)
 					.setLabel('Да')
 					.setStyle(ButtonStyle.Success),
 				new ButtonBuilder()
-					.setCustomId(`cancel_create_${channelName}-${newMember.id}`)
+					.setCustomId(
+						`cancel_create_${threadName.replace(/ /g, '-')}-${newMember.id}`
+					)
 					.setLabel('Нет')
 					.setStyle(ButtonStyle.Danger)
 			)
 
-			if (messagesChannel && messagesChannel.isTextBased()) {
-				messagesChannel.send({
-					content: `${ADMIN_ROLES.map(e => roleMention(e))} Создать для <@${newMember.id}> архив - \`${parsedChannelName}\`?`,
+			if (messagesChannel?.isTextBased()) {
+				await messagesChannel.send({
+					content: `${ADMIN_ROLES.map(e => roleMention(e)).join(' ')} Создать для <@${newMember.id}> архив - \`${threadName}\`?`,
 					components: [row]
 				})
 			}
