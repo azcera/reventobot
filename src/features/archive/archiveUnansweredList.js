@@ -80,7 +80,11 @@ async function updateUnansweredList(guild) {
 	if (unansweredList.length === 0) {
 		stringList = 'Нет непрочитанных архивов.'
 	} else {
-		unansweredList.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+		unansweredList.sort(
+			(a, b) =>
+				String(a.name).split(' ').findLast() -
+				String(b.name).split(' ').findLast()
+		)
 		unansweredList.forEach(
 			(thread, index) => (stringList += `${index + 1}. <#${thread.id}>\n`)
 		)
