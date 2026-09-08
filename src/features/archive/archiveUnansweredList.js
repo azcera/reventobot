@@ -60,7 +60,9 @@ async function updateUnansweredList(guild) {
 				// условие при котором канал считается непрочитанным
 				unansweredList.push({
 					id: thread.id,
-					name: guild.channels.cache.get(thread.id)
+					name:
+						guild.channels.cache.get(thread.id) ||
+						guild.channels.fetch(thread.id)
 				})
 			}
 		} catch (err) {
@@ -78,9 +80,9 @@ async function updateUnansweredList(guild) {
 	if (unansweredList.length === 0) {
 		stringList = 'Нет непрочитанных архивов.'
 	} else {
-		unansweredList.sort((a, b) => a.name.localeCompare(b.name))
+		unansweredList.sort((a, b) => String(a.name).localeCompare(String(b.name)))
 		unansweredList.forEach(
-			(threadId, index) => (stringList += `${index + 1}. <#${threadId}>\n`)
+			(thread, index) => (stringList += `${index + 1}. <#${thread.id}>\n`)
 		)
 	}
 
