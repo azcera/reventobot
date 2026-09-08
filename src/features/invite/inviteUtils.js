@@ -6,7 +6,9 @@ const {
 	ButtonBuilder,
 	ButtonStyle,
 	SeparatorSpacingSize,
-	MessageFlags
+	MessageFlags,
+	GuildMember,
+	PermissionFlagsBits
 } = require('discord.js')
 
 const ADMIN_ROLES = process.env.ADMIN_ROLES
@@ -15,15 +17,28 @@ const ADMIN_ROLES = process.env.ADMIN_ROLES
 			.filter(Boolean)
 	: []
 
-// Проверка, является ли пользователь администратором заявок
+/**
+ * Проверка, является ли пользователь администратором заявок
+ *
+ * @param {GuildMember} member
+ * @returns {boolean}
+ */
 function isApplicationMod(member) {
 	return (
-		member?.roles.cache.some(role => ADMIN_ROLES.includes(role.id)) || false
+		member?.roles.cache.some(role => ADMIN_ROLES.includes(role.id)) ||
+		member?.permissions.has(PermissionFlagsBits.Administrator) ||
+		member?.permissions.has(PermissionFlagsBits.ManageRoles) ||
+		false
 	)
 }
 
-// Централизованная отправка логов в аудит-канал
-
+/**
+ * Централизованная отправка логов в аудит-канал
+ *
+ * @param {GuildMember} guild
+ * @param {ContainerBuilder} container
+ * @returns {Promise<void>}
+ */
 async function logAction(guild, container) {
 	const logChannelId = process.env.LOG_CHANNEL_ID
 	if (!logChannelId) return
@@ -46,6 +61,20 @@ const colors = {
 }
 
 // Универсальный сборщик контейнеров (V2 Components)
+/**
+ * Description
+ *
+ * @param {number} userId
+ * @param {string} fullName
+ * @param {number} age
+ * @param {string} aboutAndExpectations
+ * @param {string} previousExperience
+ * @param {string} action
+ * @param {string?} adminId
+ * @param {string?} extraInfo
+ * @param {boolean?} isInterviewDisabled
+ * @returns {Promise<ContainerBuilder>}
+ */
 async function buildContainer(
 	userId,
 	fullName,

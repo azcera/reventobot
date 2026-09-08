@@ -14,6 +14,10 @@ const {
 const { NewMessage } = require('teleproto/events')
 const path = require('path')
 const { initTelegramClient } = require('../services/telegramService')
+const {
+	updateUnansweredList
+} = require('../features/archive/archiveUnansweredList')
+require('dotenv').config()
 
 const MAJESTIC_BOT_ID = '6204267987'
 const discordChannelId = process.env.CAPT_INFO_CHANNEL_ID
@@ -27,6 +31,15 @@ const DEFEND_MATCH_RE = /На вашу организацию\s+([^\n]+?)\s+на
 module.exports = client => {
 	client.once(Events.ClientReady, async readyClient => {
 		console.log(`✅ Готово! Вход как ${readyClient.user.tag}`)
+
+		const guild = client.guilds.cache.get(process.env.GUILD_ID)
+
+		if (guild) {
+			updateUnansweredList(guild)
+			console.log('✅ Успешное обновление списка.')
+		} else {
+			console.error(`❌ Сервер с ID ${GUILD_ID} не найден.`)
+		}
 
 		try {
 			const tgClient = await initTelegramClient()
