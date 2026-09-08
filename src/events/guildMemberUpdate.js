@@ -119,15 +119,25 @@ let handleMakeRevento = async (oldMember, newMember) => {
  * @param {GuildMember} newMember
  */
 let handleNameEdit = async (oldMember, newMember) => {
-	// Ник не изменился
-	if (oldMember.displayName === newMember.displayName) return
+	if (oldMember.displayName === newMember.displayName) {
+		console.log('[NameEdit] Ник не изменился')
+		return
+	}
+
+	console.log('[NameEdit] Старый ник:', oldMember.displayName)
+	console.log('[NameEdit] Новый ник:', newMember.displayName)
 
 	const parsedOld = parseDisplayName(oldMember.displayName)
 	const parsedNew = parseDisplayName(newMember.displayName)
 
-	if (!parsedOld || !parsedNew) return
+	console.log('[NameEdit] parsedOld:', parsedOld)
+	console.log('[NameEdit] parsedNew:', parsedNew)
 
-	// Старое и новое имя ветки (с пробелами)
+	if (!parsedOld || !parsedNew) {
+		console.log('[NameEdit] Не удалось распарсить один из ников')
+		return
+	}
+
 	const oldThreadName = [
 		'archive',
 		parsedOld.memberName.toLowerCase(),
@@ -140,12 +150,15 @@ let handleNameEdit = async (oldMember, newMember) => {
 		parsedNew.memberStatic.toLowerCase()
 	].join(' ')
 
-	// Имя не поменялось
-	if (oldThreadName === newThreadName) return
+	console.log('[NameEdit] Ищем ветку:', `"${oldThreadName}"`)
+	console.log('[NameEdit] Хотим переименовать в:', `"${newThreadName}"`)
 
-	const guild = newMember.guild
+	if (oldThreadName === newThreadName) {
+		console.log('[NameEdit] Имена веток одинаковые, ничего не делаем')
+		return
+	}
 
-	const existingThread = guild.channels.cache.find(
+	const existingThread = newMember.guild.channels.cache.find(
 		channel =>
 			channel.isThread() &&
 			channel.parentId === process.env.PARENT_CHANNEL_ID &&
@@ -153,12 +166,21 @@ let handleNameEdit = async (oldMember, newMember) => {
 	)
 
 	if (!existingThread) {
-		console.log(`Ветка "${oldThreadName}" не найдена`)
+		console.log('[NameEdit] ❌ Ветка не найдена')
+
+		// Покажем все ветки в этом родительском канале для отладки
+		const allThreads = newMember.guild.channels.cache.filter(
+			c => c.isThread() && c.parentId === process.env.PARENT_CHANNEL_ID
+		)
+		console.log('[NameEdit] Существующие ветки:')
+		allThreads.forEach(t => console.log(`  - "${t.name}"`))
 		return
 	}
 
+	console.log('[NameEdit] ✅ Ветка найдена:', existingThread.id)
+
 	if (!existingThread.manageable) {
-		console.warn(`❌ Нет прав на переименование ветки ${existingThread.name}`)
+		console.warn('[NameEdit] ❌ Нет прав на переименование')
 		return
 	}
 
@@ -168,7 +190,7 @@ let handleNameEdit = async (oldMember, newMember) => {
 			`✅ Ветка переименована: "${oldThreadName}" → "${newThreadName}"`
 		)
 	} catch (err) {
-		console.error(`❌ Ошибка при переименовании ветки:`, err.message)
+		console.error('❌ Ошибка при переименовании:', err.message)
 	}
 }
 
