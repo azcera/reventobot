@@ -2,7 +2,9 @@ const {
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	roleMention
+	roleMention,
+	GuildMember,
+	Events
 } = require('discord.js')
 const { parseDisplayName } = require('../utils/parseDisplayName')
 
@@ -73,7 +75,7 @@ let handleMakeRevento = async (oldMember, newMember, channelName) => {
 
 			if (messagesChannel && messagesChannel.isTextBased()) {
 				messagesChannel.send({
-					content: `${ADMIN_ROLES.map(e => roleMention(e))} Создать для <@${newMember.id}> архив - \`${channelName}\`?`,
+					content: `${ADMIN_ROLES.map(e => roleMention(e))} Создать для <@${newMember.id}> архив - \`${parsedChannelName}\`?`,
 					components: [row]
 				})
 			}
@@ -103,23 +105,34 @@ let handleNameEdit = async (oldMember, newMember, channelName) => {
 }
 
 module.exports = client => {
-	client.on('guildMemberUpdate', async (oldMember, newMember) => {
-		const displayName = oldMember.displayName
-		const parsedData = parseDisplayName(displayName)
-		if (!parsedData) return
+	client.on(
+		Events.GuildMemberUpdate,
+		/**
+		 * Обработчик события GuildMemberUpdate
+		 *
+		 * @async
+		 * @param {GuildMember} newMember
+		 * @param {GuildMember} oldMember
+		 *
+		 */
+		async (oldMember, newMember) => {
+			const displayName = oldMember.displayName
+			const parsedData = parseDisplayName(displayName)
+			if (!parsedData) return
 
-		const channelName = [
-			'archive',
-			parsedData.memberName.toLowerCase(),
-			parsedData.memberStatic.toLowerCase()
-		].join('-')
+			const channelName = [
+				'archive',
+				parsedData.memberName.toLowerCase(),
+				parsedData.memberStatic.toLowerCase()
+			].join('-')
 
-		try {
-			await handleMakeAdmin(oldMember, newMember)
-			await handleMakeRevento(oldMember, newMember, channelName)
-			await handleNameEdit(oldMember, newMember, channelName)
-		} catch (error) {
-			console.error('❌ Ошибка выполнения: ', error)
+			try {
+				await handleMakeAdmin(oldMember, newMember)
+				await handleMakeRevento(oldMember, newMember, channelName)
+				await handleNameEdit(oldMember, newMember, channelName)
+			} catch (error) {
+				console.error('❌ Ошибка выполнения: ', error)
+			}
 		}
-	})
+	)
 }
