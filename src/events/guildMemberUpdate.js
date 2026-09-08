@@ -63,53 +63,61 @@ let handleMakeRevento = async (oldMember, newMember) => {
 	const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE)
 	const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE)
 
-	if (!hadRoleBefore && hasRoleNow) {
-		const parsedData = parseDisplayName(newMember.displayName)
-		if (!parsedData) return
+	// Реагируем только на выдачу роли
+	if (hadRoleBefore || !hasRoleNow) return
 
-		const threadName = [
-			'archive',
-			parsedData.memberName.toLowerCase(),
-			parsedData.memberStatic.toLowerCase()
-		].join(' ') // пробелы, как у твоих веток
-
-		const channels = newMember.guild.channels.cache
-
-		const existingThread = channels.find(
-			channel =>
-				channel.isThread() &&
-				channel.parentId === process.env.PARENT_CHANNEL_ID &&
-				channel.name === threadName
-		)
-
-		if (!existingThread) {
-			const messagesChannel = newMember.guild.channels.cache.get(
-				process.env.LOG_CHANNEL_ID
-			)
-
-			const row = new ActionRowBuilder().addComponents(
-				new ButtonBuilder()
-					.setCustomId(
-						`create_${threadName.replace(/ /g, '-')}-${newMember.id}`
-					)
-					.setLabel('Да')
-					.setStyle(ButtonStyle.Success),
-				new ButtonBuilder()
-					.setCustomId(
-						`cancel_create_${threadName.replace(/ /g, '-')}-${newMember.id}`
-					)
-					.setLabel('Нет')
-					.setStyle(ButtonStyle.Danger)
-			)
-
-			if (messagesChannel?.isTextBased()) {
-				await messagesChannel.send({
-					content: `${ADMIN_ROLES.map(e => roleMention(e)).join(' ')} Создать для <@${newMember.id}> архив - \`${threadName}\`?`,
-					components: [row]
-				})
-			}
-		}
+	const parsedData = parseDisplayName(newMember.displayName)
+	if (!parsedData) {
+		console.log('❌ Ник не по форме, пропускаем создание архива')
+		return
 	}
+
+	const threadName = [
+		'archive',
+		parsedData.memberName.toLowerCase(),
+		parsedData.memberStatic.toLowerCase()
+	].join(' ')
+
+	const parentId = process.env.PARENT_CHANNEL_ID
+
+	// Сначала ищем, есть ли уже такая ветка
+	const existingThread = newMember.guild.channels.cache.find(
+		channel =>
+			channel.isThread() &&
+			channel.parentId === parentId &&
+			channel.name === threadName
+	)
+
+	// Если ветка уже есть — ничего не делаем
+	if (existingThread) {
+		console.log(`Ветка "${threadName}" уже существует`)
+		return
+	}
+
+	// Ветки нет → отправляем уведомление
+	const messagesChannel = newMember.guild.channels.cache.get(
+		process.env.LOG_CHANNEL_ID
+	)
+
+	if (!messagesChannel?.isTextBased()) return
+
+	const row = new ActionRowBuilder().addComponents(
+		new ButtonBuilder()
+			.setCustomId(`create_${threadName.replace(/ /g, '-')}-${newMember.id}`)
+			.setLabel('Да')
+			.setStyle(ButtonStyle.Success),
+		new ButtonBuilder()
+			.setCustomId(
+				`cancel_create_${threadName.replace(/ /g, '-')}-${newMember.id}`
+			)
+			.setLabel('Нет')
+			.setStyle(ButtonStyle.Danger)
+	)
+
+	await messagesChannel.send({
+		content: `${ADMIN_ROLES.map(id => roleMention(id)).join(' ')} Создать для <@${newMember.id}> архив - \`${threadName}\`?`,
+		components: [row]
+	})
 }
 
 /**
