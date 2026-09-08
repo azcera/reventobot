@@ -36,7 +36,7 @@ async function updateUnansweredList(guild) {
 		return console.error('❌ Неправильно настроен канал с архивами.')
 	}
 
-	await archiveChannel.threads.fetchActive()
+	const { threads } = await archiveChannel.threads.fetchActive(true)
 
 	for (const [_, thread] of archiveChannel.threads.cache) {
 		try {
@@ -45,7 +45,11 @@ async function updateUnansweredList(guild) {
 
 			if (!lastMessage) continue
 
-			const author = lastMessage.member
+			const author =
+				lastMessage.member ??
+				(await thread.guild.members
+					.fetch(lastMessage.author.id)
+					.catch(() => null))
 			if (!author) continue
 
 			const hasUserMention = lastMessage.mentions.users.size > 0
@@ -56,13 +60,12 @@ async function updateUnansweredList(guild) {
 			const hasAdminRole =
 				author.permissions.has(PermissionFlagsBits.Administrator) ||
 				author.roles.cache.some(role => ADMIN_ROLES.includes(role.id))
+
 			if ((!lastMessage.author.bot && hasAnyMention) || !hasAdminRole) {
 				// условие при котором канал считается непрочитанным
 				unansweredList.push({
 					id: thread.id,
-					name:
-						guild.channels.cache.get(thread.id) ||
-						guild.channels.fetch(thread.id)
+					name: thread.name
 				})
 			}
 		} catch (err) {
@@ -80,11 +83,11 @@ async function updateUnansweredList(guild) {
 	if (unansweredList.length === 0) {
 		stringList = 'Нет непрочитанных архивов.'
 	} else {
-		unansweredList.sort(
-			(a, b) =>
-				String(a.name).split(' ').findLast() -
-				String(b.name).split(' ').findLast()
-		)
+		unansweredList.sort((a, b) => {
+			const numA = Number(String(a.name).match(/(\d+)\s*$/)?.[1] ?? 0)
+			const numB = Number(String(b.name).match(/(\d+)\s*$/)?.[1] ?? 0)
+			return numA - numB
+		})
 		unansweredList.forEach(
 			(thread, index) => (stringList += `${index + 1}. <#${thread.id}>\n`)
 		)
