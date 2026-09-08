@@ -24,7 +24,7 @@ async function updateUnansweredList(guild) {
 	/**
 	 * Список архивов без ответа
 	 *
-	 * @type {number[]}
+	 * @type {{id: number, name: string}[]}
 	 */
 	let unansweredList = []
 
@@ -58,7 +58,10 @@ async function updateUnansweredList(guild) {
 				author.roles.cache.some(role => ADMIN_ROLES.includes(role.id))
 			if ((!lastMessage.author.bot && hasAnyMention) || !hasAdminRole) {
 				// условие при котором канал считается непрочитанным
-				unansweredList.push(thread.id)
+				unansweredList.push({
+					id: thread.id,
+					name: guild.channels.cache.get(thread.id)
+				})
 			}
 		} catch (err) {
 			console.error(`❌ Ошибка при обработке ветки ${thread.id}:`, err.message)
@@ -75,6 +78,7 @@ async function updateUnansweredList(guild) {
 	if (unansweredList.length === 0) {
 		stringList = 'Нет непрочитанных архивов.'
 	} else {
+		unansweredList.sort((a, b) => a.name.localeCompare(b.name))
 		unansweredList.forEach(
 			(threadId, index) => (stringList += `${index + 1}. <#${threadId}>\n`)
 		)
