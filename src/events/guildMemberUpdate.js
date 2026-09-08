@@ -14,6 +14,12 @@ const ADMIN_ROLES = process.env.ADMIN_ROLES
 			.filter(Boolean)
 	: []
 
+/**
+ * Действия при добавлению участнику админ ролей
+ *
+ * @param {GuildMember} oldMember
+ * @param {GuildMember} newMember
+ */
 let handleMakeAdmin = async (oldMember, newMember) => {
 	const oldHasAdmin = oldMember.roles.cache.filter(role =>
 		ADMIN_ROLES.includes(role.id)
@@ -46,6 +52,13 @@ let handleMakeAdmin = async (oldMember, newMember) => {
 	}
 }
 
+/**
+ * Действия при добавлении роли REVENTO
+ *
+ * @param {GuildMember} oldMember
+ * @param {GuildMember} newMember
+ * @param {string} channelName
+ */
 let handleMakeRevento = async (oldMember, newMember, channelName) => {
 	const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE)
 	const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE)
@@ -83,24 +96,63 @@ let handleMakeRevento = async (oldMember, newMember, channelName) => {
 	}
 }
 
-let handleNameEdit = async (oldMember, newMember, channelName) => {
+/**
+ * Действия при изменении никнейма
+ *
+ * @param {GuildMember} oldMember
+ * @param {GuildMember} newMember
+ */
+let handleNameEdit = async (oldMember, newMember) => {
+	// Ник не изменился
 	if (oldMember.displayName === newMember.displayName) return
-	const channels = newMember.guild.channels.cache
-	const parsedData = parseDisplayName(newMember.displayName)
-	if (!parsedData) return
 
-	const newMemberChannelName = [
+	const parsedOld = parseDisplayName(oldMember.displayName)
+	const parsedNew = parseDisplayName(newMember.displayName)
+
+	if (!parsedOld || !parsedNew) return
+
+	// Старое и новое имя ветки (с пробелами)
+	const oldThreadName = [
 		'archive',
-		parsedData.memberName.toLowerCase(),
-		parsedData.memberStatic.toLowerCase()
+		parsedOld.memberName.toLowerCase(),
+		parsedOld.memberStatic.toLowerCase()
 	].join(' ')
 
-	let existingChannel = channels.find(channel => channel.name === channelName)
+	const newThreadName = [
+		'archive',
+		parsedNew.memberName.toLowerCase(),
+		parsedNew.memberStatic.toLowerCase()
+	].join(' ')
 
-	if (existingChannel) {
-		if (existingChannel.name !== newMemberChannelName) {
-			await existingChannel.setName(newMemberChannelName)
-		}
+	// Имя не поменялось
+	if (oldThreadName === newThreadName) return
+
+	const guild = newMember.guild
+
+	const existingThread = guild.channels.cache.find(
+		channel =>
+			channel.isThread() &&
+			channel.parentId === process.env.PARENT_CHANNEL_ID &&
+			channel.name === oldThreadName
+	)
+
+	if (!existingThread) {
+		console.log(`Ветка "${oldThreadName}" не найдена`)
+		return
+	}
+
+	if (!existingThread.manageable) {
+		console.warn(`❌ Нет прав на переименование ветки ${existingThread.name}`)
+		return
+	}
+
+	try {
+		await existingThread.setName(newThreadName)
+		console.log(
+			`✅ Ветка переименована: "${oldThreadName}" → "${newThreadName}"`
+		)
+	} catch (err) {
+		console.error(`❌ Ошибка при переименовании ветки:`, err.message)
 	}
 }
 
@@ -120,16 +172,18 @@ module.exports = client => {
 			const parsedData = parseDisplayName(displayName)
 			if (!parsedData) return
 
-			const channelName = [
-				'archive',
-				parsedData.memberName.toLowerCase(),
-				parsedData.memberStatic.toLowerCase()
-			].join('-')
-
 			try {
 				await handleMakeAdmin(oldMember, newMember)
-				await handleMakeRevento(oldMember, newMember, channelName)
-				await handleNameEdit(oldMember, newMember, channelName)
+				await handleMakeRevento(
+					oldMember,
+					newMember,
+					[
+						'archive',
+						parsedData.memberName.toLowerCase(),
+						parsedData.memberStatic.toLowerCase()
+					].join('-')
+				)
+				await handleNameEdit(oldMember, newMember)
 			} catch (error) {
 				console.error('❌ Ошибка выполнения: ', error)
 			}

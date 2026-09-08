@@ -13,6 +13,7 @@ const adminChannelId = '1543180993786150992'
 const adminPanelMessageId = '1545889525039898767'
 const ADMIN_ROLES = process.env.ADMIN_ROLES
 const archiveChannelId = process.env.PARENT_CHANNEL_ID
+const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000 // 7 дней в миллисекундах
 
 /**
  * Функция определяющая список неотвеченных архивов
@@ -44,6 +45,9 @@ async function updateUnansweredList(guild) {
 			const lastMessage = messages.first()
 
 			if (!lastMessage) continue
+
+			const messageAge = Date.now() - lastMessage.createdTimestamp
+			if (messageAge > SEVEN_DAYS) continue
 
 			const author =
 				lastMessage.member ??
