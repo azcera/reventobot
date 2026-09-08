@@ -39,7 +39,7 @@ module.exports = client => {
 				const hasAnyMention =
 					messageHasUserMention || messageHasRoleMention || messageHasEveryone
 
-				if (hasAnyMention || !authorHasAdminRole || !message.author.bot) {
+				if (hasAnyMention && !authorHasAdminRole && !message.author.bot) {
 					await updateUnansweredList(message.guild)
 				}
 			}

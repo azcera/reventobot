@@ -56,7 +56,7 @@ async function updateUnansweredList(guild) {
 			const hasAdminRole =
 				author.permissions.has(PermissionFlagsBits.Administrator) ||
 				author.roles.cache.some(role => ADMIN_ROLES.includes(role.id))
-			if (hasAnyMention || !hasAdminRole || !lastMessage.author.bot) {
+			if (hasAnyMention && !hasAdminRole && !lastMessage.author.bot) {
 				// условие при котором канал считается непрочитанным
 				unansweredList.push(thread.id)
 			}
