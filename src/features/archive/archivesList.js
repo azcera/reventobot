@@ -77,6 +77,8 @@ async function updateArchivesList(guild) {
 		)
 		.addSeparatorComponents(new SeparatorBuilder())
 
+	const MAX_TEXT_LENGTH = 3800 // с запасом
+
 	for (const key of Object.keys(groupings)) {
 		if (!groupings[key].length) continue
 
@@ -86,7 +88,7 @@ async function updateArchivesList(guild) {
 
 		if (!role) continue
 
-		// Собираем все строки
+		// Собираем строки
 		const lines = groupings[key].map((item, index) => {
 			const channelText = item.archiveChannel
 				? `<#${item.archiveChannel.id}>`
@@ -95,31 +97,41 @@ async function updateArchivesList(guild) {
 			return `${index + 1}. <@${item.member.id}> -----> ${channelText}`
 		})
 
-		// Разбиваем на куски по ~3800 символов (с запасом)
-		const chunks = []
+		// Первый кусок начинается с заголовка роли
 		let currentChunk = `## <@&${role.id}>:\n`
 
 		for (const line of lines) {
-			// +1 на перенос строки
-			if (currentChunk.length + line.length + 1 > 3800) {
-				chunks.push(currentChunk)
-				currentChunk = line + '\n'
+			const lineWithNewline = line + '\n'
+
+			if (currentChunk.length + lineWithNewline.length > MAX_TEXT_LENGTH) {
+				// Отправляем текущий кусок
+				container.addTextDisplayComponents(
+					new TextDisplayBuilder().setContent(currentChunk)
+				)
+				container.addSeparatorComponents(new SeparatorBuilder())
+
+				// Начинаем новый кусок без заголовка роли
+				currentChunk = lineWithNewline
 			} else {
-				currentChunk += line + '\n'
+				currentChunk += lineWithNewline
 			}
 		}
 
-		if (currentChunk.trim()) {
-			chunks.push(currentChunk)
-		}
-
-		// Добавляем каждый кусок отдельным TextDisplay
-		for (const chunk of chunks) {
-			container
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(chunk))
-				.addSeparatorComponents(new SeparatorBuilder())
+		// Добавляем последний кусок
+		if (currentChunk.trim().length > 0) {
+			container.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(currentChunk)
+			)
+			container.addSeparatorComponents(new SeparatorBuilder())
 		}
 	}
+
+	// Проверяем перед отправкой (для отладки)
+	console.log(
+		'Количество компонентов в контейнере:',
+		container.components?.length ?? 'неизвестно'
+	)
+
 	await listsSend(guild, 2, container)
 }
 
