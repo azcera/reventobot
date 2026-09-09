@@ -17,14 +17,13 @@ const rolesToGroup = (process.env.ARCHIVE_GROUP_ROLES || '')
 	.filter(Boolean)
 
 const autoRoleId = process.env.AUTO_ROLE
-const ARCHIVE_PARENT_ID = '1542628698669453322'
 
-let adminRoles = (process.env.ADMIN_ROLES || '')
+const adminRoles = (process.env.ADMIN_ROLES || '')
 	.split(',')
 	.map(id => id.trim())
 	.filter(Boolean)
 
-adminRoles.push(process.env.TIER_CHECKER_ROLE_ID)
+const ARCHIVE_PARENT_ID = '1542628698669453322'
 
 /**
  * Обновляет сообщение со списком всех участников и их архивов
@@ -39,7 +38,7 @@ async function updateArchivesList(guild) {
 	await guild.members.fetch()
 
 	/**
-	 * @type {Object.<string, Array<{member: GuildMember, archiveChannel: GuildChannel|null, staticId: number, hasValidArchive: boolean}>>}
+	 * @type {Object.<string, Array<{member: GuildMember, archiveChannel: GuildChannel|null, staticId: number, hasValidArchive: boolean, isInvalidNick: boolean}>>}
 	 */
 	const groupings = {}
 	rolesToGroup.forEach(roleId => {
@@ -50,16 +49,15 @@ async function updateArchivesList(guild) {
 		if (member.user.bot) return false
 		if (!member.roles.cache.has(autoRoleId)) return false
 
-		// Исключаем тех, у кого есть любая из ADMIN_ROLES
-		const hasAdminRole = member.roles.cache.some(role =>
-			adminRoles.includes(role.id)
-		)
-		if (hasAdminRole) return false
+		// Исключаем админов
+		if (member.roles.cache.some(role => adminRoles.includes(role.id))) {
+			return false
+		}
 
 		return true
 	})
 
-	// Получаем все ветки из нужного канала
+	// Получаем все ветки из канала с архивами
 	const parentChannel = await guild.channels.fetch(ARCHIVE_PARENT_ID)
 	if (!parentChannel || !parentChannel.threads) {
 		console.error('❌ Не найден канал с архивами')
@@ -85,28 +83,27 @@ async function updateArchivesList(guild) {
 		const parsedDisplayName = parseDisplayName(member.displayName)
 
 		let archiveChannel = null
-		let staticId = Infinity // чтобы те, у кого нет staticId, ушли вниз
+		let staticId = Infinity
 		let hasValidArchive = false
+		let isInvalidNick = !parsedDisplayName || !parsedDisplayName.memberName
 
-		if (parsedDisplayName && parsedDisplayName.memberName) {
+		if (!isInvalidNick) {
 			archiveChannel =
 				[...guildChannels.values()].find(
 					ch =>
 						ch.name ===
 						[
 							'archive',
-							parsedDisplayName.memberName.toLowerCase(),
+							parsedDisplayName.memberName,
 							parsedDisplayName.memberStatic
 						].join(' ')
 				) || null
 
 			if (archiveChannel) {
 				hasValidArchive = true
-				// Достаём число в конце названия канала
 				const match = archiveChannel.name.match(/(\d+)\s*$/)
 				staticId = match ? Number(match[1]) : Infinity
 			} else if (parsedDisplayName.memberStatic) {
-				// Даже если канал не найден, пробуем взять static из ника
 				staticId = Number(parsedDisplayName.memberStatic) || Infinity
 			}
 		}
@@ -116,14 +113,11 @@ async function updateArchivesList(guild) {
 			archiveChannel,
 			staticId,
 			hasValidArchive,
-			// для удобства вывода
-			isInvalidNick: !parsedDisplayName || !parsedDisplayName.memberName
+			isInvalidNick
 		})
 	})
 
 	const MAX_TOTAL_TEXT = 3800
-
-	// Собираем блоки по ролям
 	const blocks = []
 
 	for (const key of Object.keys(groupings)) {
@@ -135,9 +129,7 @@ async function updateArchivesList(guild) {
 
 		if (!role) continue
 
-		// Сортировка:
-		// 1. Сначала те, у кого есть валидный архив — по staticId (от меньшего к большему)
-		// 2. Потом все остальные (нет архива / некорректный ник)
+		// Сортировка: сначала с валидным архивом по staticId, потом остальные
 		const sortedItems = groupings[key].sort((a, b) => {
 			if (a.hasValidArchive && b.hasValidArchive) {
 				return a.staticId - b.staticId
@@ -165,7 +157,9 @@ async function updateArchivesList(guild) {
 		blocks.push(blockText)
 	}
 
-	// Разбиваем на несколько сообщений при необходимости
+	// Собираем части
+	const parts = []
+
 	let currentContainer = new ContainerBuilder()
 		.addTextDisplayComponents(
 			new TextDisplayBuilder().setContent('# 👥 Список участников и их архивов')
@@ -173,18 +167,20 @@ async function updateArchivesList(guild) {
 		.addSeparatorComponents(new SeparatorBuilder())
 
 	let currentLength = 60
-	let messageIndex = 2
-
-	const flush = async () => {
-		await listsSend(guild, messageIndex, currentContainer)
-		messageIndex++
-		currentContainer = new ContainerBuilder()
-		currentLength = 0
-	}
 
 	for (const block of blocks) {
 		if (currentLength + block.length > MAX_TOTAL_TEXT) {
-			await flush()
+			parts.push(currentContainer)
+
+			currentContainer = new ContainerBuilder()
+				.addTextDisplayComponents(
+					new TextDisplayBuilder().setContent(
+						`# 👥 Список участников и их архивов (часть ${parts.length + 1})`
+					)
+				)
+				.addSeparatorComponents(new SeparatorBuilder())
+
+			currentLength = 60
 		}
 
 		currentContainer
@@ -194,9 +190,17 @@ async function updateArchivesList(guild) {
 		currentLength += block.length
 	}
 
-	// Отправляем последний контейнер
-	if (currentLength > 0 || messageIndex === 2) {
-		await listsSend(guild, messageIndex, currentContainer)
+	// Добавляем последнюю часть
+	parts.push(currentContainer)
+
+	// Отправляем / обновляем все части
+	for (let i = 0; i < parts.length; i++) {
+		const title =
+			i === 0
+				? '# 👥 Список участников и их архивов'
+				: `# 👥 Список участников и их архивов (часть ${i + 1})`
+
+		await listsSend(guild, title, parts[i])
 	}
 }
 

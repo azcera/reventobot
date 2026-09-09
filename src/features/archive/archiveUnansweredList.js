@@ -7,7 +7,7 @@ const {
 	SeparatorBuilder,
 	MessageFlags
 } = require('discord.js')
-const { listsSend } = require('../../utils/listsSend')
+const { listsSend } = require('./listsSend')
 require('dotenv').config()
 
 const ADMIN_ROLES = process.env.ADMIN_ROLES
@@ -100,7 +100,7 @@ async function updateUnansweredList(guild) {
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(stringList))
 
-	await listsSend(guild, 1, container)
+	await listsSend(guild, '# 🙊 Список неотвеченных архивов', container)
 }
 
 module.exports = { updateUnansweredList }
