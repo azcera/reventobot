@@ -42,8 +42,25 @@ async function updateArchivesList(guild) {
 		member => member.roles.cache.has(autoRoleId) && !member.user.bot
 	)
 
-	const guildChannels = (await guild.channels.fetch()).filter(ch =>
-		ch.isThread()
+	const ARCHIVE_PARENT_ID = '1542628698669453322'
+
+	const parentChannel = await guild.channels.fetch(ARCHIVE_PARENT_ID)
+	if (!parentChannel || !parentChannel.threads) {
+		console.error('❌ Не найден канал с архивами')
+		return
+	}
+
+	// Активные + архивные ветки
+	const active = await parentChannel.threads.fetchActive()
+	const archived = await parentChannel.threads.fetchArchived({ limit: 100 })
+
+	// Если веток больше 100 — можно дописать пагинацию позже
+	const guildChannels = new Map([...active.threads, ...archived.threads])
+
+	console.log('Найдено веток:', guildChannels.size)
+	console.log(
+		'Примеры названий веток:',
+		[...guildChannels.values()].slice(0, 5).map(t => t.name)
 	)
 
 	filteredMembers.forEach(member => {
@@ -59,7 +76,7 @@ async function updateArchivesList(guild) {
 
 		const parsedDisplayName = parseDisplayName(member.displayName)
 
-		let archiveChannel = guildChannels.find(
+		let archiveChannel = [...guildChannels.values()].find(
 			ch =>
 				ch.name ===
 				[
