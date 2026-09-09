@@ -1,11 +1,13 @@
 const {
 	GuildMember,
 	Guild,
+	GuildChannel,
 	ContainerBuilder,
 	TextDisplayBuilder,
 	SeparatorBuilder
 } = require('discord.js')
 const { listsSend } = require('../../utils/listsSend')
+const { parseDisplayName } = require('../../utils/parseDisplayName')
 
 require('dotenv').config()
 
@@ -20,6 +22,9 @@ const autoRoleId = process.env.AUTO_ROLE
 async function updateArchivesList(guild) {
 	await guild.members.fetch()
 
+	/**
+	 * @type {Object.<string, Array<{member: GuildMember, archiveChannel: GuildChannel|null}>>}
+	 */
 	const groupings = {}
 	rolesToGroup.forEach(roleId => {
 		groupings[roleId] = []
@@ -27,6 +32,10 @@ async function updateArchivesList(guild) {
 
 	const filteredMembers = guild.members.cache.filter(
 		member => member.roles.cache.has(autoRoleId) && !member.user.bot
+	)
+
+	const guildChannels = (await guild.channels.fetch()).filter(ch =>
+		ch.isThread()
 	)
 
 	filteredMembers.forEach(member => {
@@ -38,15 +47,27 @@ async function updateArchivesList(guild) {
 			rolesToGroup.includes(role.id)
 		)
 
-		let searchingChannel = guild.channels.cache.find(
-			ch => ch.name === searchingChannelName
+		const parsedDisplayName = parseDisplayName(member.displayName)
+
+		let archiveChannel = guildChannels.find(
+			ch =>
+				ch.name ===
+				[
+					'archive',
+					parsedDisplayName.memberName,
+					parsedDisplayName.memberStatic
+				].join(' ')
 		)
+
+		if (!archiveChannel) archiveChannel = null
+
 		const archiveMember = {
-			member
+			member,
+			archiveChannel
 		}
 
 		if (highestMatchingRole) {
-			groupings[highestMatchingRole.id].push()
+			groupings[highestMatchingRole.id].push(archiveMember)
 		}
 	})
 
@@ -56,27 +77,34 @@ async function updateArchivesList(guild) {
 		)
 		.addSeparatorComponents(new SeparatorBuilder())
 
-	let stringList = 'Загрузка...'
+	for (const key of Object.keys(groupings)) {
+		if (!groupings[key].length) continue
 
-	for (let key in Object.keys(groupings)) {
-		const role = guild.roles.cache.get(key) || guild.roles.fetch(key)
+		const role =
+			guild.roles.cache.get(key) ||
+			(await guild.roles.fetch(key).catch(() => null))
 
-		if (!role) return
+		if (!role) continue
 
-		stringList = ''
+		let stringList = ''
 		let index = 1
 
-		for (let member in groupings[key]) {
-			stringList += `${index}. <@${member.id}>\n`
+		for (const item of groupings[key]) {
+			const channelText = item.archiveChannel
+				? `<#${item.archiveChannel.id}>`
+				: 'нет архива'
+
+			stringList += `${index}. <@${item.member.id}> -----> ${channelText}\n`
+			index++
 		}
+
 		container
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(`## <@&${role.id}>:\n` + stringList)
 			)
 			.addSeparatorComponents(new SeparatorBuilder())
-
-		await listsSend(guild, 2, container)
 	}
+	await listsSend(guild, 2, container)
 }
 
 module.exports = { updateArchivesList }
