@@ -12,10 +12,10 @@ async function findArchive(interaction) {
 		const member = interaction.member
 		const guild = interaction.guild
 
-		let parsed
-		try {
-			parsed = parseDisplayName(member.displayName)
-		} catch (parseError) {
+		const parsed = parseDisplayName(member.displayName)
+
+		// Вот здесь правильно обрабатываем null
+		if (!parsed) {
 			return await interaction.followUp({
 				content: `❌ Не удалось найти архив: ваш никнейм на сервере имеет неверный формат.`,
 				flags: [MessageFlags.Ephemeral]
@@ -24,11 +24,10 @@ async function findArchive(interaction) {
 
 		const { memberName, memberStatic } = parsed
 
-		// 3. Формируем имя канала (теперь без ошибок undefined)
 		const searchingChannelName = [
 			'archive',
 			memberName.toLowerCase(),
-			memberStatic.toLowerCase()
+			memberStatic
 		].join(' ')
 
 		let searchingChannel = guild.channels.cache.find(
