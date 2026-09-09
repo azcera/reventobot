@@ -35,8 +35,13 @@ module.exports = client => {
 		const guild = client.guilds.cache.get(process.env.GUILD_ID)
 
 		if (guild) {
-			updateUnansweredList(guild)
-			console.log('✅ Успешное обновление списка.')
+			try {
+				await updateUnansweredList(guild)
+				await updateArchivesList(guild)
+				console.log('✅ Успешное обновление списков.')
+			} catch (error) {
+				console.error(`❌ Ошибка при обновлении списков: `, error)
+			}
 		} else {
 			console.error(`❌ Сервер с ID ${GUILD_ID} не найден.`)
 		}
