@@ -44,7 +44,7 @@ module.exports = client => {
 				console.error(`❌ Ошибка при обновлении списков: `, error)
 			}
 		} else {
-			console.error(`❌ Сервер с ID ${GUILD_ID} не найден.`)
+			console.error(`❌ Сервер с ID ${process.env.GUILD_ID} не найден.`)
 		}
 
 		try {
