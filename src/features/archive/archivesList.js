@@ -19,6 +19,13 @@ const rolesToGroup = (process.env.ARCHIVE_GROUP_ROLES || '')
 const autoRoleId = process.env.AUTO_ROLE
 const ARCHIVE_PARENT_ID = '1542628698669453322'
 
+let adminRoles = (process.env.ADMIN_ROLES || '')
+	.split(',')
+	.map(id => id.trim())
+	.filter(Boolean)
+
+adminRoles.push(process.env.TIER_CHECKER_ROLE_ID)
+
 /**
  * Обновляет сообщение со списком всех участников и их архивов
  * @param {Guild} guild
@@ -39,9 +46,18 @@ async function updateArchivesList(guild) {
 		groupings[roleId] = []
 	})
 
-	const filteredMembers = guild.members.cache.filter(
-		member => member.roles.cache.has(autoRoleId) && !member.user.bot
-	)
+	const filteredMembers = guild.members.cache.filter(member => {
+		if (member.user.bot) return false
+		if (!member.roles.cache.has(autoRoleId)) return false
+
+		// Исключаем тех, у кого есть любая из ADMIN_ROLES
+		const hasAdminRole = member.roles.cache.some(role =>
+			adminRoles.includes(role.id)
+		)
+		if (hasAdminRole) return false
+
+		return true
+	})
 
 	// Получаем все ветки из нужного канала
 	const parentChannel = await guild.channels.fetch(ARCHIVE_PARENT_ID)
@@ -79,7 +95,7 @@ async function updateArchivesList(guild) {
 						ch.name ===
 						[
 							'archive',
-							parsedDisplayName.memberName,
+							parsedDisplayName.memberName.toLowerCase(),
 							parsedDisplayName.memberStatic
 						].join(' ')
 				) || null
