@@ -17,6 +17,7 @@ const { initTelegramClient } = require('../services/telegramService')
 const {
 	updateUnansweredList
 } = require('../features/archive/archiveUnansweredList')
+const { updateArchivesList } = require('../features/archive/archivesList')
 require('dotenv').config()
 
 const MAJESTIC_BOT_ID = '6204267987'

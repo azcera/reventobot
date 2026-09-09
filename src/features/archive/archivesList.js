@@ -78,3 +78,5 @@ async function updateArchivesList(guild) {
 		await listsSend(guild, 2, container)
 	}
 }
+
+module.exports = { updateArchivesList }
