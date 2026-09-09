@@ -3,7 +3,8 @@ const {
 	ChannelType,
 	ContainerBuilder,
 	Component,
-	ContainerComponent
+	ContainerComponent,
+	MessageFlags
 } = require('discord.js')
 
 const adminChannelId = '1543180993786150992'
