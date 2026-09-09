@@ -150,7 +150,7 @@ async function updateArchivesList(guild) {
 				channelText = 'нет архива'
 			}
 
-			return `${index + 1}. <@${item.member.id}> ------→ ${channelText}`
+			return `${index + 1}. <@${item.member.id}> → ${channelText}`
 		})
 
 		const blockText = `## <@&${role.id}>\n${lines.join('\n')}`

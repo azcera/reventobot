@@ -37,8 +37,8 @@ module.exports = client => {
 
 		if (guild) {
 			try {
-				await updateUnansweredList(guild)
 				await updateArchivesList(guild)
+				await updateUnansweredList(guild)
 				console.log('✅ Успешное обновление списков.')
 			} catch (error) {
 				console.error(`❌ Ошибка при обновлении списков: `, error)
