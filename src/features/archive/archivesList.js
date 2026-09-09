@@ -6,7 +6,7 @@ const {
 	TextDisplayBuilder,
 	SeparatorBuilder
 } = require('discord.js')
-const { listsSend } = require('../../utils/listsSend')
+const { listsSend } = require('./listsSend')
 const { parseDisplayName } = require('../../utils/parseDisplayName')
 
 require('dotenv').config()
