@@ -7,10 +7,9 @@ const {
 	SeparatorBuilder,
 	MessageFlags
 } = require('discord.js')
+const { listsSend } = require('../../utils/listsSend')
 require('dotenv').config()
 
-const adminChannelId = '1543180993786150992'
-const adminPanelMessageId = '1545889525039898767'
 const ADMIN_ROLES = process.env.ADMIN_ROLES
 const archiveChannelId = process.env.PARENT_CHANNEL_ID
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000 // 7 дней в миллисекундах
@@ -101,40 +100,7 @@ async function updateUnansweredList(guild) {
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(stringList))
 
-	const adminChannel =
-		guild.channels.cache.get(adminChannelId) ||
-		(await guild.channels.fetch(adminChannelId))
-
-	if (!adminChannel || adminChannel?.type != ChannelType.GuildText) {
-		return console.error('❌ Неправильно настроен канал с панелью управления.')
-	}
-
-	const lastAdminMessage = (
-		await adminChannel.messages.fetch({ limit: 1 })
-	).first()
-
-	if (lastAdminMessage?.id === adminPanelMessageId) {
-		await adminChannel.send({
-			components: [container],
-			flags: [MessageFlags.IsComponentsV2]
-		})
-	} else {
-		const unansweredListMessageId = (
-			await adminChannel.messages.fetch({
-				limit: 1,
-				after: adminPanelMessageId
-			})
-		).first()
-
-		if (!unansweredListMessageId) {
-			return console.error('❌ Сообщение со списком неотвеченных не найдено.')
-		}
-
-		await unansweredListMessageId.edit({
-			components: [container],
-			flags: [MessageFlags.IsComponentsV2]
-		})
-	}
+	await listsSend(guild, 1, container)
 }
 
 module.exports = { updateUnansweredList }
