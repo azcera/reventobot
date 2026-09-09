@@ -86,23 +86,39 @@ async function updateArchivesList(guild) {
 
 		if (!role) continue
 
-		let stringList = ''
-		let index = 1
-
-		for (const item of groupings[key]) {
+		// Собираем все строки
+		const lines = groupings[key].map((item, index) => {
 			const channelText = item.archiveChannel
 				? `<#${item.archiveChannel.id}>`
 				: 'нет архива'
 
-			stringList += `${index}. <@${item.member.id}> -----> ${channelText}\n`
-			index++
+			return `${index + 1}. <@${item.member.id}> -----> ${channelText}`
+		})
+
+		// Разбиваем на куски по ~3800 символов (с запасом)
+		const chunks = []
+		let currentChunk = `## <@&${role.id}>:\n`
+
+		for (const line of lines) {
+			// +1 на перенос строки
+			if (currentChunk.length + line.length + 1 > 3800) {
+				chunks.push(currentChunk)
+				currentChunk = line + '\n'
+			} else {
+				currentChunk += line + '\n'
+			}
 		}
 
-		container
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(`## <@&${role.id}>:\n` + stringList)
-			)
-			.addSeparatorComponents(new SeparatorBuilder())
+		if (currentChunk.trim()) {
+			chunks.push(currentChunk)
+		}
+
+		// Добавляем каждый кусок отдельным TextDisplay
+		for (const chunk of chunks) {
+			container
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(chunk))
+				.addSeparatorComponents(new SeparatorBuilder())
+		}
 	}
 	await listsSend(guild, 2, container)
 }
