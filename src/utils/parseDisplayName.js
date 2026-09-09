@@ -8,15 +8,27 @@ function parseDisplayName(memberNickname) {
 		return null
 	}
 
-	let [memberName, memberStatic] = memberNickname.split('|')
+	// Берём только первые два куска (после второго | может быть "inactive" и т.п.)
+	const parts = memberNickname.split('|')
+	let memberName = parts[0].trim()
+	let memberStatic = parts[1].trim()
 
-	memberStatic = memberStatic.trim()
-	memberName = memberName.replace(/^\[.*\]\s+/g, '').trim()
-
-	// Дополнительная защита: если после split что-то пустое
-	if (!memberName || !memberStatic) {
+	// memberStatic должен быть строго числом
+	if (!/^\d+$/.test(memberStatic)) {
 		return null
 	}
+
+	// memberName:
+	// - только латиница, "/" и пробелы сразу слева/справа от "/"
+	// - обычные пробелы без "/" — запрещены
+	// - цифры, кириллица, спецсимволы — запрещены
+	const nameRegex = /^[A-Za-z]+(?:\s*\/\s*[A-Za-z]+)*$/
+	if (!nameRegex.test(memberName)) {
+		return null
+	}
+
+	// Нормализуем пробелы вокруг /
+	memberName = memberName.replace(/\s*\/\s*/g, ' / ')
 
 	return { memberName, memberStatic }
 }

@@ -94,7 +94,7 @@ async function updateArchivesList(guild) {
 						ch.name ===
 						[
 							'archive',
-							parsedDisplayName.memberName,
+							parsedDisplayName.memberName.toLowerCase(),
 							parsedDisplayName.memberStatic
 						].join(' ')
 				) || null
@@ -143,14 +143,14 @@ async function updateArchivesList(guild) {
 			let channelText
 
 			if (item.isInvalidNick) {
-				channelText = '`некорректный никнейм`'
+				channelText = 'некорректный никнейм'
 			} else if (item.archiveChannel) {
 				channelText = `<#${item.archiveChannel.id}>`
 			} else {
 				channelText = 'нет архива'
 			}
 
-			return `${index + 1}. <@${item.member.id}> → ${channelText}`
+			return `${index + 1}. <@${item.member.id}> ------→ ${channelText}`
 		})
 
 		const blockText = `## <@&${role.id}>\n${lines.join('\n')}`
