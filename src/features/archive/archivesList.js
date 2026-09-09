@@ -11,15 +11,23 @@ const { parseDisplayName } = require('../../utils/parseDisplayName')
 
 require('dotenv').config()
 
-const rolesToGroup = process.env.ARCHIVE_GROUP_ROLES.split(',')
+const rolesToGroup = (process.env.ARCHIVE_GROUP_ROLES || '')
+	.split(',')
+	.map(id => id.trim())
+	.filter(Boolean)
+
 const autoRoleId = process.env.AUTO_ROLE
 
 /**
  * Обновляет сообщение со списком всех участников и их архивов
- *
  * @param {Guild} guild
  */
 async function updateArchivesList(guild) {
+	if (!rolesToGroup.length || !autoRoleId) {
+		console.error('❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в .env')
+		return
+	}
+
 	await guild.members.fetch()
 
 	/**
@@ -47,6 +55,8 @@ async function updateArchivesList(guild) {
 			rolesToGroup.includes(role.id)
 		)
 
+		if (!highestMatchingRole) return
+
 		const parsedDisplayName = parseDisplayName(member.displayName)
 
 		let archiveChannel = guildChannels.find(
@@ -61,23 +71,16 @@ async function updateArchivesList(guild) {
 
 		if (!archiveChannel) archiveChannel = null
 
-		const archiveMember = {
+		groupings[highestMatchingRole.id].push({
 			member,
 			archiveChannel
-		}
-
-		if (highestMatchingRole) {
-			groupings[highestMatchingRole.id].push(archiveMember)
-		}
+		})
 	})
 
-	const container = new ContainerBuilder()
-		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent('# 👥 Список участников и их архивов')
-		)
-		.addSeparatorComponents(new SeparatorBuilder())
+	const MAX_TOTAL_TEXT = 3800
 
-	const MAX_TEXT_LENGTH = 3800 // с запасом
+	// Собираем блоки по ролям
+	const blocks = []
 
 	for (const key of Object.keys(groupings)) {
 		if (!groupings[key].length) continue
@@ -88,51 +91,51 @@ async function updateArchivesList(guild) {
 
 		if (!role) continue
 
-		// Собираем строки
 		const lines = groupings[key].map((item, index) => {
 			const channelText = item.archiveChannel
 				? `<#${item.archiveChannel.id}>`
 				: 'нет архива'
 
-			return `${index + 1}. <@${item.member.id}> -----> ${channelText}`
+			return `${index + 1}. <@${item.member.id}> → ${channelText}`
 		})
 
-		// Первый кусок начинается с заголовка роли
-		let currentChunk = `## <@&${role.id}>:\n`
-
-		for (const line of lines) {
-			const lineWithNewline = line + '\n'
-
-			if (currentChunk.length + lineWithNewline.length > MAX_TEXT_LENGTH) {
-				// Отправляем текущий кусок
-				container.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(currentChunk)
-				)
-				container.addSeparatorComponents(new SeparatorBuilder())
-
-				// Начинаем новый кусок без заголовка роли
-				currentChunk = lineWithNewline
-			} else {
-				currentChunk += lineWithNewline
-			}
-		}
-
-		// Добавляем последний кусок
-		if (currentChunk.trim().length > 0) {
-			container.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(currentChunk)
-			)
-			container.addSeparatorComponents(new SeparatorBuilder())
-		}
+		const blockText = `## <@&${role.id}>\n${lines.join('\n')}`
+		blocks.push(blockText)
 	}
 
-	// Проверяем перед отправкой (для отладки)
-	console.log(
-		'Количество компонентов в контейнере:',
-		container.components?.length ?? 'неизвестно'
-	)
+	// Разбиваем на несколько сообщений, если текст не влезает в 4000
+	let currentContainer = new ContainerBuilder()
+		.addTextDisplayComponents(
+			new TextDisplayBuilder().setContent('# 👥 Список участников и их архивов')
+		)
+		.addSeparatorComponents(new SeparatorBuilder())
 
-	await listsSend(guild, 2, container)
+	let currentLength = 60 // примерно заголовок
+	let messageIndex = 2
+
+	const flush = async () => {
+		await listsSend(guild, messageIndex, currentContainer)
+		messageIndex++
+		currentContainer = new ContainerBuilder()
+		currentLength = 0
+	}
+
+	for (const block of blocks) {
+		if (currentLength + block.length > MAX_TOTAL_TEXT) {
+			await flush()
+		}
+
+		currentContainer
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(block))
+			.addSeparatorComponents(new SeparatorBuilder())
+
+		currentLength += block.length
+	}
+
+	// Отправляем последний контейнер
+	if (currentLength > 0 || messageIndex === 2) {
+		await listsSend(guild, messageIndex, currentContainer)
+	}
 }
 
 module.exports = { updateArchivesList }
