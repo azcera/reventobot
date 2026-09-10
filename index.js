@@ -62,6 +62,31 @@ app.get('/', (req, res) => {
 	res.sendFile(path.join(__dirname, 'public', 'index.html'))
 })
 
+// API: информация о канале по ID (для подсказки названия в UI)
+app.get('/api/channel-info', async (req, res) => {
+	try {
+		const channelId = (req.query.id || '').trim()
+		if (!channelId || !/^\d{17,20}$/.test(channelId)) {
+			return res.status(400).json({ success: false, error: 'Некорректный ID' })
+		}
+
+		const channel = await client.channels.fetch(channelId).catch(() => null)
+		if (!channel) {
+			return res.status(404).json({
+				success: false,
+				error: 'Канал не найден или нет доступа'
+			})
+		}
+
+		const name = channel.name || channel.id
+		const type = channel.type
+		res.json({ success: true, name, type, id: channel.id })
+	} catch (err) {
+		console.error('Ошибка /api/channel-info:', err)
+		res.status(500).json({ success: false, error: err.message })
+	}
+})
+
 // API endpoint для отправки контейнеров с веб-интерфейса
 app.post('/api/send-container', async (req, res) => {
 	try {

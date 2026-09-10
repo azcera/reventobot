@@ -6,8 +6,8 @@ const {
 	SectionBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	MediaGalleryBuilder, // Добавлено для изображений v2
-	MediaGalleryItemBuilder, // Добавлено для изображений v2
+	MediaGalleryBuilder,
+	MediaGalleryItemBuilder,
 	MessageFlags
 } = require('discord.js')
 
@@ -35,16 +35,23 @@ function buildWebContainer(data) {
 			}
 		} else if (item.type === 'separator') {
 			const sep = new SeparatorBuilder()
-			if (item.large) {
-				sep.setSpacing(SeparatorSpacingSize.Large)
-				sep.setDivider(false) // Делаем прозрачный отступ без линии
-			} else {
-				sep.setSpacing(SeparatorSpacingSize.Small)
-				sep.setDivider(true) // Обычный тонкий разделитель
+			// spacing: 'large' | 'small' (legacy: item.large === true)
+			const isLarge =
+				item.spacing === 'large' ||
+				(item.spacing == null && item.large === true)
+			sep.setSpacing(
+				isLarge ? SeparatorSpacingSize.Large : SeparatorSpacingSize.Small
+			)
+			// divider: boolean, default true (legacy large=true означало divider=false)
+			let showDivider = true
+			if (typeof item.divider === 'boolean') {
+				showDivider = item.divider
+			} else if (item.large === true) {
+				showDivider = false
 			}
+			sep.setDivider(showDivider)
 			container.addSeparatorComponents(sep)
 		} else if (item.type === 'image') {
-			// ОБРАБОТКА ИЗОБРАЖЕНИЙ ПО URL ССЫЛКЕ
 			if (item.value) {
 				const mediaItem = new MediaGalleryItemBuilder().setURL(item.value)
 				const gallery = new MediaGalleryBuilder().addItems(mediaItem)

@@ -14,11 +14,18 @@
 			<h2>Конструктор контейнеров v2</h2>
 
 			<label for="channelId">ID Текстового канала Discord:</label>
-			<input
-				type="text"
-				id="channelId"
-				placeholder="Вставьте ID канала, куда бот отправит сообщение..."
-			/>
+			<div class="channel-id-wrap">
+				<input
+					type="text"
+					id="channelId"
+					placeholder="Вставьте ID канала, куда бот отправит сообщение..."
+					autocomplete="off"
+				/>
+				<div
+					id="channelNameHint"
+					class="channel-name-hint"
+				></div>
+			</div>
 
 			<div class="color-section">
 				<div style="display: flex; flex-direction: column; gap: 8px">
