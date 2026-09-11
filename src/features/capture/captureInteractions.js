@@ -119,7 +119,6 @@ async function handleAutoCaptButton(interaction) {
 		})
 	}
 
-	// customId формат: capt_Enemy-Faction_DD-MM-YYYY-HH-MM
 	const customId = interaction.customId
 	const parts = customId.split('_')
 
@@ -162,9 +161,7 @@ async function handleAutoCaptButton(interaction) {
 	const discordTimestamp = getDiscordTimestamp(parsedDate)
 	const maxMain = 20
 
-	await sendEphemeralWithAutoDelete(interaction, {
-		content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`
-	})
+	await interaction.deferReply({ ephemeral: true })
 
 	try {
 		await captureManager.sendCollection(
@@ -173,8 +170,23 @@ async function handleAutoCaptButton(interaction) {
 			`капт против ${target}`,
 			maxMain
 		)
+
+		await interaction.editReply({
+			content: `✅ Капт против **${target}** успешно создан автоматически! Время начала: ${discordTimestamp}`
+		})
+
+		setTimeout(async () => {
+			try {
+				await interaction.deleteReply()
+			} catch (e) {}
+		}, 5000)
 	} catch (error) {
 		console.error('❌ Ошибка при отправке автоматического набора:', error)
+
+		await interaction.editReply({
+			content:
+				'❌ Произошла ошибка при сохранении набора в базу данных. Попробуйте позже.'
+		})
 	}
 }
 
