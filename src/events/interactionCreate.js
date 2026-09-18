@@ -23,7 +23,7 @@ module.exports = client => {
 				console.error(error)
 				const payload = {
 					content: 'Произошла ошибка при запуске команды!',
-					flags: MessageFlags.Ephemeral
+					flags: [MessageFlags.Ephemeral]
 				}
 				if (interaction.replied || interaction.deferred) {
 					await interaction.followUp(payload)
