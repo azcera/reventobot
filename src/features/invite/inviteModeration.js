@@ -31,8 +31,6 @@ async function handleModerationButton(interaction) {
 	}
 
 	const [_, actionType, targetUserId] = interaction.customId.split('_')
-	const allRows = await db.query(`SELECT * FROM family_applications`)
-	console.log(`Колличество записей в БД: ${allRows?.rowCount}`)
 
 	const res = await db.query(
 		`SELECT * FROM family_applications WHERE user_id = $1`,
