@@ -5,102 +5,100 @@ const {
 	ChannelType,
 	PermissionFlagsBits,
 	SeparatorBuilder,
-	MessageFlags
-} = require('discord.js')
-const { listsSend } = require('./listsSend')
-require('dotenv').config()
+	MessageFlags,
+} = require("discord.js");
+const { listsSend } = require("./listsSend");
+require("dotenv").config();
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES
-const archiveChannelId = process.env.PARENT_CHANNEL_ID
-const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000 // 7 дней в миллисекундах
+const ADMIN_ROLES = process.env.ADMIN_ROLES;
+const archiveChannelId = process.env.PARENT_CHANNEL_ID;
+const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000; // 7 дней в миллисекундах
 
 /**
  * Функция определяющая список неотвеченных архивов
  *
  * @param {Guild} guild
- * @returns {Promise<void>}
  */
-async function updateUnansweredList(guild) {
+async function getUnansweredList(guild) {
 	/**
 	 * Список архивов без ответа
 	 *
 	 * @type {{id: number, name: string}[]}
 	 */
-	let unansweredList = []
+	let unansweredList = [];
 
 	let archiveChannel =
 		guild.channels.cache.get(archiveChannelId) ||
-		(await guild.channels.fetch(archiveChannelId))
+		(await guild.channels.fetch(archiveChannelId));
 
 	if (!archiveChannel || archiveChannel?.type != ChannelType.GuildText) {
-		return console.error('❌ Неправильно настроен канал с архивами.')
+		return console.error("❌ Неправильно настроен канал с архивами.");
 	}
 
-	const { threads } = await archiveChannel.threads.fetchActive(true)
+	const { threads } = await archiveChannel.threads.fetchActive(true);
 
 	for (const [_, thread] of archiveChannel.threads.cache) {
 		try {
-			const messages = await thread.messages.fetch({ limit: 1 })
-			const lastMessage = messages.first()
+			const messages = await thread.messages.fetch({ limit: 1 });
+			const lastMessage = messages.first();
 
-			if (!lastMessage) continue
+			if (!lastMessage) continue;
 
-			const messageAge = Date.now() - lastMessage.createdTimestamp
-			if (messageAge > SEVEN_DAYS) continue
+			const messageAge = Date.now() - lastMessage.createdTimestamp;
+			if (messageAge > SEVEN_DAYS) continue;
 
 			const author =
 				lastMessage.member ??
 				(await thread.guild.members
 					.fetch(lastMessage.author.id)
-					.catch(() => null))
-			if (!author) continue
+					.catch(() => null));
+			if (!author) continue;
 
-			const hasUserMention = lastMessage.mentions.users.size > 0
-			const hasRoleMention = lastMessage.mentions.roles.size > 0
-			const hasEveryone = lastMessage.mentions.everyone
+			const hasUserMention = lastMessage.mentions.users.size > 0;
+			const hasRoleMention = lastMessage.mentions.roles.size > 0;
+			const hasEveryone = lastMessage.mentions.everyone;
 
-			const hasAnyMention = hasUserMention || hasRoleMention || hasEveryone
+			const hasAnyMention = hasUserMention || hasRoleMention || hasEveryone;
 			const hasAdminRole =
 				author.permissions.has(PermissionFlagsBits.Administrator) ||
-				author.roles.cache.some(role => ADMIN_ROLES.includes(role.id))
+				author.roles.cache.some((role) => ADMIN_ROLES.includes(role.id));
 
 			if ((!lastMessage.author.bot && hasAnyMention) || !hasAdminRole) {
 				// условие при котором канал считается непрочитанным
 				unansweredList.push({
 					id: thread.id,
-					name: thread.name
-				})
+					name: thread.name,
+				});
 			}
 		} catch (err) {
-			console.error(`❌ Ошибка при обработке ветки ${thread.id}:`, err.message)
+			console.error(`❌ Ошибка при обработке ветки ${thread.id}:`, err.message);
 		}
 	}
 
-	const container = new ContainerBuilder()
+	const container = new ContainerBuilder();
 
 	container.addTextDisplayComponents(
-		new TextDisplayBuilder().setContent('# 🙊 Список неотвеченных архивов')
-	)
+		new TextDisplayBuilder().setContent("# 🙊 Список неотвеченных архивов"),
+	);
 
-	let stringList = ''
+	let stringList = "";
 	if (unansweredList.length === 0) {
-		stringList = 'Нет непрочитанных архивов.'
+		stringList = "Нет непрочитанных архивов.";
 	} else {
 		unansweredList.sort((a, b) => {
-			const numA = Number(String(a.name).match(/(\d+)\s*$/)?.[1] ?? 0)
-			const numB = Number(String(b.name).match(/(\d+)\s*$/)?.[1] ?? 0)
-			return numA - numB
-		})
+			const numA = Number(String(a.name).match(/(\d+)\s*$/)?.[1] ?? 0);
+			const numB = Number(String(b.name).match(/(\d+)\s*$/)?.[1] ?? 0);
+			return numA - numB;
+		});
 		unansweredList.forEach(
-			(thread, index) => (stringList += `${index + 1}. <#${thread.id}>\n`)
-		)
+			(thread, index) => (stringList += `${index + 1}. <#${thread.id}>\n`),
+		);
 	}
 
 	container
 		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(stringList))
-
-	await listsSend(guild, '# 🙊 Список неотвеченных архивов', container)
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(stringList));
+	return container;
 }
 
-module.exports = { updateUnansweredList }
+module.exports = { getUnansweredList };
