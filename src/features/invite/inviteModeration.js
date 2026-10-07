@@ -24,24 +24,32 @@ const {
 } = require('../../features/invite/inviteUtils.js')
 
 async function handleModerationButton(interaction) {
-	console.log('Кастомный ID кнопки:', interaction.customId)
-	const parsed = interaction.customId.split('_')
-	console.log('Разделённый массив:', parsed)
-
 	if (!isApplicationMod(interaction.member)) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: '❌ У вас нет прав для управления заявками!'
 		})
 	}
 
-	const [, actionType, targetUserId] = interaction.customId.split('_')
+	const parts = interaction.customId.split('_')
+	const targetUserId = parts[parts.length - 1]
+
+	let actionType = null
+	if (parts.includes('accept')) actionType = 'accept'
+	if (parts.includes('reject')) actionType = 'reject'
+	if (parts.includes('interview')) actionType = 'interview'
+
+	console.log(
+		`[Moderation] Нажата кнопка/модалка: ${interaction.customId} | Действие: ${actionType} | Юзер: ${targetUserId}`
+	)
+
 	const res = await db.query(
-		'SELECT * FROM family_applications WHERE user_id = $1',
+		'SELECT * FROM family_applications WHERE user_id = \$1',
 		[targetUserId]
 	)
+
 	if (res.rows.length === 0) {
 		return await sendEphemeralWithAutoDelete(interaction, {
-			content: '❌ Данные о заявке не найдены.'
+			content: `❌ Данные о заявке пользователя <@${targetUserId}> не найдены в базе данных.`
 		})
 	}
 	const appData = res.rows[0]
