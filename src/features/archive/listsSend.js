@@ -40,7 +40,7 @@ async function listsSend(guild) {
 	let containers = await getArchivesLists(guild);
 
 	containers.push(await getUnansweredList(guild));
-	for (const container in containers) {
+	for (const container of containers) {
 		const messageData = {
 			components: [container],
 			flags: [MessageFlags.IsComponentsV2],
