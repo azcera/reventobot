@@ -43,8 +43,8 @@ async function handleModerationButton(interaction) {
 	)
 
 	const res = await db.query(
-		'SELECT * FROM family_applications WHERE user_id = \$1',
-		[targetUserId]
+		'SELECT * FROM family_applications WHERE TRIM(user_id) = $1',
+		[targetUserId.trim()]
 	)
 
 	if (res.rows.length === 0) {
