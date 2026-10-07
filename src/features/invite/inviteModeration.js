@@ -24,6 +24,10 @@ const {
 } = require('../../features/invite/inviteUtils.js')
 
 async function handleModerationButton(interaction) {
+	console.log('Кастомный ID кнопки:', interaction.customId)
+	const parsed = interaction.customId.split('_')
+	console.log('Разделённый массив:', parsed)
+
 	if (!isApplicationMod(interaction.member)) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: '❌ У вас нет прав для управления заявками!'
