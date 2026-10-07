@@ -10,18 +10,20 @@ function parseDisplayName(memberNickname) {
 
 	const parts = memberNickname.split('|')
 	let memberName = parts[0].trim()
-	let memberStatic = parts[1].trim()
+	let memberStaticRaw = parts[1].trim() // Здесь сейчас "289229 / inactive"
 
-	// memberStatic — строго только цифры
-	if (!/^\d+$/.test(memberStatic)) {
+	// Извлекаем только первые цифры из правой части (до пробела или слэша)
+	const staticMatch = memberStaticRaw.match(/^(\d+)/)
+	if (!staticMatch) {
 		return null
 	}
+	const memberStatic = staticMatch[1]
 
 	// Убираем префикс вида [что угодно] (включая юникод)
 	memberName = memberName.replace(/^\[.*?\]\s*/, '').trim()
 
-	// memberName: только латиница + опционально " / " между словами
-	const nameRegex = /^[A-Za-z]+(?:\s*\/\s*[A-Za-z]+)*$/
+	// Разрешаем латиницу, символ @ и опционально " / " между словами
+	const nameRegex = /^[A-Za-z]+(?:\s*\/\s*[@A-Za-z]+)*$/
 	if (!nameRegex.test(memberName)) {
 		return null
 	}
