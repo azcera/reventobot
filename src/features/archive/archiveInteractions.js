@@ -1,5 +1,5 @@
 const { MessageFlags } = require('discord.js')
-const { createChannel } = require('../../utils/channelUtils')
+const { createArchiveChannel } = require('../../utils/channelUtils')
 const { replyWithAutoDelete } = require('../../utils/autoDelete')
 
 /**
@@ -17,7 +17,7 @@ async function cancelArchive(interaction) {
 
 /**
  * Обрабатывает кнопки create_ / cancel_create_ для создания архив-канала.
- * Парсит userId и имя канала из customId, вызывает createChannel.
+ * Парсит userId и имя канала из customId, вызывает createArchiveChannel.
  * @param {ButtonInteraction} interaction
  */
 async function handleDynamicButtons(interaction) {
@@ -68,7 +68,7 @@ async function handleDynamicButtons(interaction) {
 
 		await interaction.message.delete().catch(() => {})
 
-		return await createChannel(interaction, {
+		return await createArchiveChannel(interaction, {
 			channelName: cleanedChannelName,
 			member
 		})

@@ -44,6 +44,16 @@ const initDb = async () => {
             );
         `)
 
+		// types: unanswered, all
+		await pool.query(`
+            CREATE TABLE IF NOT EXISTS settings_archive_messages (
+                message_id TEXT PRIMARY KEY,
+                discord_timestamp TEXT,
+                type TEXT, 
+                part INTEGER DEFAULT 1
+            );
+        `)
+
 		console.log('✅ Все таблицы БД успешно проверены и инициализированы.')
 	} catch (err) {
 		console.error('❌ Критическая ошибка при инициализации таблиц БД:', err)

@@ -12,7 +12,10 @@ const parentChannelId = process.env.PARENT_CHANNEL_ID
  * @param {{channelName: string, member: GuildMember}}
  * @returns {Promise<ThreadChannel>}
  */
-async function createChannel(interactionOrGuild, { channelName, member }) {
+async function createArchiveChannel(
+	interactionOrGuild,
+	{ channelName, member }
+) {
 	const guild = interactionOrGuild.guild || interactionOrGuild
 	const isInteraction = !!interactionOrGuild.reply
 
@@ -89,4 +92,4 @@ async function createChannel(interactionOrGuild, { channelName, member }) {
 	return newThread
 }
 
-module.exports = { createChannel }
+module.exports = { createArchiveChannel }

@@ -1,18 +1,18 @@
-const { Message, Events, Client, PermissionFlagsBits } = require("discord.js");
-const { listsSend } = require("../features/archive/listsSend");
+const { Message, Events, Client, PermissionFlagsBits } = require('discord.js')
+const { updateLists } = require('../features/archive/updateLists')
 
-require("dotenv").config();
+require('dotenv').config()
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES;
-const PARENT_CHANNEL_ID = process.env.PARENT_CHANNEL_ID;
+const ADMIN_ROLES = process.env.ADMIN_ROLES
+const PARENT_CHANNEL_ID = process.env.PARENT_CHANNEL_ID
 
 /**
  * Обработчик удаления сообщений
  * @param {Client} client
  */
-module.exports = (client) => {
-	client.on(Events.MessageDelete, async (message) => {
-		if (message.author.bot) return;
+module.exports = client => {
+	client.on(Events.MessageDelete, async message => {
+		if (message.author.bot) return
 
 		if (
 			message.channel.isThread() &&
@@ -22,22 +22,22 @@ module.exports = (client) => {
 				message.member ||
 				(await message.guild?.members
 					.fetch(message.author.id)
-					.catch(() => null));
+					.catch(() => null))
 
 			const authorHasAdminRole =
 				member.permissions.has(PermissionFlagsBits.Administrator) ||
-				member.roles.cache.some((role) => ADMIN_ROLES.includes(role.id));
+				member.roles.cache.some(role => ADMIN_ROLES.includes(role.id))
 
-			const messageHasUserMention = message.mentions.users.size > 0;
-			const messageHasRoleMention = message.mentions.roles.size > 0;
-			const messageHasEveryone = message.mentions.everyone;
+			const messageHasUserMention = message.mentions.users.size > 0
+			const messageHasRoleMention = message.mentions.roles.size > 0
+			const messageHasEveryone = message.mentions.everyone
 
 			const hasAnyMention =
-				messageHasUserMention || messageHasRoleMention || messageHasEveryone;
+				messageHasUserMention || messageHasRoleMention || messageHasEveryone
 
 			if ((!message.author.bot && hasAnyMention) || !authorHasAdminRole) {
-				await listsSend(message.guild);
+				await updateLists(message.guild)
 			}
 		}
-	});
-};
+	})
+}

@@ -4,107 +4,106 @@ const {
 	GuildChannel,
 	ContainerBuilder,
 	TextDisplayBuilder,
-	SeparatorBuilder,
-} = require("discord.js");
-const { listsSend } = require("./listsSend");
-const { parseDisplayName } = require("../../utils/parseDisplayName");
+	SeparatorBuilder
+} = require('discord.js')
+const { parseDisplayName } = require('../../utils/parseDisplayName')
 
-require("dotenv").config();
+require('dotenv').config()
 
-const rolesToGroup = (process.env.ARCHIVE_GROUP_ROLES || "")
-	.split(",")
-	.map((id) => id.trim())
-	.filter(Boolean);
+const rolesToGroup = (process.env.ARCHIVE_GROUP_ROLES || '')
+	.split(',')
+	.map(id => id.trim())
+	.filter(Boolean)
 
-const autoRoleId = process.env.AUTO_ROLE;
+const autoRoleId = process.env.AUTO_ROLE
 
-const adminRoles = (process.env.ADMIN_ROLES || "")
-	.split(",")
-	.map((id) => id.trim())
-	.filter(Boolean);
+const adminRoles = (process.env.ADMIN_ROLES || '')
+	.split(',')
+	.map(id => id.trim())
+	.filter(Boolean)
 
-const ARCHIVE_PARENT_ID = "1542628698669453322";
+const ARCHIVE_PARENT_ID = process.env.PARENT_CHANNEL_ID
 
 /**
- * Обновляет сообщение со списком всех участников и их архивов
+ * Создает сообщение со списком всех участников и их архивов
  * @param {Guild} guild
  */
 async function getArchivesLists(guild) {
 	if (!rolesToGroup.length || !autoRoleId) {
-		console.error("❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в .env");
-		return;
+		console.error('❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в .env')
+		return
 	}
 
-	await guild.members.fetch();
+	await guild.members.fetch()
 
 	/**
 	 * @type {Object.<string, Array<{member: GuildMember, archiveChannel: GuildChannel|null, staticId: number, hasValidArchive: boolean, isInvalidNick: boolean}>>}
 	 */
-	const groupings = {};
-	rolesToGroup.forEach((roleId) => {
-		groupings[roleId] = [];
-	});
+	const groupings = {}
+	rolesToGroup.forEach(roleId => {
+		groupings[roleId] = []
+	})
 
-	const filteredMembers = guild.members.cache.filter((member) => {
-		if (member.user.bot) return false;
-		if (!member.roles.cache.has(autoRoleId)) return false;
+	const filteredMembers = guild.members.cache.filter(member => {
+		if (member.user.bot) return false
+		if (!member.roles.cache.has(autoRoleId)) return false
 
 		// Исключаем админов
-		if (member.roles.cache.some((role) => adminRoles.includes(role.id))) {
-			return false;
+		if (member.roles.cache.some(role => adminRoles.includes(role.id))) {
+			return false
 		}
 
-		return true;
-	});
+		return true
+	})
 
 	// Получаем все ветки из канала с архивами
-	const parentChannel = await guild.channels.fetch(ARCHIVE_PARENT_ID);
+	const parentChannel = await guild.channels.fetch(ARCHIVE_PARENT_ID)
 	if (!parentChannel || !parentChannel.threads) {
-		console.error("❌ Не найден канал с архивами");
-		return;
+		console.error('❌ Не найден канал с архивами')
+		return
 	}
 
-	const active = await parentChannel.threads.fetchActive();
-	const archived = await parentChannel.threads.fetchArchived({ limit: 100 });
+	const active = await parentChannel.threads.fetchActive()
+	const archived = await parentChannel.threads.fetchArchived({ limit: 100 })
 
-	const guildChannels = new Map([...active.threads, ...archived.threads]);
+	const guildChannels = new Map([...active.threads, ...archived.threads])
 
-	filteredMembers.forEach((member) => {
+	filteredMembers.forEach(member => {
 		const sortedMemberRoles = member.roles.cache.sort(
-			(a, b) => b.position - a.position,
-		);
+			(a, b) => b.position - a.position
+		)
 
-		const highestMatchingRole = sortedMemberRoles.find((role) =>
-			rolesToGroup.includes(role.id),
-		);
+		const highestMatchingRole = sortedMemberRoles.find(role =>
+			rolesToGroup.includes(role.id)
+		)
 
-		if (!highestMatchingRole) return;
+		if (!highestMatchingRole) return
 
-		const parsedDisplayName = parseDisplayName(member.displayName);
+		const parsedDisplayName = parseDisplayName(member.displayName)
 
-		let archiveChannel = null;
-		let staticId = Infinity;
-		let hasValidArchive = false;
-		let isInvalidNick = !parsedDisplayName || !parsedDisplayName.memberName;
+		let archiveChannel = null
+		let staticId = Infinity
+		let hasValidArchive = false
+		let isInvalidNick = !parsedDisplayName || !parsedDisplayName.memberName
 
 		if (!isInvalidNick) {
 			archiveChannel =
 				[...guildChannels.values()].find(
-					(ch) =>
+					ch =>
 						ch.name ===
 						[
-							"archive",
+							'archive',
 							parsedDisplayName.memberName.toLowerCase(),
-							parsedDisplayName.memberStatic,
-						].join(" "),
-				) || null;
+							parsedDisplayName.memberStatic
+						].join(' ')
+				) || null
 
 			if (archiveChannel) {
-				hasValidArchive = true;
-				const match = archiveChannel.name.match(/(\d+)\s*$/);
-				staticId = match ? Number(match[1]) : Infinity;
+				hasValidArchive = true
+				const match = archiveChannel.name.match(/(\d+)\s*$/)
+				staticId = match ? Number(match[1]) : Infinity
 			} else if (parsedDisplayName.memberStatic) {
-				staticId = Number(parsedDisplayName.memberStatic) || Infinity;
+				staticId = Number(parsedDisplayName.memberStatic) || Infinity
 			}
 		}
 
@@ -113,89 +112,90 @@ async function getArchivesLists(guild) {
 			archiveChannel,
 			staticId,
 			hasValidArchive,
-			isInvalidNick,
-		});
-	});
+			isInvalidNick
+		})
+	})
 
-	const MAX_TOTAL_TEXT = 3800;
-	const blocks = [];
+	const MAX_TOTAL_TEXT = 3800
+	const blocks = []
 
 	for (const key of Object.keys(groupings)) {
-		if (!groupings[key].length) continue;
+		if (!groupings[key].length) continue
 
 		const role =
 			guild.roles.cache.get(key) ||
-			(await guild.roles.fetch(key).catch(() => null));
+			(await guild.roles.fetch(key).catch(() => null))
 
-		if (!role) continue;
+		if (!role) continue
 
 		// Сортировка: сначала с валидным архивом по staticId, потом остальные
 		const sortedItems = groupings[key].sort((a, b) => {
 			if (a.hasValidArchive && b.hasValidArchive) {
-				return a.staticId - b.staticId;
+				return a.staticId - b.staticId
 			}
-			if (a.hasValidArchive) return -1;
-			if (b.hasValidArchive) return 1;
-			return a.staticId - b.staticId;
-		});
+			if (a.hasValidArchive) return -1
+			if (b.hasValidArchive) return 1
+			return a.staticId - b.staticId
+		})
 
 		const lines = sortedItems.map((item, index) => {
-			let channelText;
+			let channelText
 
 			if (item.isInvalidNick) {
-				channelText = "некорректный никнейм";
+				channelText = 'некорректный никнейм'
 			} else if (item.archiveChannel) {
-				channelText = `<#${item.archiveChannel.id}>`;
+				channelText = `<#${item.archiveChannel.id}>`
 			} else {
-				channelText = "нет архива";
+				channelText = 'нет архива'
 			}
 
-			return `${index + 1}. <@${item.member.id}> → ${channelText}`;
-		});
+			return `${index + 1}. <@${item.member.id}> → ${channelText}`
+		})
 
-		const blockText = `## <@&${role.id}>\n${lines.join("\n")}`;
-		blocks.push(blockText);
+		const blockText = `## <@&${role.id}>\n${lines.join('\n')}`
+		blocks.push(blockText)
 	}
 
 	// Собираем части
-	const parts = [];
+	const parts = []
 
 	let currentContainer = new ContainerBuilder()
 		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent(
-				"# 👥 Список участников и их архивов",
-			),
+			new TextDisplayBuilder().setContent('# 👥 Список участников и их архивов')
 		)
-		.addSeparatorComponents(new SeparatorBuilder());
+		.addSeparatorComponents(new SeparatorBuilder())
 
-	let currentLength = 60;
+	let currentLength = 60
 
 	for (const block of blocks) {
 		if (currentLength + block.length > MAX_TOTAL_TEXT) {
-			parts.push(currentContainer);
+			parts.push(currentContainer)
 
 			currentContainer = new ContainerBuilder()
 				.addTextDisplayComponents(
 					new TextDisplayBuilder().setContent(
-						`# 👥 Список участников и их архивов (часть ${parts.length + 1})`,
-					),
+						`# 👥 Список участников и их архивов (часть ${parts.length + 1})`
+					)
 				)
-				.addSeparatorComponents(new SeparatorBuilder());
+				.addSeparatorComponents(new SeparatorBuilder())
 
-			currentLength = 60;
+			currentLength = 60
 		}
 
 		currentContainer
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(block))
-			.addSeparatorComponents(new SeparatorBuilder());
+			.addSeparatorComponents(new SeparatorBuilder())
 
-		currentLength += block.length;
+		currentLength += block.length
 	}
 
 	// Добавляем последнюю часть
-	parts.push(currentContainer);
+	parts.push(currentContainer)
 
-	return parts;
+	return {
+		parts,
+		count: parts.length
+	}
 }
 
-module.exports = { getArchivesLists };
+module.exports = { getArchivesLists }
