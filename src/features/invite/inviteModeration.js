@@ -30,20 +30,12 @@ async function handleModerationButton(interaction) {
 		})
 	}
 
-	const parts = interaction.customId.split('_')
-	const targetUserId = parts[parts.length - 1]
-
-	let actionType = null
-	if (parts.includes('accept')) actionType = 'accept'
-	if (parts.includes('reject')) actionType = 'reject'
-	if (parts.includes('interview')) actionType = 'interview'
-
-	console.log(
-		`[Moderation] Нажата кнопка/модалка: ${interaction.customId} | Действие: ${actionType} | Юзер: ${targetUserId}`
-	)
+	const [_, actionType, targetUserId] = interaction.customId.split('_')
+	const allRows = await db.query(`SELECT * FROM family_applications`)
+	console.log(`Колличество записей в БД: ${allRows?.rowCount}`)
 
 	const res = await db.query(
-		'SELECT * FROM family_applications WHERE TRIM(user_id) = $1',
+		`SELECT * FROM family_applications WHERE user_id = $1`,
 		[targetUserId.trim()]
 	)
 
