@@ -139,7 +139,13 @@ class InviteCandidate {
 				})
 		}
 
-		const fullName = `${values.invite_name} | ${values.invite_static}`
+		/**
+		 * @type {string}
+		 */
+		const name = values.invite_name
+		const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1)
+
+		const fullName = `${capitalizedName} | ${values.invite_static}`
 		const age = parseInt(values.invite_age)
 
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
