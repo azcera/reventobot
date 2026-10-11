@@ -1,17 +1,17 @@
 const { Pool } = require('pg')
 
+delete process.env.PGHOST
+delete process.env.PGUSER
+delete process.env.PGPASSWORD
+delete process.env.PGDATABASE
+delete process.env.PGPORT
+
 const pool = new Pool({
 	connectionString: process.env.DEV_DATABASE_URL ?? process.env.DATABASE_URL,
 	ssl: { rejectUnauthorized: false },
 	max: 20,
 	idleTimeoutMillis: 30000,
-	connectionTimeoutMillis: 10000,
-
-	host: undefined,
-	user: undefined,
-	password: undefined,
-	database: undefined,
-	port: undefined
+	connectionTimeoutMillis: 10000
 })
 
 pool.on('error', err => {
