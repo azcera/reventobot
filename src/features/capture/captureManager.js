@@ -260,6 +260,8 @@ async function handleButton(interaction) {
 	)
 		return
 
+	await interaction.deferUpdate().catch(() => {})
+
 	const messageId = interaction.message.id
 	const userId = interaction.user.id
 
@@ -368,13 +370,13 @@ async function handleButton(interaction) {
 			target,
 			maxMain
 		)
-		await interaction.update(updatedMessageData)
+		await interaction.editReply(updatedMessageData)
 	} catch (err) {
 		await client.query('ROLLBACK').catch(() => {})
 		console.error('Ошибка при обработке кнопки капта:', err)
 		if (!interaction.replied && !interaction.deferred) {
 			return interaction
-				.reply({
+				.followUp({
 					content: '❌ Произошла ошибка базы данных при сохранении.',
 					flags: [MessageFlags.Ephemeral]
 				})
