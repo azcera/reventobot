@@ -2,6 +2,7 @@ const { MessageFlags, ChannelType } = require('discord.js')
 const {
 	getNavigationContainer
 } = require('../commands/admin/navigationBuilder')
+const { editReplyWithAutoDelete, replyWithAutoDelete } = require('./autoDelete')
 require('dotenv').config()
 const parentChannelId = process.env.PARENT_CHANNEL_ID
 
@@ -28,9 +29,9 @@ async function createArchiveChannel(
 			const alreadyDeferred =
 				interactionOrGuild.deferred || interactionOrGuild.replied
 			const send = alreadyDeferred
-				? opts => interactionOrGuild.editReply(opts)
+				? opts => editReplyWithAutoDelete(interactionOrGuild, opts)
 				: opts =>
-						interactionOrGuild.reply({
+						replyWithAutoDelete(interactionOrGuild, {
 							...opts,
 							flags: [MessageFlags.Ephemeral]
 						})
@@ -38,12 +39,6 @@ async function createArchiveChannel(
 			await send({
 				content: `❌ Родительский канал для веток не найден или настроен неверно.`
 			})
-				.then(() => {
-					setTimeout(async () => {
-						await interactionOrGuild.deleteReply().catch(() => {})
-					}, 60000)
-				})
-				.catch(() => {})
 		}
 		throw new Error(
 			'❌ Не удалось найти текстовый канал PARENT_CHANNEL_ID для создания ветки.'
@@ -86,19 +81,16 @@ async function createArchiveChannel(
 		const alreadyDeferred =
 			interactionOrGuild.deferred || interactionOrGuild.replied
 		const send = alreadyDeferred
-			? opts => interactionOrGuild.editReply(opts)
+			? opts => editReplyWithAutoDelete(interactionOrGuild, opts)
 			: opts =>
-					interactionOrGuild.reply({ ...opts, flags: [MessageFlags.Ephemeral] })
+					replyWithAutoDelete(interactionOrGuild, {
+						...opts,
+						flags: [MessageFlags.Ephemeral]
+					})
 
 		await send({
 			content: `✅ Приватная ветка создана успешно — ${newThread}`
 		})
-			.then(() => {
-				setTimeout(async () => {
-					await interactionOrGuild.deleteReply().catch(() => {})
-				}, 60000)
-			})
-			.catch(() => {})
 	}
 
 	return newThread

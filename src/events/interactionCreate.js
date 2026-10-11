@@ -11,6 +11,10 @@ const {
 const { handleVoiceSelect } = require('../features/invite/inviteVoiceSelect')
 const submitRejectModal = require('../features/invite/inviteModalHandler')
 const { findArchive } = require('../features/archive/archiveSearch')
+const {
+	followUpEphemeralWithAutoDelete,
+	replyWithAutoDelete
+} = require('../utils/autoDelete')
 
 module.exports = client => {
 	client.on('interactionCreate', async interaction => {
@@ -22,13 +26,13 @@ module.exports = client => {
 			} catch (error) {
 				console.error(error)
 				const payload = {
-					content: 'Произошла ошибка при запуске команды!',
+					content: '❌ Произошла ошибка при запуске команды!',
 					flags: [MessageFlags.Ephemeral]
 				}
 				if (interaction.replied || interaction.deferred) {
-					await interaction.followUp(payload)
+					await followUpEphemeralWithAutoDelete(interaction, payload)
 				} else {
-					await interaction.reply(payload)
+					await replyWithAutoDelete(interaction, payload)
 				}
 			}
 			return

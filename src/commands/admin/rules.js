@@ -10,6 +10,7 @@ const {
 } = require('discord.js')
 const path = require('path')
 const { IMAGES_PATH } = require('../../config/path')
+const { replyWithAutoDelete } = require('../../utils/autoDelete')
 
 const rules = [
 	{
@@ -54,9 +55,9 @@ module.exports = {
 	description: 'Создает сообщение для rules',
 	async execute(message, args) {
 		if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-			return message
-				.reply('У вас нет прав для использования этой команды!')
-				.then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000))
+			return await replyWithAutoDelete(message, {
+				content: '❌ У вас нет прав для использования этой команды!'
+			})
 		}
 		const imagePath = path.join(IMAGES_PATH, 'rules.png')
 

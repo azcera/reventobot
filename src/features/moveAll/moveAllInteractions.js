@@ -5,7 +5,10 @@ const {
 	MessageFlags,
 	ChannelType
 } = require('discord.js')
-const { sendEphemeralWithAutoDelete } = require('../../utils/autoDelete')
+const {
+	sendEphemeralWithAutoDelete,
+	editReplyWithAutoDelete
+} = require('../../utils/autoDelete')
 
 async function showMoveAllSelect(interaction) {
 	// Отвечаем сразу, чтобы избежать таймаута
@@ -21,7 +24,7 @@ async function showMoveAllSelect(interaction) {
 
 	// ✅ ИСПРАВЛЕНО: Проверяем, что есть голосовые каналы
 	if (voiceChannels.size === 0) {
-		return await interaction.editReply({
+		return await editReplyWithAutoDelete(interaction, {
 			content: '❌ На сервере нет голосовых каналов с 🔊 в названии.'
 		})
 	}
@@ -44,7 +47,7 @@ async function showMoveAllSelect(interaction) {
 
 	const row = new ActionRowBuilder().addComponents(selectMenu)
 
-	await interaction.editReply({
+	await editReplyWithAutoDelete(interaction, {
 		content: 'Пожалуйста, выберите канал для перемещения из списка ниже:',
 		components: [row]
 	})
@@ -62,14 +65,14 @@ async function handleMoveAllSelect(interaction) {
 	const targetChannel = guild.channels.cache.get(targetChannelId)
 
 	if (!targetChannel) {
-		return await interaction.editReply({
+		return await editReplyWithAutoDelete(interaction, {
 			content: '❌ Выбранный канал не найден.'
 		})
 	}
 
 	// ✅ ИСПРАВЛЕНО: Проверяем права ДО начала работы
 	if (!guild.members.me.permissions.has('MoveMembers')) {
-		return await interaction.editReply({
+		return await editReplyWithAutoDelete(interaction, {
 			content: '❌ У бота нет прав «Перемещение участников» на этом сервере.'
 		})
 	}
@@ -112,12 +115,12 @@ async function handleMoveAllSelect(interaction) {
 				'ℹ️ В других голосовых каналах нет участников для перемещения.'
 		}
 
-		await interaction.editReply({
+		await editReplyWithAutoDelete(interaction, {
 			content: resultMessage
 		})
 	} catch (error) {
 		console.error('[MoveAll] Критическая ошибка при перемещении:', error)
-		await interaction.editReply({
+		await editReplyWithAutoDelete(interaction, {
 			content: '❌ Произошла ошибка при перемещении участников.'
 		})
 	}
