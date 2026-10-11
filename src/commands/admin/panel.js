@@ -31,7 +31,7 @@ module.exports = {
 	 * @param {string[]} args
 	 */
 	async execute(message, args) {
-		await interaction
+		await message
 			.deferReply({ flags: [MessageFlags.Ephemeral] })
 			.catch(() => {})
 
