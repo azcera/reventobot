@@ -15,7 +15,11 @@ const {
 
 const path = require('path')
 const { IMAGES_PATH } = require('../../config/path')
-const { replyWithAutoDelete } = require('../../utils/autoDelete')
+const {
+	replyWithAutoDelete,
+	editReplyWithAutoDelete
+} = require('../../utils/autoDelete')
+const pool = require('../../services/database')
 
 module.exports = {
 	name: 'panel',
@@ -27,10 +31,28 @@ module.exports = {
 	 * @param {string[]} args
 	 */
 	async execute(message, args) {
+		await interaction
+			.deferReply({ flags: [MessageFlags.Ephemeral] })
+			.catch(() => {})
+
 		if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-			return await replyWithAutoDelete(message, {
+			return await editReplyWithAutoDelete(message, {
 				content: '❌ У вас нет прав для использования этой команды!'
 			})
+		}
+
+		if (message.channel.id != process.env.ADMIN_PANEL_CHANNEL_ID) {
+			return await editReplyWithAutoDelete(message, {
+				content:
+					'❌ Использование этой команды в данном канале не предусмотрено!'
+			})
+		}
+
+		const result = await pool.query(`SELECT * FROM admin_panel`)
+
+		if (result.rows.length === 0) {
+			console.error('❌ Админ-панель не настроена')
+			return
 		}
 
 		const imagePath = path.join(IMAGES_PATH, 'panel.png')
@@ -49,83 +71,52 @@ module.exports = {
 			'## 📌 Админ-панель\nДля взаимодействия с ботом используйте кнопки ниже.'
 		)
 
-		const groupSection = new SectionBuilder()
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'📢 ╎ **Отправить оповещение о группе**'
-				)
-			)
-			.setButtonAccessory(
-				new ButtonBuilder()
-					.setCustomId('group')
-					.setLabel('📢 Создать групп')
-					.setStyle(ButtonStyle.Primary)
-			)
+		const container = new ContainerBuilder()
+			.addMediaGalleryComponents(inviteImage)
+			.addTextDisplayComponents(titleText)
+			.addSeparatorComponents(new SeparatorBuilder())
 
-		const captSection = new SectionBuilder()
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'⚔️ ╎ **Создать регу на капт или другое МП**'
-				)
-			)
-			.setButtonAccessory(
-				new ButtonBuilder()
-					.setCustomId('capt')
-					.setLabel('⚔️ Создать регу')
-					.setStyle(ButtonStyle.Success)
-			)
+		for (const row of result.rows) {
+			const button = new ButtonBuilder()
+				.setLabel(action.buttonLabel)
+				.setStyle(action.style)
 
-		const moveAllSection = new SectionBuilder()
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'🔊 ╎ **Переместить всех в один канал**'
-				)
-			)
-			.setButtonAccessory(
-				new ButtonBuilder()
-					.setCustomId('move-all')
-					.setLabel('🔊 Выбрать канал')
-					.setStyle(ButtonStyle.Secondary)
-			)
+			if (action.buttonId.includes('http')) {
+				button.setURL(action.buttonId)
+			} else {
+				button.setCustomId(action.buttonId)
+			}
 
-		const archiveSection = new SectionBuilder()
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'👥 ╎ **Открыть панель архивов (администратор)**'
+			const section = new SectionBuilder()
+				.addTextDisplayComponents(
+					new TextDisplayBuilder().setContent(action.text)
 				)
-			)
-			.setButtonAccessory(
-				new ButtonBuilder()
-					.setURL(
-						'https://discord.com/channels/1445808131484553348/1557432771172110336'
-					)
-					.setLabel('👥 Открыть')
-					.setStyle(ButtonStyle.Link)
-			)
+				.setButtonAccessory(button)
+			container
+				.addSectionComponents(section)
+				.addSeparatorComponents(new SeparatorBuilder())
+		}
 
 		const footerText = new TextDisplayBuilder().setContent(
 			'*Время необходимо указывать по МСК. Формат \`ДД.ММ.ГГГГ ЧЧ:ММ\` нужен только если дата не сегодняшняя.*'
 		)
 
-		const container = new ContainerBuilder()
-			.addMediaGalleryComponents(inviteImage)
-			.addTextDisplayComponents(titleText)
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addSectionComponents(groupSection)
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addSectionComponents(captSection)
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addSectionComponents(moveAllSection)
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addSectionComponents(archiveSection)
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addTextDisplayComponents(footerText)
+		container.addTextDisplayComponents(footerText)
 
-		await message.channel.send({
+		const messageData = {
 			flags: MessageFlags.IsComponentsV2,
 			components: [container],
 			files: [localImage]
-		})
+		}
+
+		const messages = await message.channel.messages.fetch({ limit: 5 })
+		const botMessage = messages.find(m => m.author.bot)
+
+		if (botMessage) {
+			await botMessage.edit(messageData)
+		} else {
+			await message.channel.send(messageData)
+		}
 
 		return await message.delete().catch(() => {})
 	}
