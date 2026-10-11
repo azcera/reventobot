@@ -260,6 +260,7 @@ async function handleButton(interaction) {
 	)
 		return
 
+	// Сразу подтверждаем, чтобы Discord не слал "не ответило вовремя"
 	await interaction.deferUpdate().catch(() => {})
 
 	const messageId = interaction.message.id
@@ -289,10 +290,12 @@ async function handleButton(interaction) {
 
 		if (!row) {
 			await client.query('ROLLBACK')
-			return interaction.reply({
-				content: '❌ Данная регистрация устарела или неактивна.',
-				flags: [MessageFlags.Ephemeral]
-			})
+			return interaction
+				.followUp({
+					content: '❌ Данная регистрация устарела или неактивна.',
+					flags: [MessageFlags.Ephemeral]
+				})
+				.catch(() => {})
 		}
 
 		const discordTimestamp = row.discord_timestamp
@@ -306,10 +309,12 @@ async function handleButton(interaction) {
 		if (interaction.customId === 'capt_join') {
 			if (mainList.includes(userId) || reserveList.includes(userId)) {
 				await client.query('ROLLBACK')
-				return interaction.reply({
-					content: 'Вы уже записаны на капт!',
-					flags: [MessageFlags.Ephemeral]
-				})
+				return interaction
+					.followUp({
+						content: 'Вы уже записаны на капт!',
+						flags: [MessageFlags.Ephemeral]
+					})
+					.catch(() => {})
 			}
 
 			const leftIndex = leftList.indexOf(userId)
@@ -326,15 +331,16 @@ async function handleButton(interaction) {
 
 			if (mainIndex === -1 && reserveIndex === -1) {
 				await client.query('ROLLBACK')
-				return interaction.reply({
-					content: 'Вас и так нет в списках.',
-					flags: [MessageFlags.Ephemeral]
-				})
+				return interaction
+					.followUp({
+						content: 'Вас и так нет в списках.',
+						flags: [MessageFlags.Ephemeral]
+					})
+					.catch(() => {})
 			}
 
 			if (mainIndex !== -1) {
 				mainList.splice(mainIndex, 1)
-
 				if (reserveList.length > 0) {
 					const movingPlayer = reserveList.shift()
 					mainList.push(movingPlayer)
@@ -374,18 +380,17 @@ async function handleButton(interaction) {
 	} catch (err) {
 		await client.query('ROLLBACK').catch(() => {})
 		console.error('Ошибка при обработке кнопки капта:', err)
-		if (!interaction.replied && !interaction.deferred) {
-			return interaction
-				.followUp({
-					content: '❌ Произошла ошибка базы данных при сохранении.',
-					flags: [MessageFlags.Ephemeral]
-				})
-				.catch(() => {})
-		}
+		await interaction
+			.followUp({
+				content: '❌ Произошла ошибка базы данных при сохранении.',
+				flags: [MessageFlags.Ephemeral]
+			})
+			.catch(() => {})
 	} finally {
 		client.release()
 	}
 }
+
 module.exports = {
 	buildCaptureMessage,
 	updateCollectionTime,

@@ -22,6 +22,7 @@ async function cancelArchive(interaction) {
  */
 async function handleDynamicButtons(interaction) {
 	const customId = interaction.customId
+
 	if (customId.startsWith('cancel_create')) {
 		try {
 			await interaction.deferUpdate()
@@ -33,21 +34,25 @@ async function handleDynamicButtons(interaction) {
 	}
 
 	if (customId.startsWith('create_')) {
-		const rawData = customId.replace('create_', '')
+		// Сразу подтверждаем interaction
+		await interaction
+			.deferReply({ flags: [MessageFlags.Ephemeral] })
+			.catch(() => {})
 
+		const rawData = customId.replace('create_', '')
 		const idMatch = rawData.match(/\d{17,19}$/)
 		const targetMemberID = idMatch ? idMatch[0] : null
 
 		if (!targetMemberID) {
 			console.error(`❌ Не удалось найти Snowflake в строке: ${rawData}`)
-			return await interaction.reply({
-				content: '❌ В кнопке не найден ID пользователя.',
-				flags: MessageFlags.Ephemeral
-			})
+			return await interaction
+				.editReply({
+					content: '❌ В кнопке не найден ID пользователя.'
+				})
+				.catch(() => {})
 		}
 
 		const rawChannelName = rawData.replace(`-${targetMemberID}`, '')
-
 		const cleanedChannelName = rawChannelName.replace(/-/g, ' ')
 
 		const member = await interaction.guild.members
@@ -61,9 +66,11 @@ async function handleDynamicButtons(interaction) {
 			})
 
 		if (!member) {
-			return await replyWithAutoDelete(interaction, {
-				content: '❌ Пользователь не найден на сервере.'
-			})
+			return await interaction
+				.editReply({
+					content: '❌ Пользователь не найден на сервере.'
+				})
+				.catch(() => {})
 		}
 
 		await interaction.message.delete().catch(() => {})

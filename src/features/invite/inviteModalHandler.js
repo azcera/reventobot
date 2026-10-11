@@ -14,25 +14,33 @@ async function submitRejectModal(interaction) {
 	const targetUserId = interaction.customId.split('_')[3]
 	const reason = interaction.fields.getTextInputValue('reject_reason')
 
+	await interaction
+		.deferReply({ flags: [MessageFlags.Ephemeral] })
+		.catch(() => {})
+
 	const res = await db.query(
 		'SELECT * FROM family_applications WHERE user_id = $1',
 		[targetUserId]
 	)
-	if (res.rows.length === 0)
-		return interaction.reply({
-			content: '❌ Заявка не найдена.',
-			flags: [MessageFlags.Ephemeral]
-		})
+	if (res.rows.length === 0) {
+		return interaction
+			.editReply({
+				content: '❌ Заявка не найдена.'
+			})
+			.catch(() => {})
+	}
 	const appData = res.rows[0]
 
-	await interaction.reply({
-		content: `✅ Заявка <@${targetUserId}> отклонена `,
-		flags: [MessageFlags.Ephemeral]
-	})
+	await interaction
+		.editReply({
+			content: `✅ Заявка <@${targetUserId}> отклонена`
+		})
+		.catch(() => {})
 
 	const targetUser = await interaction.client.users
 		.fetch(targetUserId)
 		.catch(() => null)
+
 	if (targetUser) {
 		const container = new ContainerBuilder()
 			.setAccentColor(0xe74c3c)

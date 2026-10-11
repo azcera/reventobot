@@ -14,11 +14,9 @@ async function findArchive(interaction) {
 
 		const parsed = parseDisplayName(member.displayName)
 
-		// Вот здесь правильно обрабатываем null
 		if (!parsed) {
-			return await interaction.followUp({
-				content: `❌ Не удалось найти архив: ваш никнейм на сервере имеет неверный формат.`,
-				flags: [MessageFlags.Ephemeral]
+			return await interaction.editReply({
+				content: `❌ Не удалось найти архив: ваш никнейм на сервере имеет неверный формат.`
 			})
 		}
 
@@ -46,23 +44,19 @@ async function findArchive(interaction) {
 		}
 
 		if (searchingChannel) {
-			return await interaction.followUp({
-				content: `Ваш архив - <#${searchingChannel.id}>`,
-				flags: [MessageFlags.Ephemeral]
+			return await interaction.editReply({
+				content: `Ваш архив - <#${searchingChannel.id}>`
 			})
 		} else {
-			return await interaction.followUp({
-				content: `❌ Для вас нет созданного архива.`,
-				flags: [MessageFlags.Ephemeral]
+			return await interaction.editReply({
+				content: `❌ Для вас нет созданного архива.`
 			})
 		}
 	} catch (err) {
 		console.error('❌ Ошибка при поиске архива: ', err)
-
 		try {
-			await interaction.followUp({
-				content: '❌ Произошла внутренняя ошибка при поиске архива.',
-				flags: [MessageFlags.Ephemeral]
+			await interaction.editReply({
+				content: '❌ Произошла внутренняя ошибка при поиске архива.'
 			})
 		} catch (_) {}
 	}

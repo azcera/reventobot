@@ -14,7 +14,8 @@ const {
 } = require('discord.js')
 const {
 	sendEphemeralWithAutoDelete,
-	followUpEphemeralWithAutoDelete
+	followUpEphemeralWithAutoDelete,
+	editReplyWithAutoDelete
 } = require('../../utils/autoDelete.js')
 const db = require('../../services/database.js')
 const {
@@ -204,11 +205,16 @@ async function handleModerationButton(interaction) {
 	}
 
 	if (actionType === 'interview') {
+		await interaction
+			.deferReply({ flags: [MessageFlags.Ephemeral] })
+			.catch(() => {})
+
 		const voiceChannels = interaction.guild.channels.cache.filter(
 			c => c.type === ChannelType.GuildVoice && c.name.includes('📞')
 		)
+
 		if (voiceChannels.size === 0) {
-			return sendEphemeralWithAutoDelete(interaction, {
+			return editReplyWithAutoDelete(interaction, {
 				content: '❌ Нет подходящих голосовых каналов.'
 			})
 		}
@@ -246,7 +252,7 @@ async function handleModerationButton(interaction) {
 			)
 		)
 
-		await sendEphemeralWithAutoDelete(interaction, {
+		await editReplyWithAutoDelete(interaction, {
 			content: 'Выберите комнату для кандидата (меню активно 1 минуту):',
 			components: [new ActionRowBuilder().addComponents(selectMenu)]
 		})
@@ -261,7 +267,7 @@ async function handleModerationButton(interaction) {
 		})
 
 		collector.on('collect', async menuInteraction => {
-			await sendEphemeralWithAutoDelete(menuInteraction, {
+			await editReplyWithAutoDelete(menuInteraction, {
 				content: '✅ Кандидат вызван! Кнопка обзвона деактивирована.'
 			})
 			await interaction.deleteReply().catch(() => {}) // Удаляем сообщение с меню выбора, чтобы не мешало

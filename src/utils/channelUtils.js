@@ -25,12 +25,19 @@ async function createArchiveChannel(
 
 	if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
 		if (isInteraction) {
-			await interactionOrGuild
-				.reply({
-					content:
-						'❌ Родительский канал для веток не найден или настроен неверно.',
-					flags: [MessageFlags.Ephemeral]
-				})
+			const alreadyDeferred =
+				interactionOrGuild.deferred || interactionOrGuild.replied
+			const send = alreadyDeferred
+				? opts => interactionOrGuild.editReply(opts)
+				: opts =>
+						interactionOrGuild.reply({
+							...opts,
+							flags: [MessageFlags.Ephemeral]
+						})
+
+			await send({
+				content: `❌ Родительский канал для веток не найден или настроен неверно.`
+			})
 				.then(() => {
 					setTimeout(async () => {
 						await interactionOrGuild.deleteReply().catch(() => {})
@@ -76,11 +83,16 @@ async function createArchiveChannel(
 
 	// 5. Отвечаем на саму кнопку (если вызов был через взаимодействие)
 	if (isInteraction) {
-		await interactionOrGuild
-			.reply({
-				content: `✅ Приватная ветка создана успешно — ${newThread}`,
-				flags: [MessageFlags.Ephemeral]
-			})
+		const alreadyDeferred =
+			interactionOrGuild.deferred || interactionOrGuild.replied
+		const send = alreadyDeferred
+			? opts => interactionOrGuild.editReply(opts)
+			: opts =>
+					interactionOrGuild.reply({ ...opts, flags: [MessageFlags.Ephemeral] })
+
+		await send({
+			content: `✅ Приватная ветка создана успешно — ${newThread}`
+		})
 			.then(() => {
 				setTimeout(async () => {
 					await interactionOrGuild.deleteReply().catch(() => {})
