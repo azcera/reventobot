@@ -78,19 +78,17 @@ module.exports = {
 
 		for (const row of result.rows) {
 			const button = new ButtonBuilder()
-				.setLabel(action.buttonLabel)
-				.setStyle(action.style)
+				.setLabel(row.buttonLabel)
+				.setStyle(row.style)
 
-			if (action.buttonId.includes('http')) {
-				button.setURL(action.buttonId)
+			if (row.buttonId.includes('http')) {
+				button.setURL(row.buttonId)
 			} else {
-				button.setCustomId(action.buttonId)
+				button.setCustomId(row.buttonId)
 			}
 
 			const section = new SectionBuilder()
-				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(action.text)
-				)
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(row.text))
 				.setButtonAccessory(button)
 			container
 				.addSectionComponents(section)
