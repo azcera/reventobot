@@ -85,16 +85,6 @@ class InviteCandidate {
 	 * @param {ButtonInteraction} interaction
 	 */
 	async showModal(interaction) {
-		const checkActive = await db.query(
-			'SELECT * FROM family_applications WHERE user_id = $1',
-			[interaction.user.id]
-		)
-		if (checkActive.rows.length > 0) {
-			return sendEphemeralWithAutoDelete(interaction, {
-				content: '❌ Вы уже подали заявку!'
-			})
-		}
-
 		const modal = new ModalBuilder()
 			.setCustomId('invite_modal_submit')
 			.setTitle('Заявка в семью REVENTO')
@@ -114,6 +104,7 @@ class InviteCandidate {
 		})
 
 		modal.addLabelComponents(...labels)
+
 		return interaction.showModal(modal)
 	}
 
@@ -131,6 +122,7 @@ class InviteCandidate {
 				.trim()
 		})
 
+		// 1. Быстрая валидация полей (в памяти, 0 мс)
 		for (const field of MODAL_FIELDS) {
 			const error = field.validate(values[field.customId])
 			if (error)
@@ -148,9 +140,21 @@ class InviteCandidate {
 		const fullName = `${capitalizedName} | ${values.invite_static}`
 		const age = parseInt(values.invite_age)
 
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
+		await interaction
+			.deferReply({ flags: [MessageFlags.Ephemeral] })
+			.catch(() => {})
 
 		try {
+			const checkActive = await db.query(
+				'SELECT * FROM family_applications WHERE user_id = \$1',
+				[interaction.user.id]
+			)
+			if (checkActive.rows.length > 0) {
+				return await editReplyWithAutoDelete(interaction, {
+					content: '❌ Вы уже подали заявку!'
+				})
+			}
+
 			await interaction.member.setNickname(fullName).catch(() => {})
 
 			const permissionOverwrites = [
@@ -186,8 +190,8 @@ class InviteCandidate {
 
 			await db.query(
 				`INSERT INTO family_applications 
-                 (user_id, channel_id, full_name, age, about_and_expectations, previous_experience) 
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
+             (user_id, channel_id, full_name, age, about_and_expectations, previous_experience) 
+             VALUES ($1, $2, $3, $4, $5, $6)`,
 				[
 					interaction.user.id,
 					channel.id,
