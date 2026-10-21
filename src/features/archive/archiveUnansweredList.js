@@ -4,6 +4,7 @@ const {
 	Guild,
 	ChannelType,
 	PermissionFlagsBits,
+	MessageType,
 	SeparatorBuilder
 } = require('discord.js')
 require('dotenv').config()
@@ -53,9 +54,22 @@ async function getUnansweredList(guild) {
 					.catch(() => null))
 			if (!author) continue
 
-			const hasUserMention = lastMessage.mentions.users.size > 0
 			const hasRoleMention = lastMessage.mentions.roles.size > 0
 			const hasEveryone = lastMessage.mentions.everyone
+
+			const isReply = lastMessage.type === MessageType.Reply
+
+			let hasUserMention = lastMessage.mentions.users.size > 0
+
+			if (isReply && hasUserMention) {
+					const repliedUserId = lastMessage.mentions.repliedUser?.id
+
+					if (repliedUserId) {
+							const realMentions = lastMessage.mentions.users.filter(user => user.id !== repliedUserId)
+					
+							hasUserMention = realMentions.size > 0
+					}
+			}
 
 			const hasAnyMention = hasUserMention || hasRoleMention || hasEveryone
 			const hasAdminRole =
