@@ -1,5 +1,8 @@
 const { MessageFlags, PermissionFlagsBits } = require('discord.js')
-const { buildCaptureMessage } = require('../../features/capture/captureManager')
+const {
+	buildCaptureMessage,
+	redistributeApproved
+} = require('../../features/capture/captureManager')
 
 function hasAccess(member) {
 	const roles = (process.env.ADMIN_ROLES || '')
@@ -14,10 +17,11 @@ function hasAccess(member) {
 }
 
 module.exports = {
-	name: 'testcaptapproval',
+	name: 'testcaptselection',
 	description: 'Создаёт тестовый набор для проверки одобрения',
 	async execute(message) {
-		return this.createTest(message, 10)
+		await message.delete().catch(() => {})
+		return this.createTest(message, 27)
 	},
 	async createTest(message, count) {
 		if (!message.guild) return
@@ -35,10 +39,12 @@ module.exports = {
 		}
 		const ids = candidates.slice(0, count).map(member => member.id)
 		const maxMain = count === 10 ? 5 : 20
-		const main = ids.slice(0, maxMain)
-		const reserve = ids.slice(maxMain)
+		let main = ids.slice(0, maxMain)
+		let reserve = ids.slice(maxMain)
 		const meta = list =>
-			list.map((userId, index) => ({ userId, joinedAt: index }))
+			list.map(userId => ({ userId, joinedAt: ids.indexOf(userId) }))
+		let mainMeta = meta(main)
+		let reserveMeta = meta(reserve)
 		const timestamp = `<t:${Math.floor(Date.now() / 1000)}:F>`
 		let approved = []
 		function build(disabled = false) {
@@ -50,8 +56,8 @@ module.exports = {
 				'тестовый капт',
 				maxMain,
 				message.guild,
-				meta(main),
-				meta(reserve),
+				mainMeta,
+				reserveMeta,
 				approved
 			)
 			for (const button of payload.components[1].components)
@@ -92,6 +98,17 @@ module.exports = {
 					...approved.filter(id => !group.has(id)),
 					...interaction.values
 				]
+				const lists = redistributeApproved(
+					main,
+					reserve,
+					mainMeta,
+					reserveMeta,
+					approved
+				)
+				main = lists.mainList
+				reserve = lists.reserveList
+				mainMeta = lists.mainMeta
+				reserveMeta = lists.reserveMeta
 				await interaction.update(build())
 			} catch (err) {
 				console.error('Ошибка тестового одобрения:', err)

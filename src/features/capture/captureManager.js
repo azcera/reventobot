@@ -18,11 +18,48 @@ const pool = require('../../services/database.js')
 const PLUS_CHANNEL = process.env.PLUS_CHANNEL_ID
 const APPROVAL_PAGE_SIZE = 100
 
-function approvalGroups(mainList, reserveList, page) {
-	const players = [...mainList, ...reserveList].slice(
-		page * APPROVAL_PAGE_SIZE,
-		(page + 1) * APPROVAL_PAGE_SIZE
-	)
+function joinedPlayers(mainList, reserveList, mainMeta, reserveMeta) {
+	return [...mainList, ...reserveList]
+		.map((userId, index) => {
+			const meta =
+				index < mainList.length
+					? mainMeta[index]
+					: reserveMeta[index - mainList.length]
+			return { userId, joinedAt: meta?.joinedAt ?? index }
+		})
+		.sort((a, b) => a.joinedAt - b.joinedAt)
+}
+
+function redistributeApproved(
+	mainList,
+	reserveList,
+	mainMeta,
+	reserveMeta,
+	approved
+) {
+	if (!approved.length) return { mainList, reserveList, mainMeta, reserveMeta }
+	const selected = new Set(approved)
+	const players = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
+	const main = players.filter(player => selected.has(player.userId))
+	const reserve = players.filter(player => !selected.has(player.userId))
+	return {
+		mainList: main.map(p => p.userId),
+		reserveList: reserve.map(p => p.userId),
+		mainMeta: main,
+		reserveMeta: reserve
+	}
+}
+
+function approvalGroups(
+	mainList,
+	reserveList,
+	page,
+	mainMeta = [],
+	reserveMeta = []
+) {
+	const players = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
+		.map(player => player.userId)
+		.slice(page * APPROVAL_PAGE_SIZE, (page + 1) * APPROVAL_PAGE_SIZE)
 	const groups = []
 	for (let i = 0; i < players.length; i += 25)
 		groups.push(players.slice(i, i + 25))
@@ -220,29 +257,33 @@ function buildCaptureMessage(
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(approvalPage >= pageCount - 1)
 		)
-	const menus = approvalGroups(mainList, reserveList, approvalPage).map(
-		(group, index) => {
-			const start = approvalPage * APPROVAL_PAGE_SIZE + index * 25 + 1
-			const menu = new StringSelectMenuBuilder()
-				.setCustomId(approvalId(group))
-				.setPlaceholder(
-					`Одобрить участников ${start}–${start + group.length - 1}`
-				)
-				.setMinValues(0)
-				.setMaxValues(group.length)
-				.addOptions(
-					group.map(id => ({
-						label: (guild?.members.cache.get(id)?.displayName || id).slice(
-							0,
-							100
-						),
-						value: id,
-						default: approved.has(id)
-					}))
-				)
-			return new ActionRowBuilder().addComponents(menu)
-		}
-	)
+	const menus = approvalGroups(
+		mainList,
+		reserveList,
+		approvalPage,
+		mainListMeta,
+		reserveListMeta
+	).map((group, index) => {
+		const start = approvalPage * APPROVAL_PAGE_SIZE + index * 25 + 1
+		const menu = new StringSelectMenuBuilder()
+			.setCustomId(approvalId(group))
+			.setPlaceholder(
+				`Одобрить участников ${start}–${start + group.length - 1}`
+			)
+			.setMinValues(0)
+			.setMaxValues(group.length)
+			.addOptions(
+				group.map(id => ({
+					label: (guild?.members.cache.get(id)?.displayName || id).slice(
+						0,
+						100
+					),
+					value: id,
+					default: approved.has(id)
+				}))
+			)
+		return new ActionRowBuilder().addComponents(menu)
+	})
 
 	return {
 		flags: MessageFlags.IsComponentsV2,
@@ -489,7 +530,7 @@ async function handleButton(interaction) {
 			if (leftIndex !== -1) leftList.splice(leftIndex, 1)
 
 			const now = Date.now()
-			if (mainList.length < maxMain) {
+			if (approvedUsers.length === 0 && mainList.length < maxMain) {
 				mainList.push(userId)
 				mainListMeta.push({ userId, joinedAt: now })
 			} else {
@@ -513,7 +554,7 @@ async function handleButton(interaction) {
 			if (mainIndex !== -1) {
 				mainList.splice(mainIndex, 1)
 				mainListMeta.splice(mainIndex, 1)
-				if (reserveList.length > 0) {
+				if (approvedUsers.length === 0 && reserveList.length > 0) {
 					const movingPlayer = reserveList.shift()
 					const movingMeta = reserveListMeta.shift()
 					mainList.push(movingPlayer)
@@ -615,8 +656,10 @@ async function handleApproval(interaction) {
 				return []
 			}
 		}
-		const main = parse(row.main_list)
-		const reserve = parse(row.reserve_list)
+		let main = parse(row.main_list)
+		let reserve = parse(row.reserve_list)
+		let mainMeta = parse(row.main_list_meta)
+		let reserveMeta = parse(row.reserve_list_meta)
 		let approved = parse(row.approved_users)
 		let page = Math.max(
 			0,
@@ -629,9 +672,13 @@ async function handleApproval(interaction) {
 			)
 		)
 		if (interaction.isStringSelectMenu()) {
-			const group = approvalGroups(main, reserve, page).find(
-				items => approvalId(items) === interaction.customId
-			)
+			const group = approvalGroups(
+				main,
+				reserve,
+				page,
+				mainMeta,
+				reserveMeta
+			).find(items => approvalId(items) === interaction.customId)
 			if (!group || interaction.values.some(id => !group.includes(id))) {
 				await client.query('ROLLBACK')
 				return interaction.followUp({
@@ -643,6 +690,17 @@ async function handleApproval(interaction) {
 				...approved.filter(id => !group.includes(id)),
 				...interaction.values
 			]
+			const lists = redistributeApproved(
+				main,
+				reserve,
+				mainMeta,
+				reserveMeta,
+				approved
+			)
+			main = lists.mainList
+			reserve = lists.reserveList
+			mainMeta = lists.mainMeta
+			reserveMeta = lists.reserveMeta
 		} else {
 			const requestedPage = Number(
 				interaction.customId.slice('capt_approval_page_'.length)
@@ -659,8 +717,16 @@ async function handleApproval(interaction) {
 			page = requestedPage
 		}
 		await client.query(
-			'UPDATE active_captures SET approved_users = $1, approval_page = $2 WHERE message_id = $3',
-			[JSON.stringify(approved), page, interaction.message.id]
+			'UPDATE active_captures SET approved_users = $1, approval_page = $2, main_list = $3, reserve_list = $4, main_list_meta = $5, reserve_list_meta = $6 WHERE message_id = $7',
+			[
+				JSON.stringify(approved),
+				page,
+				JSON.stringify(main),
+				JSON.stringify(reserve),
+				JSON.stringify(mainMeta),
+				JSON.stringify(reserveMeta),
+				interaction.message.id
+			]
 		)
 		await interaction.editReply(
 			buildCaptureMessage(
@@ -671,8 +737,8 @@ async function handleApproval(interaction) {
 				row.target,
 				row.max_main || 20,
 				interaction.guild,
-				parse(row.main_list_meta),
-				parse(row.reserve_list_meta),
+				mainMeta,
+				reserveMeta,
 				approved,
 				page
 			)
@@ -694,6 +760,7 @@ async function handleApproval(interaction) {
 
 module.exports = {
 	buildCaptureMessage,
+	redistributeApproved,
 	updateCollectionTime,
 	sendCollection,
 	handleButton,

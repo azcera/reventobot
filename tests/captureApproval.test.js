@@ -9,6 +9,12 @@ const client = {
 		if (sql.includes('SET approved_users =')) {
 			row.approved_users = JSON.parse(params[0])
 			row.approval_page = params[1]
+			;[
+				row.main_list,
+				row.reserve_list,
+				row.main_list_meta,
+				row.reserve_list_meta
+			] = params.slice(2, 6).map(JSON.parse)
 		}
 		if (sql.includes('SET main_list =')) {
 			;[
@@ -77,10 +83,13 @@ test('approval across menus survives reload and is removed on leave', async () =
 		followUp: async () => {}
 	}
 	await manager.handleApproval(interaction)
+	assert.deepEqual(row.main_list, [ids[0]])
+	assert.equal(row.reserve_list.length, 29)
 	interaction.customId = menus[1].custom_id
 	interaction.values = [ids[29]]
 	await manager.handleApproval(interaction)
 	assert.deepEqual(row.approved_users, [ids[0], ids[29]])
+	assert.deepEqual(row.main_list, [ids[0], ids[29]])
 	delete require.cache[
 		require.resolve('../src/features/capture/captureManager')
 	]
@@ -112,6 +121,19 @@ test('approval across menus survives reload and is removed on leave', async () =
 		followUp: async () => {}
 	})
 	assert.deepEqual(row.approved_users, [ids[29]])
+	assert.deepEqual(row.main_list, [ids[29]])
+	await reloaded.handleButton({
+		isButton: () => true,
+		customId: 'capt_join',
+		deferUpdate: async () => {},
+		message: { id: 'm' },
+		user: { id: 'new' },
+		guild,
+		editReply: async () => {},
+		followUp: async () => {}
+	})
+	assert.deepEqual(row.main_list, [ids[29]])
+	assert.ok(row.reserve_list.includes('new'))
 })
 
 test('approval requires permission and rejects stale menus', async () => {
@@ -169,11 +191,14 @@ test('more than 100 participants use pages in the same message', () => {
 
 test('test command approves across menus without database access', async () => {
 	const { EventEmitter } = require('node:events')
-	const command = require('../src/commands/utility/testcaptapproval27')
+	const command = require('../src/commands/utility/testcaptselection')
 	const collector = new EventEmitter()
 	const members = new Map(ids.map(id => [id, { id, user: { bot: false } }]))
 	let payload
 	const message = {
+		delete: async () => {
+			deleted = true
+		},
 		guild: { members: { cache: new Map(), fetch: async () => members } },
 		member: admin,
 		channel: {
@@ -183,7 +208,9 @@ test('test command approves across menus without database access', async () => {
 			}
 		}
 	}
+	let deleted = false
 	await command.execute(message)
+	assert.equal(deleted, true)
 	assert.equal(payload.components.length, 4)
 	const menus = payload.components
 		.slice(2)
