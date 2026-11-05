@@ -103,7 +103,8 @@ module.exports = {
 					reserve,
 					mainMeta,
 					reserveMeta,
-					approved
+					approved,
+					maxMain
 				)
 				main = lists.mainList
 				reserve = lists.reserveList

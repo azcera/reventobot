@@ -157,6 +157,70 @@ test('approval requires permission and rejects stale menus', async () => {
 	assert.match(replies[1].content, /изменился/)
 })
 
+test('clearing the last approval restores the original join order', async () => {
+	row = {
+		message_id: 'm',
+		discord_timestamp: 'now',
+		main_list: ids.slice(0, 3),
+		reserve_list: ids.slice(3, 6),
+		left_list: [],
+		main_list_meta: ids
+			.slice(0, 3)
+			.map((userId, joinedAt) => ({ userId, joinedAt })),
+		reserve_list_meta: ids
+			.slice(3, 6)
+			.map((userId, i) => ({ userId, joinedAt: i + 3 })),
+		approved_users: [],
+		approval_page: 0,
+		max_main: 3
+	}
+	let payload = manager.buildCaptureMessage(
+		'now',
+		row.main_list,
+		row.reserve_list,
+		[],
+		'test',
+		3,
+		guild,
+		row.main_list_meta,
+		row.reserve_list_meta
+	)
+	const menuId = payload.components[2].toJSON().components[0].custom_id
+	const interaction = {
+		member: admin,
+		guild,
+		message: { id: 'm' },
+		customId: menuId,
+		values: [ids[5]],
+		isStringSelectMenu: () => true,
+		deferUpdate: async () => {},
+		editReply: async value => {
+			payload = value
+		},
+		followUp: async () => {}
+	}
+	await manager.handleApproval(interaction)
+	assert.deepEqual(row.main_list, [ids[5]])
+	interaction.values = []
+	await manager.handleApproval(interaction)
+	assert.deepEqual(row.main_list, ids.slice(0, 3))
+	assert.deepEqual(row.reserve_list, ids.slice(3, 6))
+	interaction.values = [ids[5]]
+	await manager.handleApproval(interaction)
+	await manager.handleButton({
+		isButton: () => true,
+		customId: 'capt_leave',
+		deferUpdate: async () => {},
+		message: { id: 'm' },
+		user: { id: ids[5] },
+		guild,
+		editReply: async () => {},
+		followUp: async () => {}
+	})
+	assert.deepEqual(row.main_list, ids.slice(0, 3))
+	assert.deepEqual(row.reserve_list, ids.slice(3, 5))
+})
+
 test('more than 100 participants use pages in the same message', () => {
 	const players = Array.from({ length: 101 }, (_, i) => String(2000 + i))
 	const first = manager.buildCaptureMessage(

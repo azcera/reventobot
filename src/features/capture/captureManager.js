@@ -35,13 +35,17 @@ function redistributeApproved(
 	reserveList,
 	mainMeta,
 	reserveMeta,
-	approved
+	approved,
+	maxMain
 ) {
-	if (!approved.length) return { mainList, reserveList, mainMeta, reserveMeta }
 	const selected = new Set(approved)
 	const players = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
-	const main = players.filter(player => selected.has(player.userId))
-	const reserve = players.filter(player => !selected.has(player.userId))
+	const main = approved.length
+		? players.filter(player => selected.has(player.userId))
+		: players.slice(0, maxMain)
+	const reserve = approved.length
+		? players.filter(player => !selected.has(player.userId))
+		: players.slice(maxMain)
 	return {
 		mainList: main.map(p => p.userId),
 		reserveList: reserve.map(p => p.userId),
@@ -568,7 +572,22 @@ async function handleButton(interaction) {
 			if (!leftList.includes(userId)) {
 				leftList.push(userId)
 			}
+			const wasApproved = approvedUsers.includes(userId)
 			approvedUsers = approvedUsers.filter(id => id !== userId)
+			if (wasApproved && approvedUsers.length === 0) {
+				const lists = redistributeApproved(
+					mainList,
+					reserveList,
+					mainListMeta,
+					reserveListMeta,
+					approvedUsers,
+					maxMain
+				)
+				mainList = lists.mainList
+				reserveList = lists.reserveList
+				mainListMeta = lists.mainMeta
+				reserveListMeta = lists.reserveMeta
+			}
 		}
 
 		await client.query(
@@ -695,7 +714,8 @@ async function handleApproval(interaction) {
 				reserve,
 				mainMeta,
 				reserveMeta,
-				approved
+				approved,
+				row.max_main || 20
 			)
 			main = lists.mainList
 			reserve = lists.reserveList
