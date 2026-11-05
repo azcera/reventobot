@@ -39,6 +39,8 @@ const initDb = async () => {
                 main_list JSONB,
                 reserve_list JSONB,
                 left_list JSONB,
+                main_list_meta JSONB,
+                reserve_list_meta JSONB,
                 target TEXT,
                 max_main INTEGER DEFAULT 20
             );
