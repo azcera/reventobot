@@ -6,13 +6,35 @@ const {
 	ButtonStyle,
 	ContainerBuilder,
 	SeparatorBuilder,
+	StringSelectMenuBuilder,
+	PermissionFlagsBits,
 	ChannelType
 } = require('discord.js')
+const { createHash } = require('node:crypto')
 require('dotenv').config()
 
 const pool = require('../../services/database.js')
 
 const PLUS_CHANNEL = process.env.PLUS_CHANNEL_ID
+const APPROVAL_PAGE_SIZE = 100
+
+function approvalGroups(mainList, reserveList, page) {
+	const players = [...mainList, ...reserveList].slice(
+		page * APPROVAL_PAGE_SIZE,
+		(page + 1) * APPROVAL_PAGE_SIZE
+	)
+	const groups = []
+	for (let i = 0; i < players.length; i += 25)
+		groups.push(players.slice(i, i + 25))
+	return groups
+}
+
+function approvalId(group) {
+	return (
+		'capt_approve_' +
+		createHash('sha256').update(group.join(',')).digest('hex').slice(0, 20)
+	)
+}
 
 // Parse PRIORITY_ROLES from env: comma-separated role IDs, highest priority first
 const PRIORITY_ROLES = (process.env.PRIORITY_ROLES || '')
@@ -41,18 +63,24 @@ function getRolePriority(member) {
  * @returns {Array<string>} sorted userIds
  */
 function sortByRolePriority(list, guild) {
-	return [...list].sort((a, b) => {
-		const memberA = guild.members.cache.get(a.userId)
-		const memberB = guild.members.cache.get(b.userId)
-		
-		const priorityA = memberA ? getRolePriority(memberA) : PRIORITY_ROLES.length
-		const priorityB = memberB ? getRolePriority(memberB) : PRIORITY_ROLES.length
-		
-		if (priorityA !== priorityB) return priorityA - priorityB
-		
-		// Same priority: earlier join timestamp comes first
-		return a.joinedAt - b.joinedAt
-	}).map(item => item.userId)
+	return [...list]
+		.sort((a, b) => {
+			const memberA = guild.members.cache.get(a.userId)
+			const memberB = guild.members.cache.get(b.userId)
+
+			const priorityA = memberA
+				? getRolePriority(memberA)
+				: PRIORITY_ROLES.length
+			const priorityB = memberB
+				? getRolePriority(memberB)
+				: PRIORITY_ROLES.length
+
+			if (priorityA !== priorityB) return priorityA - priorityB
+
+			// Same priority: earlier join timestamp comes first
+			return a.joinedAt - b.joinedAt
+		})
+		.map(item => item.userId)
 }
 
 function buildCaptureMessage(
@@ -64,8 +92,22 @@ function buildCaptureMessage(
 	maxMain,
 	guild,
 	mainListMeta = [],
-	reserveListMeta = []
+	reserveListMeta = [],
+	approvedUsers = [],
+	approvalPage = 0
 ) {
+	const approved = new Set(approvedUsers)
+	approvalPage = Math.max(
+		0,
+		Math.min(
+			approvalPage,
+			Math.max(
+				0,
+				Math.ceil((mainList.length + reserveList.length) / APPROVAL_PAGE_SIZE) -
+					1
+			)
+		)
+	)
 	const title = new TextDisplayBuilder().setContent(
 		`## 📢 Рега на ${target ?? 'капт'}!`
 	)
@@ -87,16 +129,30 @@ function buildCaptureMessage(
 		joinedAt: reserveListMeta[index]?.joinedAt ?? index
 	}))
 
-	const sortedMainList = guild ? sortByRolePriority(mainListWithMeta, guild) : mainList || []
-	const sortedReserveList = guild ? sortByRolePriority(reserveListWithMeta, guild) : reserveList || []
+	const sortedMainList = guild
+		? sortByRolePriority(mainListWithMeta, guild)
+		: mainList || []
+	const sortedReserveList = guild
+		? sortByRolePriority(reserveListWithMeta, guild)
+		: reserveList || []
 
 	const mainPlayersText =
 		sortedMainList.length > 0
-			? sortedMainList.map((id, index) => `${index + 1}. <@${id}>`).join('\n')
+			? sortedMainList
+					.map(
+						(id, index) =>
+							`${index + 1}. <@${id}>${approved.has(id) ? ' ✅' : ''}`
+					)
+					.join('\n')
 			: 'Пусто'
 	const reservePlayersText =
 		sortedReserveList.length > 0
-			? sortedReserveList.map((id, index) => `${index + 1}. <@${id}>`).join('\n')
+			? sortedReserveList
+					.map(
+						(id, index) =>
+							`${index + 1}. <@${id}>${approved.has(id) ? ' ✅' : ''}`
+					)
+					.join('\n')
 			: 'Пусто'
 	const leftPlayersText =
 		leftList.length > 0
@@ -148,10 +204,49 @@ function buildCaptureMessage(
 			.setLabel('✏️ Время')
 			.setStyle(ButtonStyle.Secondary)
 	)
+	const pageCount = Math.ceil(
+		(mainList.length + reserveList.length) / APPROVAL_PAGE_SIZE
+	)
+	if (pageCount > 1)
+		buttonsRow.addComponents(
+			new ButtonBuilder()
+				.setCustomId(`capt_approval_page_${approvalPage - 1}`)
+				.setLabel('◀')
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(approvalPage === 0),
+			new ButtonBuilder()
+				.setCustomId(`capt_approval_page_${approvalPage + 1}`)
+				.setLabel('▶')
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(approvalPage >= pageCount - 1)
+		)
+	const menus = approvalGroups(mainList, reserveList, approvalPage).map(
+		(group, index) => {
+			const start = approvalPage * APPROVAL_PAGE_SIZE + index * 25 + 1
+			const menu = new StringSelectMenuBuilder()
+				.setCustomId(approvalId(group))
+				.setPlaceholder(
+					`Одобрить участников ${start}–${start + group.length - 1}`
+				)
+				.setMinValues(0)
+				.setMaxValues(group.length)
+				.addOptions(
+					group.map(id => ({
+						label: (guild?.members.cache.get(id)?.displayName || id).slice(
+							0,
+							100
+						),
+						value: id,
+						default: approved.has(id)
+					}))
+				)
+			return new ActionRowBuilder().addComponents(menu)
+		}
+	)
 
 	return {
 		flags: MessageFlags.IsComponentsV2,
-		components: [containerComponent, buttonsRow]
+		components: [containerComponent, buttonsRow, ...menus]
 	}
 }
 
@@ -229,7 +324,9 @@ async function updateCollectionTime(
 		captureData.max_main,
 		client.guilds.cache.first(), // guild for sorting
 		safeParse(captureData.main_list_meta, []),
-		safeParse(captureData.reserve_list_meta, [])
+		safeParse(captureData.reserve_list_meta, []),
+		safeParse(captureData.approved_users, []),
+		captureData.approval_page || 0
 	)
 
 	// Ищем канал
@@ -375,6 +472,7 @@ async function handleButton(interaction) {
 		let leftList = safeParse(row.left_list, [])
 		let mainListMeta = safeParse(row.main_list_meta, [])
 		let reserveListMeta = safeParse(row.reserve_list_meta, [])
+		let approvedUsers = safeParse(row.approved_users, [])
 
 		if (interaction.customId === 'capt_join') {
 			if (mainList.includes(userId) || reserveList.includes(userId)) {
@@ -429,23 +527,23 @@ async function handleButton(interaction) {
 			if (!leftList.includes(userId)) {
 				leftList.push(userId)
 			}
+			approvedUsers = approvedUsers.filter(id => id !== userId)
 		}
 
 		await client.query(
 			`UPDATE active_captures 
-         SET main_list = $1, reserve_list = $2, left_list = $3, main_list_meta = $4, reserve_list_meta = $5
-         WHERE message_id = $6`,
+         SET main_list = $1, reserve_list = $2, left_list = $3, main_list_meta = $4, reserve_list_meta = $5, approved_users = $6
+         WHERE message_id = $7`,
 			[
 				JSON.stringify(mainList),
 				JSON.stringify(reserveList),
 				JSON.stringify(leftList),
 				JSON.stringify(mainListMeta),
 				JSON.stringify(reserveListMeta),
+				JSON.stringify(approvedUsers),
 				messageId
 			]
 		)
-
-		await client.query('COMMIT')
 
 		const updatedMessageData = buildCaptureMessage(
 			discordTimestamp,
@@ -456,9 +554,12 @@ async function handleButton(interaction) {
 			maxMain,
 			interaction.guild,
 			mainListMeta,
-			reserveListMeta
+			reserveListMeta,
+			approvedUsers,
+			row.approval_page || 0
 		)
 		await interaction.editReply(updatedMessageData)
+		await client.query('COMMIT')
 	} catch (err) {
 		await client.query('ROLLBACK').catch(() => {})
 		console.error('Ошибка при обработке кнопки капта:', err)
@@ -473,9 +574,128 @@ async function handleButton(interaction) {
 	}
 }
 
+async function handleApproval(interaction) {
+	const adminRoles = (process.env.ADMIN_ROLES || '')
+		.split(',')
+		.map(id => id.trim())
+		.filter(Boolean)
+	const member = interaction.member
+	if (
+		!member ||
+		(!member.permissions.has(PermissionFlagsBits.Administrator) &&
+			!adminRoles.some(id => member.roles.cache.has(id)))
+	) {
+		return interaction.reply({
+			content: '❌ У вас нет прав для одобрения участников.',
+			flags: MessageFlags.Ephemeral
+		})
+	}
+	await interaction.deferUpdate()
+	let client
+	try {
+		client = await pool.connect()
+		await client.query('BEGIN')
+		const result = await client.query(
+			'SELECT * FROM active_captures WHERE message_id = $1 FOR UPDATE',
+			[interaction.message.id]
+		)
+		const row = result.rows[0]
+		if (!row) {
+			await client.query('ROLLBACK')
+			return interaction.followUp({
+				content: '❌ Данная регистрация устарела или неактивна.',
+				flags: MessageFlags.Ephemeral
+			})
+		}
+		const parse = value => {
+			if (Array.isArray(value)) return value
+			try {
+				return JSON.parse(value || '[]')
+			} catch {
+				return []
+			}
+		}
+		const main = parse(row.main_list)
+		const reserve = parse(row.reserve_list)
+		let approved = parse(row.approved_users)
+		let page = Math.max(
+			0,
+			Math.min(
+				row.approval_page || 0,
+				Math.max(
+					0,
+					Math.ceil((main.length + reserve.length) / APPROVAL_PAGE_SIZE) - 1
+				)
+			)
+		)
+		if (interaction.isStringSelectMenu()) {
+			const group = approvalGroups(main, reserve, page).find(
+				items => approvalId(items) === interaction.customId
+			)
+			if (!group || interaction.values.some(id => !group.includes(id))) {
+				await client.query('ROLLBACK')
+				return interaction.followUp({
+					content: 'Список изменился. Обновите сообщение и попробуйте снова.',
+					flags: MessageFlags.Ephemeral
+				})
+			}
+			approved = [
+				...approved.filter(id => !group.includes(id)),
+				...interaction.values
+			]
+		} else {
+			const requestedPage = Number(
+				interaction.customId.slice('capt_approval_page_'.length)
+			)
+			if (
+				!Number.isInteger(requestedPage) ||
+				requestedPage < 0 ||
+				requestedPage >=
+					Math.ceil((main.length + reserve.length) / APPROVAL_PAGE_SIZE)
+			) {
+				await client.query('ROLLBACK')
+				return
+			}
+			page = requestedPage
+		}
+		await client.query(
+			'UPDATE active_captures SET approved_users = $1, approval_page = $2 WHERE message_id = $3',
+			[JSON.stringify(approved), page, interaction.message.id]
+		)
+		await interaction.editReply(
+			buildCaptureMessage(
+				row.discord_timestamp,
+				main,
+				reserve,
+				parse(row.left_list),
+				row.target,
+				row.max_main || 20,
+				interaction.guild,
+				parse(row.main_list_meta),
+				parse(row.reserve_list_meta),
+				approved,
+				page
+			)
+		)
+		await client.query('COMMIT')
+	} catch (err) {
+		if (client) await client.query('ROLLBACK').catch(() => {})
+		console.error('Ошибка одобрения участников:', err)
+		await interaction
+			.followUp({
+				content: '❌ Не удалось сохранить одобрение.',
+				flags: MessageFlags.Ephemeral
+			})
+			.catch(() => {})
+	} finally {
+		if (client) client.release()
+	}
+}
+
 module.exports = {
 	buildCaptureMessage,
 	updateCollectionTime,
 	sendCollection,
-	handleButton
+	handleButton,
+	handleApproval
 }

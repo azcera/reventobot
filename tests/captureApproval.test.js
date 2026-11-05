@@ -1,0 +1,207 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+
+const dbPath = require.resolve('../src/services/database')
+let row
+const client = {
+	async query(sql, params) {
+		if (sql.startsWith('SELECT')) return { rows: [row] }
+		if (sql.includes('SET approved_users =')) {
+			row.approved_users = JSON.parse(params[0])
+			row.approval_page = params[1]
+		}
+		if (sql.includes('SET main_list =')) {
+			;[
+				row.main_list,
+				row.reserve_list,
+				row.left_list,
+				row.main_list_meta,
+				row.reserve_list_meta,
+				row.approved_users
+			] = params.slice(0, 6).map(JSON.parse)
+		}
+		return { rows: [] }
+	},
+	release() {}
+}
+require.cache[dbPath] = {
+	id: dbPath,
+	filename: dbPath,
+	loaded: true,
+	exports: { connect: async () => client }
+}
+const manager = require('../src/features/capture/captureManager')
+const guild = { members: { cache: new Map() } }
+const admin = { permissions: { has: () => true }, roles: { cache: new Map() } }
+const ids = Array.from({ length: 30 }, (_, i) => String(1000 + i))
+
+test('approval across menus survives reload and is removed on leave', async () => {
+	row = {
+		message_id: 'm',
+		discord_timestamp: 'now',
+		main_list: ids.slice(0, 20),
+		reserve_list: ids.slice(20),
+		left_list: [],
+		main_list_meta: [],
+		reserve_list_meta: [],
+		approved_users: [],
+		approval_page: 0,
+		max_main: 20
+	}
+	let payload = manager.buildCaptureMessage(
+		'now',
+		row.main_list,
+		row.reserve_list,
+		[],
+		'test',
+		20,
+		guild
+	)
+	assert.equal(payload.components.length, 4)
+	const menus = payload.components
+		.slice(2)
+		.map(item => item.toJSON().components[0])
+	assert.equal(menus[0].options.length, 25)
+	assert.equal(menus[1].options.length, 5)
+	const interaction = {
+		member: admin,
+		guild,
+		message: { id: 'm' },
+		values: [ids[0]],
+		customId: menus[0].custom_id,
+		isStringSelectMenu: () => true,
+		deferUpdate: async () => {},
+		editReply: async value => {
+			payload = value
+		},
+		followUp: async () => {}
+	}
+	await manager.handleApproval(interaction)
+	interaction.customId = menus[1].custom_id
+	interaction.values = [ids[29]]
+	await manager.handleApproval(interaction)
+	assert.deepEqual(row.approved_users, [ids[0], ids[29]])
+	delete require.cache[
+		require.resolve('../src/features/capture/captureManager')
+	]
+	const reloaded = require('../src/features/capture/captureManager')
+	payload = reloaded.buildCaptureMessage(
+		'now',
+		row.main_list,
+		row.reserve_list,
+		[],
+		'test',
+		20,
+		guild,
+		[],
+		[],
+		row.approved_users
+	)
+	assert.equal(
+		payload.components[2].toJSON().components[0].options[0].default,
+		true
+	)
+	await reloaded.handleButton({
+		isButton: () => true,
+		customId: 'capt_leave',
+		deferUpdate: async () => {},
+		message: { id: 'm' },
+		user: { id: ids[0] },
+		guild,
+		editReply: async () => {},
+		followUp: async () => {}
+	})
+	assert.deepEqual(row.approved_users, [ids[29]])
+})
+
+test('approval requires permission and rejects stale menus', async () => {
+	let replies = []
+	const interaction = {
+		member: { permissions: { has: () => false }, roles: { cache: new Map() } },
+		reply: async value => replies.push(value)
+	}
+	await manager.handleApproval(interaction)
+	assert.match(replies[0].content, /нет прав/)
+	await manager.handleApproval({
+		member: admin,
+		guild,
+		message: { id: 'm' },
+		customId: 'capt_approve_stale',
+		values: [],
+		isStringSelectMenu: () => true,
+		deferUpdate: async () => {},
+		followUp: async value => replies.push(value)
+	})
+	assert.match(replies[1].content, /изменился/)
+})
+
+test('more than 100 participants use pages in the same message', () => {
+	const players = Array.from({ length: 101 }, (_, i) => String(2000 + i))
+	const first = manager.buildCaptureMessage(
+		'now',
+		players.slice(0, 20),
+		players.slice(20),
+		[],
+		'test',
+		20,
+		guild
+	)
+	const second = manager.buildCaptureMessage(
+		'now',
+		players.slice(0, 20),
+		players.slice(20),
+		[],
+		'test',
+		20,
+		guild,
+		[],
+		[],
+		[],
+		1
+	)
+	assert.equal(first.components.length, 6)
+	assert.equal(second.components.length, 3)
+	assert.equal(
+		second.components[2].toJSON().components[0].options[0].value,
+		players[100]
+	)
+})
+
+test('test command approves across menus without database access', async () => {
+	const { EventEmitter } = require('node:events')
+	const command = require('../src/commands/utility/testcaptapproval27')
+	const collector = new EventEmitter()
+	const members = new Map(ids.map(id => [id, { id, user: { bot: false } }]))
+	let payload
+	const message = {
+		guild: { members: { cache: new Map(), fetch: async () => members } },
+		member: admin,
+		channel: {
+			send: async value => {
+				payload = value
+				return { createMessageComponentCollector: () => collector }
+			}
+		}
+	}
+	await command.execute(message)
+	assert.equal(payload.components.length, 4)
+	const menus = payload.components
+		.slice(2)
+		.map(item => item.toJSON().components[0])
+	for (const menu of menus) {
+		collector.emit('collect', {
+			member: admin,
+			customId: menu.custom_id,
+			isStringSelectMenu: () => true,
+			values: [menu.options[0].value],
+			update: async value => {
+				payload = value
+			}
+		})
+	}
+	for (const menu of payload.components
+		.slice(2)
+		.map(item => item.toJSON().components[0])) {
+		assert.equal(menu.options[0].default, true)
+	}
+})

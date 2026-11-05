@@ -46,6 +46,15 @@ module.exports = client => {
 		}
 
 		if (
+			(interaction.isStringSelectMenu() &&
+				interaction.customId.startsWith('capt_approve_')) ||
+			(interaction.isButton() &&
+				interaction.customId.startsWith('capt_approval_page_'))
+		) {
+			return await captureManager.handleApproval(interaction)
+		}
+
+		if (
 			!interaction.isButton() &&
 			!interaction.isModalSubmit() &&
 			!interaction.isStringSelectMenu()
