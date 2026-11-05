@@ -411,7 +411,8 @@ async function sendCollection(
 	interaction,
 	discordTimestamp,
 	target = null,
-	maxMain = 20
+	maxMain = 20,
+	sendReminders = true
 ) {
 	const guild = interaction.guild
 	const channel = guild.channels.cache.get(PLUS_CHANNEL)
@@ -435,10 +436,12 @@ async function sendCollection(
 		reserveListMeta
 	)
 	const message = await channel.send(messageData)
-	for (let i = 0; i < 3; i++) {
-		await channel.send({
-			content: `<@&${process.env.AUTO_ROLE}> рега выше`
-		})
+	if (sendReminders) {
+		for (let i = 0; i < 3; i++) {
+			await channel.send({
+				content: `<@&${process.env.AUTO_ROLE}> рега выше`
+			})
+		}
 	}
 
 	try {
