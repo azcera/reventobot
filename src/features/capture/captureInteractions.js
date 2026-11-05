@@ -3,6 +3,7 @@ const {
 	TextInputBuilder,
 	TextInputStyle,
 	MessageFlags,
+	PermissionFlagsBits,
 	LabelBuilder
 } = require('discord.js')
 const { parseDateTime, getDiscordTimestamp } = require('../../utils/dateUtils')
@@ -105,7 +106,7 @@ async function submitCaptModal(interaction) {
 
 /**
  * Авто-создание капта по кнопке из Telegram-сообщения.
- * Парсит enemy + time из customId, проверяет админ-роль.
+ * Парсит enemy + time из customId, проверяет админ-роль или право администратора.
  * @param {ButtonInteraction} interaction
  */
 async function handleAutoCaptButton(interaction) {
@@ -113,7 +114,7 @@ async function handleAutoCaptButton(interaction) {
 		ADMIN_ROLES.includes(role.id)
 	)
 
-	if (!hasAdminRole) {
+	if (!hasAdminRole && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: '❌ У вас нет необходимой роли для использования этой кнопки.'
 		})
@@ -199,7 +200,10 @@ async function handleInlineEditTimeButton(interaction) {
 		ADMIN_ROLES.includes(role.id)
 	)
 
-	if (!hasAdminRole) {
+	if (
+		!hasAdminRole &&
+		!interaction.member.permissions.has(PermissionFlagsBits.Administrator)
+	) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: '❌ У вас нет необходимой роли для изменения времени капта.'
 		})
