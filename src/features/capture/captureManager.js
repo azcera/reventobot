@@ -27,10 +27,8 @@ const PRIORITY_ROLES = (process.env.PRIORITY_ROLES || '')
  * @returns {number}
  */
 function getRolePriority(member) {
-	const sortedRoles = [...member.roles.cache.values()].sort((a, b) => b.position - a.position)
-	for (const role of sortedRoles) {
-		const idx = PRIORITY_ROLES.indexOf(role.id)
-		if (idx !== -1) return idx
+	for (let i = 0; i < PRIORITY_ROLES.length; i++) {
+		if (member.roles.cache.has(PRIORITY_ROLES[i])) return i
 	}
 	return PRIORITY_ROLES.length // lowest priority (after all configured roles)
 }
