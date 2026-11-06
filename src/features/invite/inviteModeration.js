@@ -266,10 +266,7 @@ async function handleModerationButton(interaction) {
 			max: 1
 		})
 
-		collector.on('collect', async menuInteraction => {
-			await editReplyWithAutoDelete(menuInteraction, {
-				content: '✅ Кандидат вызван! Кнопка обзвона деактивирована.'
-			})
+		collector.on('collect', async () => {
 			await interaction.deleteReply().catch(() => {}) // Удаляем сообщение с меню выбора, чтобы не мешало
 		})
 

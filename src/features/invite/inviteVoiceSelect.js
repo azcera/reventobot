@@ -5,6 +5,7 @@ const {
 	SeparatorBuilder
 } = require('discord.js')
 const db = require('../../services/database')
+const { editReplyWithAutoDelete } = require('../../utils/autoDelete')
 const {
 	isApplicationMod,
 	logAction,
@@ -12,15 +13,17 @@ const {
 } = require('../../features/invite/inviteUtils')
 
 async function handleVoiceSelect(interaction) {
-	// 1. СРАЗУ резервируем ответ, чтобы избежать ошибок "InteractionAlreadyReplied"
-	await interaction
-		.deferReply({ flags: [MessageFlags.Ephemeral] })
-		.catch(() => {})
+	// Ответом на выбор комнаты управляет только этот обработчик.
+	try {
+		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
+	} catch (error) {
+		console.error('Ошибка подтверждения выбора комнаты:', error)
+		return
+	}
 
 	if (!isApplicationMod(interaction.member)) {
-		return interaction.followUp({
-			content: '❌ Недостаточно прав.',
-			flags: [MessageFlags.Ephemeral]
+		return editReplyWithAutoDelete(interaction, {
+			content: '❌ Недостаточно прав.'
 		})
 	}
 
@@ -32,9 +35,8 @@ async function handleVoiceSelect(interaction) {
 		[targetUserId]
 	)
 	if (res.rows.length === 0) {
-		return interaction.followUp({
-			content: '❌ Заявка не найдена (возможно, она уже была обработана).',
-			flags: [MessageFlags.Ephemeral]
+		return editReplyWithAutoDelete(interaction, {
+			content: '❌ Заявка не найдена (возможно, она уже была обработана).'
 		})
 	}
 	const appData = res.rows[0]
@@ -84,10 +86,8 @@ async function handleVoiceSelect(interaction) {
 	)
 	await logAction(interaction.guild, logContainer)
 
-	// 2. Используем followUp, так как deferReply уже был вызван в начале функции
-	return interaction.followUp({
-		content: '✅ Кандидат успешно вызван на обзвон!',
-		flags: [MessageFlags.Ephemeral]
+	return editReplyWithAutoDelete(interaction, {
+		content: '✅ Кандидат успешно вызван на обзвон!'
 	})
 }
 
