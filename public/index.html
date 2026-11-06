@@ -2,6 +2,7 @@
 <html lang="ru">
 	<head>
 		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Discord UI Components v2 Constructor</title>
 		<link
 			rel="stylesheet"
@@ -12,6 +13,15 @@
 		<!-- ЛЕВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ И СБОРКА -->
 		<div class="panel">
 			<h2>Конструктор контейнеров v2</h2>
+			<div class="message-import">
+				<label for="messageLink">Редактировать сообщение по ссылке</label>
+				<div class="import-row">
+					<input type="text" id="messageLink" placeholder="https://discord.com/channels/…/…/…" autocomplete="off" />
+					<button type="button" class="btn-add blue" id="loadMessageBtn">Загрузить</button>
+				</div>
+				<div id="messageStatus" class="message-status" role="status" aria-live="polite">Вставьте ссылку, чтобы загрузить отправленный контейнер.</div>
+				<button type="button" class="btn-copy" id="detachMessageBtn" hidden>Выйти из режима редактирования</button>
+			</div>
 
 			<label for="channelId">ID Текстового канала Discord:</label>
 			<div class="channel-id-wrap">
@@ -47,32 +57,39 @@
 				</div>
 			</div>
 
-			<label>Добавить элементы в контейнер:</label>
-			<div class="actions-bar">
-				<button
-					class="btn-add blue"
-					id="addTextBtn"
-				>
-					+ Текст
-				</button>
-				<button
-					class="btn-add"
-					id="addImageBtn"
-				>
-					+ Картинку
-				</button>
-				<button
-					class="btn-add"
-					id="addSeparatorBtn"
-				>
-					+ Отступ
-				</button>
-				<button
-					class="btn-add grey"
-					id="addSectionBtn"
-				>
-					+ Секцию (кнопка справа)
-				</button>
+			<div class="component-toolbar">
+				<div class="insert-controls">
+					<label for="insertAfter" id="componentCount">Компоненты: 0</label>
+					<select id="insertAfter" aria-label="Место вставки нового компонента">
+						<option value="">В конец контейнера</option>
+					</select>
+				</div>
+				<div class="actions-bar">
+					<button
+						class="btn-add blue"
+						id="addTextBtn"
+					>
+						+ Текст
+					</button>
+					<button
+						class="btn-add"
+						id="addImageBtn"
+					>
+						+ Изображение
+					</button>
+					<button
+						class="btn-add"
+						id="addSeparatorBtn"
+					>
+						+ Разделитель
+					</button>
+					<button
+						class="btn-add grey"
+						id="addSectionBtn"
+					>
+						+ Текст с кнопкой
+					</button>
+				</div>
 			</div>
 
 			<div
@@ -80,12 +97,15 @@
 				class="items-list"
 			></div>
 
-			<button
-				class="btn-send"
-				id="sendBtn"
-			>
-				🚀 Опубликовать в Discord
-			</button>
+			<div class="publish-actions">
+				<button type="button" class="btn-send" id="saveMessageBtn" hidden>Сохранить изменения</button>
+				<button
+					class="btn-send"
+					id="sendBtn"
+				>
+					🚀 Опубликовать в Discord
+				</button>
+			</div>
 		</div>
 
 		<!-- ПРАВАЯ ПАНЕЛЬ: ЖИВОЕ ПРЕВЬЮ -->

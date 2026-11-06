@@ -11,6 +11,7 @@ require('dotenv').config()
 
 // Импорты сервисов
 const { buildWebContainer } = require('./src/services/containerService')
+const { registerContainerMessageRoutes } = require('./src/services/containerMessageService')
 const loadCommands = require('./src/utils/loadCommands')
 
 // --- ИНИЦИАЛИЗАЦИЯ DISCORD КЛИЕНТА ---
@@ -57,6 +58,7 @@ if (fs.existsSync(eventsPath)) {
 const app = express()
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'public')))
+registerContainerMessageRoutes(app, client)
 
 app.get('/', (req, res) => {
 	res.sendFile(path.join(__dirname, 'public', 'index.html'))
