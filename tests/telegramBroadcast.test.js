@@ -79,7 +79,7 @@ test('notification template uses server nickname and falls back to Discord names
 	value.author.globalName = 'Отображаемое имя'
 	value.author.username = 'username'
 	assert.equal(prepareMessage(value).parts.join(''),
-		`📣 Канал: #объявления\n👤 Отправил: Ник на сервере\n\nТекст сообщения\n\n🔗 Оригинал: ${value.url}`)
+		'📣 Канал: #объявления\n👤 Отправил: Ник на сервере\n\nТекст сообщения')
 	value.member = null
 	assert.match(prepareMessage(value).parts[0], /Отправил: Отображаемое имя/)
 	value.author.globalName = null

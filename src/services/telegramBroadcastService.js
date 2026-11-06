@@ -22,7 +22,7 @@ function prepareMessage(message) {
 	}
 	const hash = createHash('sha256').update(JSON.stringify(identity)).digest('hex')
 	const author = message.member?.displayName || message.author.globalName || message.author.username || message.author.tag
-	const text = `📣 Канал: #${message.channel.name || message.channelId}\n👤 Отправил: ${author}\n\n${content}\n\n🔗 Оригинал: ${message.url}`
+	const text = `📣 Канал: #${message.channel.name || message.channelId}\n👤 Отправил: ${author}\n\n${content}`
 	// Count Unicode code points so a split never breaks a surrogate pair.
 	const characters = Array.from(text)
 	const parts = []
