@@ -118,8 +118,9 @@ const server = app.listen(3000, () => {
 })
 
 // --- GRACEFUL SHUTDOWN (корректное завершение работы) ---
-const shutdown = () => {
+const shutdown = async () => {
 	console.log('\n🛑 Получен сигнал остановки. Завершаю работу...')
+	await client.stopTelegramBroadcast?.()
 	client.destroy()
 	server.close(() => {
 		console.log('✅ Сервер остановлен.')

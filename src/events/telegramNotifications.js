@@ -1,4 +1,5 @@
 const { Events } = require('discord.js')
+const { discordNotificationContent } = require('../utils/discordNotificationContent')
 require('dotenv').config()
 
 module.exports = client => {
@@ -10,10 +11,7 @@ module.exports = client => {
 	client.on(Events.MessageCreate, async message => {
 		if (message.author.bot || message.channelId !== channelId) return
 
-		const attachments = [...message.attachments.values()].map(file => file.url)
-		const content =
-			[message.content, ...attachments].filter(Boolean).join('\n') ||
-			'[Сообщение без текста]'
+		const content = discordNotificationContent(message) || '[Сообщение без текста]'
 		const text = `🔔 Уведомление\nОт: ${message.author.tag}\n${content}`
 
 		try {
