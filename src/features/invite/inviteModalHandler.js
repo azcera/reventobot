@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	MessageFlags,
 	ContainerBuilder,
@@ -46,13 +47,13 @@ async function submitRejectModal(interaction) {
 			.setAccentColor(0xe74c3c)
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
-					`### Отклонение заявки\nВаша заявка в ${interaction.guild.name} отклонена!!`
+					dashboard.text('dm.rejectTitle', { server: interaction.guild.name })
 				)
 			)
 			.addSeparatorComponents(new SeparatorBuilder())
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
-					`> Причина: ${reason}\n> Дата отклонения: <t:${Math.floor(Date.now() / 1000)}:F>`
+					dashboard.text('dm.rejectReason', { reason, time: Math.floor(Date.now() / 1000) })
 				)
 			)
 		await targetUser

@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	ButtonBuilder,
 	ButtonStyle,
@@ -66,7 +67,7 @@ function getNavigationContainer(text = null, isMentionHere = true) {
 	}
 	container
 		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent(`# Панель навигации`)
+			new TextDisplayBuilder().setContent(dashboard.text('navigation.1'))
 		)
 		.addSeparatorComponents(
 			new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
@@ -76,7 +77,7 @@ function getNavigationContainer(text = null, isMentionHere = true) {
 		if (btn.link === 'category') {
 			container
 				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(`## ${btn.label}`)
+					new TextDisplayBuilder().setContent('## ' + dashboard.text('navigation.item.' + index + '.label'))
 				)
 				.addSeparatorComponents(new SeparatorBuilder())
 		} else {
@@ -84,13 +85,13 @@ function getNavigationContainer(text = null, isMentionHere = true) {
 				.addSectionComponents(
 					new SectionBuilder()
 						.addTextDisplayComponents(
-							new TextDisplayBuilder().setContent(btn.text)
+							new TextDisplayBuilder().setContent(dashboard.text('navigation.item.' + index + '.text'))
 						)
 						.setButtonAccessory(
 							new ButtonBuilder()
-								.setLabel(btn.label)
+								.setLabel(dashboard.text('navigation.item.' + index + '.label'))
 								.setStyle(ButtonStyle.Link)
-								.setURL(btn.link.trim())
+								.setURL(dashboard.text('navigation.item.' + index + '.link').trim())
 						)
 				)
 				.addSeparatorComponents(new SeparatorBuilder())
@@ -103,7 +104,7 @@ function getNavigationContainer(text = null, isMentionHere = true) {
 		)
 	}
 
-	return container
+	return dashboard.decorate('navigation', container)
 }
 
 module.exports = { getNavigationContainer }

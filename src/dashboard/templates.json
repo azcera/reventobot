@@ -1,0 +1,859 @@
+{
+  "rules.1": {
+    "group": "Правила",
+    "label": "attachment://rules.png",
+    "default": "attachment://rules.png",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "rules.heading.1": {
+    "group": "Правила",
+    "label": "## Общие положения",
+    "default": "## Общие положения",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.1.1": {
+    "group": "Правила",
+    "label": "**Правило — 1-1**",
+    "default": "**Правило — 1-1**\nЗапрещено разжигать конфликты, оскорблять или проявлять неуважение внутри и вне семьи к кому-либо незавсисимо от пола.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.1.2": {
+    "group": "Правила",
+    "label": "**Правило — 1-2**",
+    "default": "**Правило — 1-2**\nНикнейм в дискорде должен строго соответствовать вашему игровому нику и статическому ID (пример: Имя | Статик).",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.1.3": {
+    "group": "Правила",
+    "label": "**Правило — 1-3**",
+    "default": "**Правило — 1-3**\nЗапрещен флуд, спам, реклама сторонних ресурсов и упоминание родных в любом виде.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.heading.2": {
+    "group": "Правила",
+    "label": "## Голосовые каналы",
+    "default": "## Голосовые каналы",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.2.1": {
+    "group": "Правила",
+    "label": "**Правило — 2-1**",
+    "default": "**Правило — 2-1**\nЗаходя в каналы сбора на семейные МП (мероприятия, капты), вы обязаны иметь работающий микрофон и не создавать посторонних шумов.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.2.2": {
+    "group": "Правила",
+    "label": "**Правило — 2-2**",
+    "default": "**Правило — 2-2**\nЗапрещено издавать громкие звуки, перебивать старших, кричать или использовать программы для изменения голоса на протяжении всего общения.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.heading.3": {
+    "group": "Правила",
+    "label": "## Дисциплина и информация",
+    "default": "## Дисциплина и информация",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.3.1": {
+    "group": "Правила",
+    "label": "**Правило — 3-1**",
+    "default": "**Правило — 3-1**\nЗапрещена передача любой внутренней информации и ресурсов семьи третьим лицам.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.3.2": {
+    "group": "Правила",
+    "label": "**Правило — 3-2**",
+    "default": "**Правило — 3-2**\nЗапрещено игнорировать сборы (https://discord.com/channels/1445808131484553348/1445808132671668233) на семейные мероприятия, если вы находитесь в игре и не имеете уважительной причины.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.heading.4": {
+    "group": "Правила",
+    "label": "## Правила для мероприятий",
+    "default": "## Правила для мероприятий",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.4.1": {
+    "group": "Правила",
+    "label": "**Правило — 4-1**",
+    "default": "**Правило — 4-1**\nПри участии на мероприятии `\"ОПАСНЫЕ ТАЙНИКИ\"` запрещено оставлять или продавать лут из тайников у себя, все что было найдено должно попасть на __склад__ или __особняк__.\n\n```ansi\n\u001b[2;31m\u001b[1;31mПод правила опасных тайников попадают предметы: Строительное и электронное оборудование, материалы, генераторы, (1,2,3) уровня. Остальные предметы: пачки сигарет, металлолом и т.д вы можете оставлять себе и продавать.\u001b[0m\u001b[2;31m\u001b[0m\n```",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "rules.rule.4.2": {
+    "group": "Правила",
+    "label": "**Правило — 4-2**",
+    "default": "**Правило — 4-2**\nПри участии на любом из МП выбитое оружие должно быть сложено на склад или хранится на личный перезафул для ближайших мероприятий, продавать нельзя",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.1": {
+    "group": "Приглашение",
+    "label": "attachment://invites.png",
+    "default": "attachment://invites.png",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "invite.2": {
+    "group": "Приглашение",
+    "label": "attachment://revento.png",
+    "default": "attachment://revento.png",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "invite.3": {
+    "group": "Приглашение",
+    "label": "## 😎 Оставить заявку на вступление",
+    "default": "## 😎 Оставить заявку на вступление\nДля этого нажмите кнопку \"Подать заявку\" справа и заполните необходимые данные.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.4": {
+    "group": "Приглашение",
+    "label": "Кнопка: 😎 Подать заявку",
+    "default": "😎 Подать заявку",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "invite.5": {
+    "group": "Приглашение",
+    "label": "## 🥶 Немного о нас:",
+    "default": "## 🥶 Немного о нас:",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.6": {
+    "group": "Приглашение",
+    "label": "Мы ставим большие амбиции, так как Revento - это прежде всего семья, жаждущая по",
+    "default": "Мы ставим большие амбиции, так как Revento - это прежде всего семья, жаждущая побед. Перед нами стоит много преград и наша цель - их преодолеть. В составе адекватные ребята, которые также замотивированы на победу.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.7": {
+    "group": "Приглашение",
+    "label": "## 🪙 От нас Вы получите:",
+    "default": "## 🪙 От нас Вы получите:",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.8": {
+    "group": "Приглашение",
+    "label": "### • Опытный и отзывчивый старший состав, готовый делиться опытом и помогать",
+    "default": "### • Опытный и отзывчивый старший состав, готовый делиться опытом и помогать\n### • Семейный офис, большой склад на 16 тонн\n### • Богатый автопарк, вертолеты\n### • Много интересного контента - капты, рп-контент, контракты\n### • Зафулл на все семейные мероприятия",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.9": {
+    "group": "Приглашение",
+    "label": "## ✅ Минимальные требования:",
+    "default": "## ✅ Минимальные требования:",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.10": {
+    "group": "Приглашение",
+    "label": "### 1. Возраст 16+ (бывают исключения).",
+    "default": "### 1. Возраст 16+ (бывают исключения).\n### 2. Наличие рабочего микрофона и Discord.\n### 3. Знание базовых правил сервера (DM, PG, NRD).\n### 4. Адекватность и готовность участвовать в жизни семьи.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.11": {
+    "group": "Приглашение",
+    "label": "## 📃 Форма заявки:",
+    "default": "## 📃 Форма заявки:",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.12": {
+    "group": "Приглашение",
+    "label": "## ❌ Ваша заявка будет отклонена, если:",
+    "default": "## ❌ Ваша заявка будет отклонена, если:",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.13": {
+    "group": "Приглашение",
+    "label": "```css",
+    "default": "```css\n1. Поля будут заполнены некорректно\n2. Форма подачи заявки будет не соблюдена\n3. В заявке присутствует обман в любом виде\n4. На момент принятия заявки ваш никнейм не будет соответствовать форме (Имя | Статик)```",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.14": {
+    "group": "Приглашение",
+    "label": "Чем больше информации вы предоставите в заявке - тем больше шансов на ее одобрен",
+    "default": "Чем больше информации вы предоставите в заявке - тем больше шансов на ее одобрение.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "panel.1": {
+    "group": "Админ-панель",
+    "label": "attachment://panel.png",
+    "default": "attachment://panel.png",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "panel.2": {
+    "group": "Админ-панель",
+    "label": "## 📌 Админ-панель",
+    "default": "## 📌 Админ-панель\nДля взаимодействия с ботом используйте кнопки ниже.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "panel.3": {
+    "group": "Админ-панель",
+    "label": "*Время необходимо указывать по МСК. Формат `ДД.ММ.ГГГГ ЧЧ:ММ` нужен только если ",
+    "default": "*Время необходимо указывать по МСК. Формат `ДД.ММ.ГГГГ ЧЧ:ММ` нужен только если дата не сегодняшняя.*",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.1": {
+    "group": "Навигация",
+    "label": "# Панель навигации",
+    "default": "# Панель навигации",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.0.label": {
+    "group": "Навигация",
+    "label": "Кнопка: Основное",
+    "default": "Основное",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.1.label": {
+    "group": "Навигация",
+    "label": "Кнопка: 📕 ПРАВИЛА",
+    "default": "📕 ПРАВИЛА",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.1.text": {
+    "group": "Навигация",
+    "label": "Раздел всех основных правил",
+    "default": "Раздел всех основных правил",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.1.link": {
+    "group": "Навигация",
+    "label": "https://discord.com/channels/1445808131484553348/1544098139089277040",
+    "default": "https://discord.com/channels/1445808131484553348/1544098139089277040",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "navigation.item.2.label": {
+    "group": "Навигация",
+    "label": "Кнопка: 📈 ПОВЫШЕНИЕ",
+    "default": "📈 ПОВЫШЕНИЕ",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.2.text": {
+    "group": "Навигация",
+    "label": "Информация о повышении",
+    "default": "Информация о повышении",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.2.link": {
+    "group": "Навигация",
+    "label": "https://discord.com/channels/1445808131484553348/1500204371638620170",
+    "default": "https://discord.com/channels/1445808131484553348/1500204371638620170",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "navigation.item.3.label": {
+    "group": "Навигация",
+    "label": "Кнопка: ⏰ РАСПИСАНИЕ МП",
+    "default": "⏰ РАСПИСАНИЕ МП",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.3.text": {
+    "group": "Навигация",
+    "label": "Список и время проведения основных мероприятий",
+    "default": "Список и время проведения основных мероприятий",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.3.link": {
+    "group": "Навигация",
+    "label": "https://discord.com/channels/1445808131484553348/1500208108578930829",
+    "default": "https://discord.com/channels/1445808131484553348/1500208108578930829",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "navigation.item.4.label": {
+    "group": "Навигация",
+    "label": "Кнопка: Обучение",
+    "default": "Обучение",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.5.label": {
+    "group": "Навигация",
+    "label": "Кнопка: 🥦 ЗАКУР",
+    "default": "🥦 ЗАКУР",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.5.text": {
+    "group": "Навигация",
+    "label": "Обучение видам закура",
+    "default": "Обучение видам закура",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.5.link": {
+    "group": "Навигация",
+    "label": "https://discord.com/channels/1445808131484553348/1500167057810128938",
+    "default": "https://discord.com/channels/1445808131484553348/1500167057810128938",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "navigation.item.6.label": {
+    "group": "Навигация",
+    "label": "Кнопка: ✅ МЕТКИ",
+    "default": "✅ МЕТКИ",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.6.text": {
+    "group": "Навигация",
+    "label": "Использование группы",
+    "default": "Использование группы",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.6.link": {
+    "group": "Навигация",
+    "label": "https://discord.com/channels/1445808131484553348/1500169291801301113",
+    "default": "https://discord.com/channels/1445808131484553348/1500169291801301113",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "navigation.item.7.label": {
+    "group": "Навигация",
+    "label": "Кнопка: 💊 ЭПИКИ/ДЕФИКИ",
+    "default": "💊 ЭПИКИ/ДЕФИКИ",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.7.text": {
+    "group": "Навигация",
+    "label": "Информация об использовании эпиков и дефиков",
+    "default": "Информация об использовании эпиков и дефиков",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.7.link": {
+    "group": "Навигация",
+    "label": "https://discord.com/channels/1445808131484553348/1500170743273750750",
+    "default": "https://discord.com/channels/1445808131484553348/1500170743273750750",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "navigation.item.8.label": {
+    "group": "Навигация",
+    "label": "Кнопка: 💪 НАВЫКИ",
+    "default": "💪 НАВЫКИ",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "navigation.item.8.text": {
+    "group": "Навигация",
+    "label": "Видеоматериал про навыки",
+    "default": "Видеоматериал про навыки",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "navigation.item.8.link": {
+    "group": "Навигация",
+    "label": "https://discord.com/channels/1445808131484553348/1505861163328602182",
+    "default": "https://discord.com/channels/1445808131484553348/1505861163328602182",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
+  "application.1": {
+    "group": "Заявка",
+    "label": "Кнопка: ✅ Принять",
+    "default": "✅ Принять",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "application.2": {
+    "group": "Заявка",
+    "label": "Кнопка: 📞 Вызвать на обзвон",
+    "default": "📞 Вызвать на обзвон",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "application.3": {
+    "group": "Заявка",
+    "label": "Кнопка: ❌ Отклонить",
+    "default": "❌ Отклонить",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "capture.1": {
+    "group": "Регистрация на капт",
+    "label": "-# Нажмите на кнопку ниже, чтобы записаться на капт.",
+    "default": "-# Нажмите на кнопку ниже, чтобы записаться на капт.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 500
+  },
+  "capture.2": {
+    "group": "Регистрация на капт",
+    "label": "Кнопка: ✅ Принять",
+    "default": "✅ Принять",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "capture.3": {
+    "group": "Регистрация на капт",
+    "label": "Кнопка: ❌ Выйти",
+    "default": "❌ Выйти",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "capture.4": {
+    "group": "Регистрация на капт",
+    "label": "Кнопка: ✏️ Время",
+    "default": "✏️ Время",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "capture.5": {
+    "group": "Регистрация на капт",
+    "label": "Кнопка: ◀",
+    "default": "◀",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "capture.6": {
+    "group": "Регистрация на капт",
+    "label": "Кнопка: ▶",
+    "default": "▶",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "archives.1": {
+    "group": "Списки архивов",
+    "label": "# 👥 Список участников и их архивов",
+    "default": "# 👥 Список участников и их архивов",
+    "type": "text",
+    "variables": [],
+    "maxLength": 180
+  },
+  "unanswered.1": {
+    "group": "Неотвеченные архивы",
+    "label": "# 🙊 Список неотвеченных архивов",
+    "default": "# 🙊 Список неотвеченных архивов",
+    "type": "text",
+    "variables": [],
+    "maxLength": 180
+  },
+  "capture.title": {
+    "group": "Регистрация на капт",
+    "label": "## 📢 Рега на {target}!",
+    "default": "## 📢 Рега на {target}!",
+    "type": "text",
+    "variables": [
+      "target"
+    ],
+    "maxLength": 500
+  },
+  "capture.time": {
+    "group": "Регистрация на капт",
+    "label": "## Время проведения: {time}",
+    "default": "## Время проведения: {time}",
+    "type": "text",
+    "variables": [
+      "time"
+    ],
+    "maxLength": 500
+  },
+  "capture.main": {
+    "group": "Регистрация на капт",
+    "label": "### 👥 Основной состав ({count}/{limit})",
+    "default": "### 👥 Основной состав ({count}/{limit})\n{players}",
+    "type": "text",
+    "variables": [
+      "count",
+      "limit",
+      "players"
+    ],
+    "maxLength": 500
+  },
+  "capture.reserve": {
+    "group": "Регистрация на капт",
+    "label": "### 🤝 Резерв ({count})",
+    "default": "### 🤝 Резерв ({count})\n{players}",
+    "type": "text",
+    "variables": [
+      "count",
+      "players"
+    ],
+    "maxLength": 500
+  },
+  "capture.left": {
+    "group": "Регистрация на капт",
+    "label": "### 🚪 Покинули набор ({count})",
+    "default": "### 🚪 Покинули набор ({count})\n{players}",
+    "type": "text",
+    "variables": [
+      "count",
+      "players"
+    ],
+    "maxLength": 500
+  },
+  "archives.part": {
+    "group": "Списки архивов",
+    "label": "# 👥 Список участников и их архивов (часть {part})",
+    "default": "# 👥 Список участников и их архивов (часть {part})",
+    "type": "text",
+    "variables": [
+      "part"
+    ],
+    "maxLength": 180
+  },
+  "unanswered.empty": {
+    "group": "Неотвеченные архивы",
+    "label": "Нет непрочитанных архивов.",
+    "default": "Нет непрочитанных архивов.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 180
+  },
+  "application.title": {
+    "group": "Заявка",
+    "label": "# 📝 Заявка в семью",
+    "default": "# 📝 Заявка в семью\nНиже выведена информация о кандидате.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "application.help": {
+    "group": "Заявка",
+    "label": " Если вы администратор: используйте кнопки ниже для управления заявкой.",
+    "default": " Если вы администратор: используйте кнопки ниже для управления заявкой.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "application.accepted": {
+    "group": "Заявка",
+    "label": "# ✅ Заявка одобрена",
+    "default": "# ✅ Заявка одобрена",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "application.rejected": {
+    "group": "Заявка",
+    "label": "# ❌ Заявка отклонена",
+    "default": "# ❌ Заявка отклонена",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "application.interview": {
+    "group": "Заявка",
+    "label": "# 📞 Вызов на обзвон",
+    "default": "# 📞 Вызов на обзвон",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "application.pendingStatus": {
+    "group": "Заявка",
+    "label": "application.pendingStatus",
+    "default": "\n**Статус:** На рассмотрении\nВремя отправления: <t:{time}:F> (<t:{time}:R>)",
+    "type": "text",
+    "variables": [
+      "time"
+    ],
+    "maxLength": 4000
+  },
+  "application.acceptedStatus": {
+    "group": "Заявка",
+    "label": "application.acceptedStatus",
+    "default": "\n**Статус:** Принят в семью\n**Администратор:** <@{admin}>\nВремя решения: <t:{time}:F>",
+    "type": "text",
+    "variables": [
+      "admin",
+      "time"
+    ],
+    "maxLength": 4000
+  },
+  "application.rejectedStatus": {
+    "group": "Заявка",
+    "label": "application.rejectedStatus",
+    "default": "\n**Статус:** Отклонено\n**Администратор:** <@{admin}>\n**Причина:** {reason}\nВремя решения: <t:{time}:F>",
+    "type": "text",
+    "variables": [
+      "admin",
+      "reason",
+      "time"
+    ],
+    "maxLength": 4000
+  },
+  "application.interviewStatus": {
+    "group": "Заявка",
+    "label": "application.interviewStatus",
+    "default": "\n**Статус:** Вызван на обзвон\n**Администратор:** <@{admin}>\n**Комната:** <#{channel}>\nВремя вызова: <t:{time}:F>",
+    "type": "text",
+    "variables": [
+      "admin",
+      "channel",
+      "time"
+    ],
+    "maxLength": 4000
+  },
+  "application.details": {
+    "group": "Заявка",
+    "label": "### Пользователь: <@{user}>",
+    "default": "### Пользователь: <@{user}>\n### 1. Никнейм\n{name}\n### 2. Возраст (ООС)\n{age}\n### 3. Как узнали о семье и чего ждете?\n{about}\n### 4. Где ранее играли?\n{history}",
+    "type": "text",
+    "variables": [
+      "user",
+      "name",
+      "age",
+      "about",
+      "history"
+    ],
+    "maxLength": 4000
+  },
+  "dm.acceptTitle": {
+    "group": "Личные сообщения заявок",
+    "label": "### Одобрение заявки",
+    "default": "### Одобрение заявки\nВаша заявка в {server} одобрена!",
+    "type": "text",
+    "variables": [
+      "server"
+    ],
+    "maxLength": 500
+  },
+  "dm.acceptDate": {
+    "group": "Личные сообщения заявок",
+    "label": "> Дата одобрения: <t:{time}:F>",
+    "default": "> Дата одобрения: <t:{time}:F>",
+    "type": "text",
+    "variables": [
+      "time"
+    ],
+    "maxLength": 500
+  },
+  "dm.rejectTitle": {
+    "group": "Личные сообщения заявок",
+    "label": "### Отклонение заявки",
+    "default": "### Отклонение заявки\nВаша заявка в {server} отклонена!!",
+    "type": "text",
+    "variables": [
+      "server"
+    ],
+    "maxLength": 500
+  },
+  "dm.rejectReason": {
+    "group": "Личные сообщения заявок",
+    "label": "> Причина: {reason}",
+    "default": "> Причина: {reason}\n> Дата отклонения: <t:{time}:F>",
+    "type": "text",
+    "variables": [
+      "reason",
+      "time"
+    ],
+    "maxLength": 500
+  },
+  "dm.interviewTitle": {
+    "group": "Личные сообщения заявок",
+    "label": "### Приглашение на обзвон в **{server}**",
+    "default": "### Приглашение на обзвон в **{server}**\nВы были вызваны на обзвон!",
+    "type": "text",
+    "variables": [
+      "server"
+    ],
+    "maxLength": 500
+  },
+  "dm.interviewDate": {
+    "group": "Личные сообщения заявок",
+    "label": "> Голосовой канал: <#{channel}>",
+    "default": "> Голосовой канал: <#{channel}>\n> Дата события: <t:{time}:F>",
+    "type": "text",
+    "variables": [
+      "channel",
+      "time"
+    ],
+    "maxLength": 500
+  },
+  "rules.color": {
+    "group": "Правила",
+    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
+    "default": "",
+    "type": "color",
+    "variables": [],
+    "maxLength": 7
+  },
+  "invite.color": {
+    "group": "Приглашение",
+    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
+    "default": "",
+    "type": "color",
+    "variables": [],
+    "maxLength": 7
+  },
+  "panel.color": {
+    "group": "Админ-панель",
+    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
+    "default": "",
+    "type": "color",
+    "variables": [],
+    "maxLength": 7
+  },
+  "navigation.color": {
+    "group": "Навигация",
+    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
+    "default": "",
+    "type": "color",
+    "variables": [],
+    "maxLength": 7
+  },
+  "capture.color": {
+    "group": "Регистрация на капт",
+    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
+    "default": "",
+    "type": "color",
+    "variables": [],
+    "maxLength": 7
+  },
+  "archives.color": {
+    "group": "Списки архивов",
+    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
+    "default": "",
+    "type": "color",
+    "variables": [],
+    "maxLength": 7
+  },
+  "unanswered.color": {
+    "group": "Неотвеченные архивы",
+    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
+    "default": "",
+    "type": "color",
+    "variables": [],
+    "maxLength": 7
+  },
+  "invite.form.invite_name": {
+    "group": "Приглашение",
+    "label": "Описание поля: Никнейм",
+    "default": "### 1. Никнейм\n> Только имя (без фамилии и статика)\n> **Пример:** ||Tony||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_static": {
+    "group": "Приглашение",
+    "label": "Описание поля: Статик ID",
+    "default": "### 2. Статик ID\n> Ваш уникальный числовой идентификатор (можно посмотреть справа вверху в игре после символа '#')\n> **Пример:** ||132961||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_age": {
+    "group": "Приглашение",
+    "label": "Описание поля: Возраст (ООС)",
+    "default": "### 3. Возраст (ООС)\n> **Пример:** ||18||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_info": {
+    "group": "Приглашение",
+    "label": "Описание поля: Как узнали о семье и чего ждете?",
+    "default": "### 4. Как узнали о семье и чего ждете?\n> Расскажите о ваших ожиданиях\n> **Пример:** ||Узнал через маркет, хочу развиваться||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_history": {
+    "group": "Приглашение",
+    "label": "Описание поля: Где ранее играли?",
+    "default": "### 5. Где ранее играли?\n> Указывайте проекты и семьи\n> **Пример:** ||Revento, Sweet, Gucci (5rp)||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  }
+}

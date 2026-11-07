@@ -1,10 +1,9 @@
+const { store: dashboard } = require('../dashboard/store')
 const { Message, Events, Client, PermissionFlagsBits } = require('discord.js')
 const { updateLists } = require('../features/archive/updateLists')
 
 require('dotenv').config()
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES
-const PARENT_CHANNEL_ID = process.env.PARENT_CHANNEL_ID
 
 /**
  * Обработчик удаления сообщений
@@ -16,7 +15,7 @@ module.exports = client => {
 
 		if (
 			message.channel.isThread() &&
-			message.channel.parentId === PARENT_CHANNEL_ID
+			message.channel.parentId === dashboard.getSetting('PARENT_CHANNEL_ID')
 		) {
 			const member =
 				message.member ||
@@ -26,7 +25,7 @@ module.exports = client => {
 
 			const authorHasAdminRole =
 				member.permissions.has(PermissionFlagsBits.Administrator) ||
-				member.roles.cache.some(role => ADMIN_ROLES.includes(role.id))
+				member.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))
 
 			const messageHasUserMention = message.mentions.users.size > 0
 			const messageHasRoleMention = message.mentions.roles.size > 0

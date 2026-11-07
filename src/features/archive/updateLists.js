@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	Guild,
 	ChannelType,
@@ -8,7 +9,6 @@ const { getArchivesLists } = require('./archivesList')
 const { getUnansweredList } = require('./archiveUnansweredList')
 require('dotenv').config()
 
-const adminChannelId = process.env.ARCHIVE_SETTINGS_CHANNEL
 
 /**
  * Отправляет или изменяет сообщение в панель управления
@@ -34,8 +34,8 @@ async function updateLists(guild) {
 		return console.error('❌ Ошибка обновления архивных списков: списки пусты')
 
 	const adminChannel =
-		guild.channels.cache.get(adminChannelId) ||
-		(await guild.channels.fetch(adminChannelId))
+		guild.channels.cache.get(dashboard.getSetting('ARCHIVE_SETTINGS_CHANNEL')) ||
+		(await guild.channels.fetch(dashboard.getSetting('ARCHIVE_SETTINGS_CHANNEL')))
 
 	if (
 		!adminChannel ||

@@ -32,7 +32,7 @@ function prepareMessage(message) {
 	return { hash, parts }
 }
 
-function createBroadcastService({ pool, token, request = fetch }) {
+function createBroadcastService({ pool, token, request = fetch, isEnabled = () => true }) {
 	const controller = new AbortController()
 	const { signal } = controller
 	let tasks = []
@@ -138,6 +138,7 @@ function createBroadcastService({ pool, token, request = fetch }) {
 	}
 
 	async function deliverOne() {
+		if (!isEnabled()) return false
 		const { rows: [job] } = await pool.query(`SELECT q.* FROM telegram_broadcast_queue q
 			JOIN telegram_broadcast_subscribers s ON s.chat_id = q.chat_id AND s.active
 			WHERE q.retry_at <= NOW() AND NOT EXISTS (

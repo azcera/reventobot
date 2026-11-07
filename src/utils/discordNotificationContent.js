@@ -31,7 +31,16 @@ function discordNotificationContent(message) {
 		...[...(message.attachments?.values() || [])].map(attachmentLabel),
 		message.poll ? '[Опрос]' : null,
 		...[...(message.stickers?.values() || [])].map(() => '[Стикер]')
-	].filter(Boolean).join('\n').replace(/\r\n?/g, '\n').trim()
+	].filter(Boolean).join('\n').replace(/<@([!&]?)(\d+)>/g, (mention, type, id) => {
+		if (type === '&') {
+			const role = message.guild?.roles?.cache.get(id) || message.mentions?.roles?.get(id)
+			return role ? `@${role.name}` : mention
+		}
+		const member = message.guild?.members?.cache.get(id) || message.mentions?.members?.get(id)
+		const user = message.mentions?.users?.get(id) || message.client?.users?.cache.get(id)
+		const name = member?.displayName || user?.globalName || user?.username
+		return name ? `@${name}` : mention
+	}).replace(/\r\n?/g, '\n').trim()
 }
 
 module.exports = { discordNotificationContent }

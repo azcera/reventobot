@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Revento — конструктор компонентов v2</title>
+		<link rel="icon" type="image/png" href="/revento-logo.png" />
+		<link rel="stylesheet" href="/theme.css" />
+		<link
+			rel="stylesheet"
+			href="style.css"
+		/>
+	</head>
+	<body>
+		<div class="builder-layout">
+		<!-- ЛЕВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ И СБОРКА -->
+		<div class="panel">
+			<header class="editor-heading"><p class="eyebrow">КОМПОЗИЦИЯ / COMPONENTS V2</p><h2>Редактор сообщения</h2><p>Собери содержимое из блоков и выбери канал публикации.</p></header>
+			<details class="message-import">
+				<summary>Редактировать контейнер по ссылке</summary>
+				<div class="import-content">
+				<label for="messageLink">Редактировать сообщение по ссылке</label>
+				<div class="import-row">
+					<input type="text" id="messageLink" placeholder="https://discord.com/channels/…/…/…" autocomplete="off" />
+					<button type="button" class="btn-add blue" id="loadMessageBtn">Загрузить</button>
+				</div>
+				<div id="messageStatus" class="message-status" role="status" aria-live="polite">Вставьте ссылку, чтобы загрузить отправленный контейнер.</div>
+				<button type="button" class="btn-copy" id="detachMessageBtn" hidden>Выйти из режима редактирования</button>
+				</div>
+			</details>
+
+			<label for="channelId">Канал публикации</label>
+			<div class="channel-id-wrap">
+				<input
+					type="text"
+					id="channelId"
+					list="channelOptions"
+					placeholder="Выбери канал из списка или вставь его ID"
+					autocomplete="off"
+				/>
+				<div
+					id="channelNameHint"
+					class="channel-name-hint"
+				></div>
+			</div>
+
+			<datalist id="channelOptions"></datalist>
+			<div class="color-section">
+				<div style="display: flex; flex-direction: column; gap: 8px">
+					<label for="accentColor">Цвет сообщения</label>
+					<input
+						type="color"
+						id="accentColor"
+						value="#ee60db"
+					/>
+				</div>
+				<div style="margin-left: auto">
+					<label class="checkbox-container">
+						<input
+							type="checkbox"
+							id="noColor"
+						/>
+						Без боковой полоски
+					</label>
+				</div>
+			</div>
+
+			<div class="component-toolbar">
+				<div class="insert-controls">
+					<label for="insertAfter" id="componentCount">Компоненты: 0</label>
+					<select id="insertAfter" aria-label="Место вставки нового компонента">
+						<option value="">В конец контейнера</option>
+					</select>
+				</div>
+				<div class="actions-bar">
+					<button
+						class="btn-add blue"
+						id="addTextBtn"
+					>
+						+ Текст
+					</button>
+					<button
+						class="btn-add"
+						id="addImageBtn"
+					>
+						+ Изображение
+					</button>
+					<button
+						class="btn-add"
+						id="addSeparatorBtn"
+					>
+						+ Разделитель
+					</button>
+					<button
+						class="btn-add grey"
+						id="addSectionBtn"
+					>
+						+ Текст с кнопкой
+					</button>
+				</div>
+			</div>
+
+			<div
+				id="itemsContainer"
+				class="items-list"
+			></div>
+
+			<div class="publish-actions">
+				<button type="button" class="btn-send" id="saveMessageBtn" hidden>Сохранить изменения</button>
+				<button
+					class="btn-send"
+					id="sendBtn"
+				>
+					Опубликовать в Discord ↗
+				</button>
+			</div>
+		</div>
+
+		<!-- ПРАВАЯ ПАНЕЛЬ: ЖИВОЕ ПРЕВЬЮ -->
+		<div class="preview-panel">
+			<header class="editor-heading preview-heading"><div><p class="eyebrow">DISCORD / ПРЕДПРОСМОТР</p><h2>Твоё сообщение</h2></div><span class="live-badge">● LIVE</span></header>
+			<div class="preview-stage">
+				<div class="preview-author"><img src="/revento-logo.png" alt="" /><div><strong>Revento <span>ПРИЛОЖЕНИЕ</span></strong><small>Предпросмотр публикации</small></div></div>
+			<div
+				class="discord-container"
+				id="discordPreview"
+			></div>
+			</div>
+			<p class="preview-note">Изменения сразу отображаются в превью. Сообщение появится в канале после публикации.</p>
+		</div>
+		</div>
+
+		<!-- Подключение логики -->
+		<script src="app.js"></script>
+	</body>
+</html>

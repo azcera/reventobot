@@ -1,123 +1,55 @@
 <!doctype html>
 <html lang="ru">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Discord UI Components v2 Constructor</title>
-		<link
-			rel="stylesheet"
-			href="style.css"
-		/>
-	</head>
-	<body>
-		<!-- ЛЕВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ И СБОРКА -->
-		<div class="panel">
-			<h2>Конструктор контейнеров v2</h2>
-			<div class="message-import">
-				<label for="messageLink">Редактировать сообщение по ссылке</label>
-				<div class="import-row">
-					<input type="text" id="messageLink" placeholder="https://discord.com/channels/…/…/…" autocomplete="off" />
-					<button type="button" class="btn-add blue" id="loadMessageBtn">Загрузить</button>
-				</div>
-				<div id="messageStatus" class="message-status" role="status" aria-live="polite">Вставьте ссылку, чтобы загрузить отправленный контейнер.</div>
-				<button type="button" class="btn-copy" id="detachMessageBtn" hidden>Выйти из режима редактирования</button>
-			</div>
-
-			<label for="channelId">ID Текстового канала Discord:</label>
-			<div class="channel-id-wrap">
-				<input
-					type="text"
-					id="channelId"
-					placeholder="Вставьте ID канала, куда бот отправит сообщение..."
-					autocomplete="off"
-				/>
-				<div
-					id="channelNameHint"
-					class="channel-name-hint"
-				></div>
-			</div>
-
-			<div class="color-section">
-				<div style="display: flex; flex-direction: column; gap: 8px">
-					<label>Цвет боковой линии</label>
-					<input
-						type="color"
-						id="accentColor"
-						value="#5865f2"
-					/>
-				</div>
-				<div style="margin-left: auto">
-					<label class="checkbox-container">
-						<input
-							type="checkbox"
-							id="noColor"
-						/>
-						Без боковой полоски
-					</label>
-				</div>
-			</div>
-
-			<div class="component-toolbar">
-				<div class="insert-controls">
-					<label for="insertAfter" id="componentCount">Компоненты: 0</label>
-					<select id="insertAfter" aria-label="Место вставки нового компонента">
-						<option value="">В конец контейнера</option>
-					</select>
-				</div>
-				<div class="actions-bar">
-					<button
-						class="btn-add blue"
-						id="addTextBtn"
-					>
-						+ Текст
-					</button>
-					<button
-						class="btn-add"
-						id="addImageBtn"
-					>
-						+ Изображение
-					</button>
-					<button
-						class="btn-add"
-						id="addSeparatorBtn"
-					>
-						+ Разделитель
-					</button>
-					<button
-						class="btn-add grey"
-						id="addSectionBtn"
-					>
-						+ Текст с кнопкой
-					</button>
-				</div>
-			</div>
-
-			<div
-				id="itemsContainer"
-				class="items-list"
-			></div>
-
-			<div class="publish-actions">
-				<button type="button" class="btn-send" id="saveMessageBtn" hidden>Сохранить изменения</button>
-				<button
-					class="btn-send"
-					id="sendBtn"
-				>
-					🚀 Опубликовать в Discord
-				</button>
-			</div>
-		</div>
-
-		<!-- ПРАВАЯ ПАНЕЛЬ: ЖИВОЕ ПРЕВЬЮ -->
-		<div class="preview-panel">
-			<h2 style="width: 100%">Живое превью контейнера</h2>
-			<div
-				class="discord-container"
-				id="discordPreview"
-			></div>
-		</div>
-
-		<!-- Подключение логики -->
-		<script src="app.js"></script>
-	</body>
+<head>
+	<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="theme-color" content="#0b0a10"><title>Revento — управление ботом</title>
+	<link rel="icon" type="image/png" href="/revento-logo.png">
+	<link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/dashboard.css"><script src="/dashboard.js" defer></script>
+</head>
+<body>
+	<section id="login" class="login-screen"><div class="login-card"><img class="brand-mark" src="/revento-logo.png" alt="Логотип Revento"><p class="eyebrow">REVENTO / CONTROL ROOM</p>
+		<h1>Всё под контролем.</h1><p>Сообщения, компоненты и настройки твоего сервера в одном месте.</p>
+		<a class="button primary" href="/auth/discord" id="loginButton">Войти через Discord ↗</a><p class="muted">Доступ только администраторам сервера.</p>
+		<p id="loginStatus" role="status" aria-live="polite">Проверяем подключение…</p></div></section>
+	<div id="dashboard" class="dashboard" hidden>
+		<aside class="sidebar">
+			<a href="#overview" class="brand"><img class="brand-mark small" src="/revento-logo.png" alt="Логотип Revento"><span>REVENTO<small>УПРАВЛЕНИЕ БОТОМ</small></span></a>
+			<p class="nav-caption">РАБОЧЕЕ ПРОСТРАНСТВО</p>
+			<nav aria-label="Разделы дашборда">
+				<a href="#overview" data-tab="overview"><span>◈</span> Обзор</a>
+				<a href="#builder" data-tab="builder"><span>▦</span> Конструктор v2 <small>V2</small></a>
+				<a href="#templates" data-tab="templates"><span>▤</span> Шаблоны</a>
+				<a href="#messages" data-tab="messages"><span>▣</span> Сообщения в Discord</a>
+				<a href="#settings" data-tab="settings"><span>⚙</span> Настройки</a>
+				<a href="#history" data-tab="history"><span>◷</span> История изменений</a>
+			</nav>
+			<div class="sidebar-bottom"><p id="guildName"></p><p id="userName" class="muted"></p><button id="logout" class="quiet">Выйти из аккаунта ↗</button></div>
+		</aside>
+		<main>
+			<header class="topbar"><div><p class="eyebrow">REVENTO / DASHBOARD</p><h1 id="pageTitle">Обзор</h1></div><span class="badge">● Администратор</span></header>
+			<div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+			<section id="overview" class="view">
+				<div class="hero"><div><span class="eyebrow">ТВОЙ СЕРВЕР. ТВОИ ПРАВИЛА.</span><h2>Центр управления Revento</h2><p>Настрой сообщения бота и подготовь новую публикацию — без редактирования кода.</p><a class="button primary" href="#templates">Открыть шаблоны ↗</a></div><img class="hero-emblem" src="/revento-logo.png" alt="" aria-hidden="true"></div>
+				<div id="metrics" class="metrics"></div>
+				<div class="section-heading"><h2>Быстрый доступ</h2><span class="muted">Работай с содержимым</span></div>
+				<div class="quick-grid"><a href="#builder" class="card quick"><span>▦</span><h3>Создать сообщение</h3><p>Компоненты v2 с живым превью</p><b>Открыть конструктор ↗</b></a><a href="#messages" class="card quick"><span>▣</span><h3>Изменить публикацию</h3><p>Тексты и кнопки по ссылке из Discord</p><b>Загрузить сообщение ↗</b></a></div>
+				<div class="section-heading"><h2>Последние изменения</h2><a href="#history">Вся история ↗</a></div><div id="recentHistory" class="card"></div>
+			</section>
+			<section id="builder" class="view" hidden><p class="section-intro">Собирай сообщения, выбирай канал и публикуй от имени бота. Сложные сообщения команд открывай во вкладке «Сообщения в Discord».</p><iframe id="builderFrame" title="Конструктор компонентов v2"></iframe></section>
+			<section id="templates" class="view" hidden>
+				<p class="section-intro">Изменения применяются при следующих отправках и обновлениях ботом. Уже опубликованное сообщение можно изменить отдельно по ссылке.</p>
+				<div class="toolbar"><label>Раздел<select id="templateGroup"></select></label><button id="reloadConfig" class="quiet">Обновить данные</button></div>
+				<div class="editor-layout"><form id="templateForm" class="card editor"><div id="templateFields"></div><div class="form-actions"><button class="primary" type="submit">Сохранить шаблон</button><button id="resetTemplate" type="button" class="quiet">Восстановить исходный</button></div></form><aside class="preview"><div class="preview-heading"><span>ПРЕДПРОСМОТР ПОЛЕЙ</span><span class="live-dot">● LIVE</span></div><div id="templatePreview" class="message-preview"></div><p class="muted">Приблизительный вид текста. Размещение компонентов определяет бот. Переменные заменены примерными значениями.</p></aside></div>
+			</section>
+			<section id="messages" class="view" hidden>
+				<p class="section-intro">Редактируй публикации этого бота. Рабочие кнопки, вложения и структура сохраняются. Динамические списки каптов и архивов настраиваются через шаблоны.</p>
+				<form id="loadMessageForm" class="card inline-form"><label>Ссылка на сообщение<input id="editMessageLink" type="url" placeholder="https://discord.com/channels/…/…/…" required></label><button class="primary">Загрузить</button></form>
+				<div id="messageEditor" class="editor-layout" hidden><form id="messageForm" class="card editor"><div id="messageFields"></div><button class="primary" type="submit">Сохранить в Discord</button></form><aside class="preview"><div class="preview-heading">ПРЕДПРОСМОТР ПОЛЕЙ</div><div id="messagePreview" class="message-preview"></div><p class="muted">Показываются доступные для изменения поля, без вложений и служебных элементов.</p></aside></div>
+			</section>
+			<section id="settings" class="view" hidden><p class="section-intro">Настройки сохраняются в базе и применяются без перезапуска. Пустое значение отключает выбор. Порядок нескольких ролей можно менять стрелками.</p><form id="settingsForm" class="card settings-form"><div id="settingFields"></div><div class="form-actions"><button class="primary" type="submit">Сохранить настройки</button><button id="reloadSettings" class="quiet" type="button">Обновить данные</button></div></form></section>
+			<section id="history" class="view" hidden><p class="section-intro">Последние 100 действий администраторов. Запрос на публикацию записывается до обращения к Discord, успешное выполнение — отдельной строкой.</p><button id="refreshHistory" class="quiet">Обновить историю</button><div id="historyRows" class="card history"></div></section>
+			<footer>REVENTO <span>Панель управления сервером</span></footer>
+		</main>
+	</div>
+</body>
 </html>

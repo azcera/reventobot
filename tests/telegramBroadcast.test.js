@@ -88,6 +88,32 @@ test('notification template uses server nickname and falls back to Discord names
 	assert.match(prepareMessage(value).parts[0], /Отправил: author/)
 })
 
+test('forwarded mentions use role names and server nicknames across all text', () => {
+	const value = message('<@&1499130457357422764> <@123> <@!123>')
+	value.guild = {
+		roles: { cache: new Map([['1499130457357422764', { name: 'Новости' }]]) },
+		members: { cache: new Map([['123', { displayName: 'Ник на сервере' }]]) }
+	}
+	value.mentions = { users: new Map([['123', { globalName: 'Другой ник', username: 'login' }]]) }
+	value.embeds = [{ description: '<@&1499130457357422764>', fields: [{ name: '<@123>', value: '<@!123>' }] }]
+	value.components = [{ components: [{ content: '<@123>' }] }]
+	assert.equal(discordNotificationContent(value),
+		'@Новости @Ник на сервере @Ник на сервере\n@Новости\n@Ник на сервере\n@Ник на сервере\n@Ник на сервере')
+	assert.ok(prepareMessage(value).parts.join('').includes('@Новости @Ник на сервере'))
+})
+
+test('mention names fall back to available Discord data and preserve unknown mentions', () => {
+	const value = message('<@&1> <@2> <@!3> <@4> <@5> <@&6> <@7> <#8>')
+	value.mentions = {
+		roles: new Map([['1', { name: 'Роль' }]]),
+		members: new Map([['2', { displayName: 'Ник' }]]),
+		users: new Map([['3', { globalName: 'Имя', username: 'login' }], ['4', { username: 'username' }]])
+	}
+	value.client = { users: { cache: new Map([['5', { username: 'cached' }]]) } }
+	assert.equal(discordNotificationContent(value), '@Роль @Ник @Имя @username @cached <@&6> <@7> <#8>')
+	assert.equal(discordNotificationContent(message('<@123> <@&456>')), '<@123> <@&456>')
+})
+
 test('embeds, attachments and component text are forwarded and affect fingerprint', () => {
 	const value = message('')
 	value.embeds = [{ title: 'Title', description: 'Body', fields: [{ name: 'Field', value: 'Value' }] }]

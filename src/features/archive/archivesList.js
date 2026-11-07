@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	GuildMember,
 	Guild,
@@ -10,26 +11,16 @@ const { parseDisplayName } = require('../../utils/parseDisplayName')
 
 require('dotenv').config()
 
-const rolesToGroup = (process.env.ARCHIVE_GROUP_ROLES || '')
-	.split(',')
-	.map(id => id.trim())
-	.filter(Boolean)
 
-const autoRoleId = process.env.AUTO_ROLE
 
-const adminRoles = (process.env.ADMIN_ROLES || '')
-	.split(',')
-	.map(id => id.trim())
-	.filter(Boolean)
 
-const ARCHIVE_PARENT_ID = process.env.PARENT_CHANNEL_ID
 
 /**
  * Создает сообщение со списком всех участников и их архивов
  * @param {Guild} guild
  */
 async function getArchivesLists(guild) {
-	if (!rolesToGroup.length || !autoRoleId) {
+	if (!dashboard.roleIds('ARCHIVE_GROUP_ROLES').length || !dashboard.getSetting('AUTO_ROLE')) {
 		console.error('❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в .env')
 		return
 	}
@@ -40,16 +31,16 @@ async function getArchivesLists(guild) {
 	 * @type {Object.<string, Array<{member: GuildMember, archiveChannel: GuildChannel|null, staticId: number, hasValidArchive: boolean, isInvalidNick: boolean}>>}
 	 */
 	const groupings = {}
-	rolesToGroup.forEach(roleId => {
+	dashboard.roleIds('ARCHIVE_GROUP_ROLES').forEach(roleId => {
 		groupings[roleId] = []
 	})
 
 	const filteredMembers = guild.members.cache.filter(member => {
 		if (member.user.bot) return false
-		if (!member.roles.cache.has(autoRoleId)) return false
+		if (!member.roles.cache.has(dashboard.getSetting('AUTO_ROLE'))) return false
 
 		// Исключаем админов
-		if (member.roles.cache.some(role => adminRoles.includes(role.id))) {
+		if (member.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))) {
 			return false
 		}
 
@@ -57,7 +48,7 @@ async function getArchivesLists(guild) {
 	})
 
 	// Получаем все ветки из канала с архивами
-	const parentChannel = await guild.channels.fetch(ARCHIVE_PARENT_ID)
+	const parentChannel = await guild.channels.fetch(dashboard.getSetting('PARENT_CHANNEL_ID'))
 	if (!parentChannel || !parentChannel.threads) {
 		console.error('❌ Не найден канал с архивами')
 		return
@@ -74,7 +65,7 @@ async function getArchivesLists(guild) {
 		)
 
 		const highestMatchingRole = sortedMemberRoles.find(role =>
-			rolesToGroup.includes(role.id)
+			dashboard.roleIds('ARCHIVE_GROUP_ROLES').includes(role.id)
 		)
 
 		if (!highestMatchingRole) return
@@ -161,7 +152,7 @@ async function getArchivesLists(guild) {
 
 	let currentContainer = new ContainerBuilder()
 		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent('# 👥 Список участников и их архивов')
+			new TextDisplayBuilder().setContent(dashboard.text('archives.1'))
 		)
 		.addSeparatorComponents(new SeparatorBuilder())
 
@@ -174,7 +165,7 @@ async function getArchivesLists(guild) {
 			currentContainer = new ContainerBuilder()
 				.addTextDisplayComponents(
 					new TextDisplayBuilder().setContent(
-						`# 👥 Список участников и их архивов (часть ${parts.length + 1})`
+						dashboard.text('archives.part', { part: parts.length + 1 })
 					)
 				)
 				.addSeparatorComponents(new SeparatorBuilder())
@@ -193,7 +184,7 @@ async function getArchivesLists(guild) {
 	parts.push(currentContainer)
 
 	return {
-		parts,
+		parts: parts.map(container => dashboard.decorate('archives', container)),
 		count: parts.length
 	}
 }

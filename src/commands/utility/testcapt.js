@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const { PermissionFlagsBits } = require('discord.js')
 const captureManager = require('../../features/capture/captureManager')
 
@@ -6,7 +7,7 @@ module.exports = {
 	description: 'Создаёт тестовый набор без уведомлений',
 	async execute(message) {
 		if (!message.guild) return
-		const adminRoles = (process.env.ADMIN_ROLES || '')
+		const adminRoles = (dashboard.getSetting('ADMIN_ROLES') || '')
 			.split(',')
 			.map(id => id.trim())
 			.filter(Boolean)

@@ -2,9 +2,10 @@ let items = []
 let channelResolveTimer = null
 let messageSource = null
 let requestPending = false
+let dashboardCsrf = ''
 
 // Инициализация обработчиков после загрузки DOM
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
 	document
 		.getElementById('accentColor')
 		.addEventListener('input', updatePreview)
@@ -51,6 +52,22 @@ document.addEventListener('DOMContentLoaded', () => {
 		localStorage.setItem('reventobot_channelId', val)
 	})
 
+	try {
+		const session = await fetch('/api/session').then(response => response.json())
+		if (!session.csrf) throw new Error(session.error || 'Войдите через Discord в дашборде.')
+		dashboardCsrf = session.csrf
+		const [resources, config] = await Promise.all([
+			fetch('/api/resources').then(response => response.json()),
+			fetch('/api/config').then(response => response.json())
+		])
+		const list = document.getElementById('channelOptions')
+		for (const channel of resources.channels || []) if ([0, 5].includes(channel.type) && channel.canSend) list.appendChild(new Option('#' + channel.name, channel.id))
+		document.getElementById('accentColor').value = config.settings?.find(setting => setting.key === 'DASHBOARD_ACCENT_COLOR')?.value || '#ee60db'
+	} catch (error) {
+		setMessageStatus(error.message, true)
+		document.getElementById('sendBtn').disabled = true
+		document.getElementById('loadMessageBtn').disabled = true
+	}
 	updatePreview()
 	renderInputs()
 })
@@ -153,17 +170,17 @@ function renderInputs() {
 		let html = `<div class="item-card-header">
       <span>#${index + 1} — ${labelName}</span>
       <div class="item-header-actions">
-        <button type="button" class="btn-move" title="Вверх" ${isFirst ? 'disabled' : ''} onclick="moveItem('${item.id}', -1)">↑</button>
-        <button type="button" class="btn-move" title="Вниз" ${isLast ? 'disabled' : ''} onclick="moveItem('${item.id}', 1)">↓</button>
-        <button type="button" class="btn-copy" onclick="duplicateItem('${item.id}')">Копия</button>
-        <button class="btn-delete" onclick="deleteItem('${item.id}')">Удалить</button>
+        <button type="button" class="btn-move" title="Вверх" ${isFirst ? 'disabled' : ''} data-action="move" data-direction="-1">↑</button>
+        <button type="button" class="btn-move" title="Вниз" ${isLast ? 'disabled' : ''} data-action="move" data-direction="1">↓</button>
+        <button type="button" class="btn-copy" data-action="copy">Копия</button>
+        <button class="btn-delete" data-action="delete">Удалить</button>
       </div>
     </div>`
 
 		if (item.type === 'text') {
-			html += `<textarea class="auto-resize" placeholder="Введите текст сообщения... (Поддерживает Markdown: # ## ### **жирный** *курсив* ~~зачёркнутый~~ \`код\` \`\`\`блок\`\`\`)" oninput="updateItemData('${item.id}', 'value', this.value); autoResizeTextarea(this)">${escapeHtml(item.value)}</textarea>`
+			html += `<textarea class="auto-resize" placeholder="Введите текст сообщения... (Поддерживает Markdown: # ## ### **жирный** *курсив* ~~зачёркнутый~~ \`код\` \`\`\`блок\`\`\`)" data-field="value">${escapeHtml(item.value)}</textarea>`
 		} else if (item.type === 'image') {
-			html += `<input type="text" placeholder="Вставьте прямую URL-ссылку на изображение..." value="${escapeAttr(item.value)}" oninput="updateItemData('${item.id}', 'value', this.value)">`
+			html += `<input type="text" placeholder="Вставьте прямую URL-ссылку на изображение..." value="${escapeAttr(item.value)}" data-field="value">`
 		} else if (item.type === 'separator') {
 			const spacing = item.spacing || (item.large ? 'large' : 'small')
 			const divider =
@@ -174,28 +191,35 @@ function renderInputs() {
 						: true
 			html += `<div class="separator-options">
         <label class="checkbox-container">
-          <input type="checkbox" ${spacing === 'large' ? 'checked' : ''} onchange="updateItemData('${item.id}', 'spacing', this.checked ? 'large' : 'small')">
+          <input type="checkbox" ${spacing === 'large' ? 'checked' : ''} data-field="spacing">
           Большой отступ по высоте (Large)
         </label>
         <label class="checkbox-container">
-          <input type="checkbox" ${divider ? 'checked' : ''} onchange="updateItemData('${item.id}', 'divider', this.checked)">
+          <input type="checkbox" ${divider ? 'checked' : ''} data-field="divider">
           Показывать серую линию-разделитель
         </label>
       </div>`
 		} else if (item.type === 'section') {
 			html += `
-        <textarea class="auto-resize" placeholder="Введите основной текст секции (слева)... (Markdown поддерживается)" oninput="updateItemData('${item.id}', 'value', this.value); autoResizeTextarea(this)">${escapeHtml(item.value)}</textarea>
+        <textarea class="auto-resize" placeholder="Введите основной текст секции (слева)... (Markdown поддерживается)" data-field="value">${escapeHtml(item.value)}</textarea>
         <div style="display:flex; gap:10px;">
-          <input type="text" placeholder="Текст на кнопке" value="${escapeAttr(item.btnLabel)}" oninput="updateItemData('${item.id}', 'btnLabel', this.value)">
-          <input type="text" placeholder="Ссылка (https://...)" value="${escapeAttr(item.btnLink)}" oninput="updateItemData('${item.id}', 'btnLink', this.value)">
+          <input type="text" placeholder="Текст на кнопке" value="${escapeAttr(item.btnLabel)}" data-field="btnLabel">
+          <input type="text" placeholder="Ссылка (https://...)" value="${escapeAttr(item.btnLink)}" data-field="btnLink">
         </div>
       `
 		}
 
 		card.innerHTML = html
-		if (item.type === 'image') card.style.borderLeftColor = '#9b59b6'
-		if (item.type === 'separator') card.style.borderLeftColor = '#e67e22'
-		if (item.type === 'section') card.style.borderLeftColor = '#3498db'
+		card.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => {
+			if (button.dataset.action === 'move') moveItem(item.id, Number(button.dataset.direction))
+			if (button.dataset.action === 'copy') duplicateItem(item.id)
+			if (button.dataset.action === 'delete') deleteItem(item.id)
+		}))
+		card.querySelectorAll('[data-field]').forEach(input => input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
+			const field = input.dataset.field
+			updateItemData(item.id, field, field === 'divider' ? input.checked : field === 'spacing' ? input.checked ? 'large' : 'small' : input.value)
+			if (input.tagName === 'TEXTAREA') autoResizeTextarea(input)
+		}))
 
 		container.appendChild(card)
 
@@ -391,7 +415,7 @@ function updateMessageMode() {
 	save.hidden = !messageSource
 	save.disabled = requestPending || !messageSource?.canEdit
 	document.getElementById('detachMessageBtn').hidden = !messageSource
-	document.getElementById('sendBtn').textContent = messageSource ? 'Отправить копию' : '🚀 Опубликовать в Discord'
+	document.getElementById('sendBtn').textContent = messageSource ? 'Отправить копию' : 'Опубликовать в Discord ↗'
 }
 
 function beginRequest() {
@@ -466,7 +490,7 @@ async function sendToDiscord(edit = false) {
 	try {
 		const response = await fetch(edit ? '/api/edit-container' : '/api/send-container', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': dashboardCsrf },
 			body: JSON.stringify({
 				channelId, noColor, accentColor, items,
 				...(edit ? { link: messageSource.url, revision: messageSource.revision } : {})

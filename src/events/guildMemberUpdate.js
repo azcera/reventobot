@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../dashboard/store')
 const {
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -8,11 +9,6 @@ const {
 } = require('discord.js')
 const { parseDisplayName } = require('../utils/parseDisplayName')
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES
-	? process.env.ADMIN_ROLES.split(',')
-			.map(r => r.trim())
-			.filter(Boolean)
-	: []
 
 /**
  * Действия при добавлению участнику админ ролей
@@ -22,10 +18,10 @@ const ADMIN_ROLES = process.env.ADMIN_ROLES
  */
 let handleMakeAdmin = async (oldMember, newMember) => {
 	const oldHasAdmin = oldMember.roles.cache.filter(role =>
-		ADMIN_ROLES.includes(role.id)
+		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
 	)
 	const newHasAdmin = newMember.roles.cache.filter(role =>
-		ADMIN_ROLES.includes(role.id)
+		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
 	)
 	const addedRole = newHasAdmin.find(role => !oldHasAdmin.has(role.id))
 	const removedRole = oldHasAdmin.find(role => !newHasAdmin.has(role.id))
@@ -37,11 +33,11 @@ let handleMakeAdmin = async (oldMember, newMember) => {
 	let newPrefix = ''
 
 	if (addedRole) {
-		if (addedRole.id === ADMIN_ROLES[0]) {
+		if (addedRole.id === dashboard.roleIds('ADMIN_ROLES')[0]) {
 			newPrefix = '[𝐃𝐞𝐩] ' // dep
-		} else if (addedRole.id === ADMIN_ROLES[1]) {
+		} else if (addedRole.id === dashboard.roleIds('ADMIN_ROLES')[1]) {
 			newPrefix = '[𝐇𝐢𝐠𝐡] ' // high
-		} else if (addedRole.id === ADMIN_ROLES[2]) {
+		} else if (addedRole.id === dashboard.roleIds('ADMIN_ROLES')[2]) {
 			newPrefix = '[𝐑𝐞𝐜] ' // recruit
 		}
 	}
@@ -60,8 +56,8 @@ let handleMakeAdmin = async (oldMember, newMember) => {
  * @param {string} channelName
  */
 let handleMakeRevento = async (oldMember, newMember) => {
-	const hadRoleBefore = oldMember.roles.cache.has(process.env.AUTO_ROLE)
-	const hasRoleNow = newMember.roles.cache.has(process.env.AUTO_ROLE)
+	const hadRoleBefore = oldMember.roles.cache.has(dashboard.getSetting('AUTO_ROLE'))
+	const hasRoleNow = newMember.roles.cache.has(dashboard.getSetting('AUTO_ROLE'))
 
 	// Реагируем только на выдачу роли
 	if (hadRoleBefore || !hasRoleNow) return
@@ -78,7 +74,7 @@ let handleMakeRevento = async (oldMember, newMember) => {
 		parsedData.memberStatic.toLowerCase()
 	].join(' ')
 
-	const parentId = process.env.PARENT_CHANNEL_ID
+	const parentId = dashboard.getSetting('PARENT_CHANNEL_ID')
 
 	// Сначала ищем, есть ли уже такая ветка
 	const existingThread = newMember.guild.channels.cache.find(
@@ -96,7 +92,7 @@ let handleMakeRevento = async (oldMember, newMember) => {
 
 	// Ветки нет → отправляем уведомление
 	const messagesChannel = newMember.guild.channels.cache.get(
-		process.env.LOG_CHANNEL_ID
+		dashboard.getSetting('LOG_CHANNEL_ID')
 	)
 
 	if (!messagesChannel?.isTextBased()) return
@@ -115,7 +111,7 @@ let handleMakeRevento = async (oldMember, newMember) => {
 	)
 
 	await messagesChannel.send({
-		content: `${ADMIN_ROLES.map(id => roleMention(id)).join(' ')} Создать для <@${newMember.id}> архив - \`${threadName}\`?`,
+		content: `${dashboard.roleIds('ADMIN_ROLES').map(id => roleMention(id)).join(' ')} Создать для <@${newMember.id}> архив - \`${threadName}\`?`,
 		components: [row]
 	})
 }
@@ -139,7 +135,7 @@ let handleNameEdit = async (oldMember, newMember) => {
 	].join(' ')
 
 	const guild = newMember.guild
-	const parentId = process.env.PARENT_CHANNEL_ID
+	const parentId = dashboard.getSetting('PARENT_CHANNEL_ID')
 
 	// Ищем ветку, у которой в названии есть такой же static (цифры)
 	const existingThread = guild.channels.cache.find(channel => {

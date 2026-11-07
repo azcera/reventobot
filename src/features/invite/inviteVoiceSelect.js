@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	MessageFlags,
 	ContainerBuilder,
@@ -56,13 +57,13 @@ async function handleVoiceSelect(interaction) {
 			.setAccentColor(0xe67e22)
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
-					`### Приглашение на обзвон в **${interaction.guild.name}**\nВы были вызваны на обзвон!`
+					dashboard.text('dm.interviewTitle', { server: interaction.guild.name })
 				)
 			)
 			.addSeparatorComponents(new SeparatorBuilder())
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
-					`> Голосовой канал: <#${voiceChannelId}>\n> Дата события: <t:${Math.floor(Date.now() / 1000)}:F>`
+					dashboard.text('dm.interviewDate', { channel: voiceChannelId, time: Math.floor(Date.now() / 1000) })
 				)
 			)
 

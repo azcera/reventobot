@@ -1,6 +1,7 @@
 const { createHash } = require('node:crypto')
 const { MessageFlags } = require('discord.js')
 const { buildWebContainer } = require('./containerService')
+const saving = require('./messageLocks')
 
 function fail(status, message) {
 	throw Object.assign(new Error(message), { status })
@@ -95,8 +96,7 @@ function buildEditPayload(data) {
 	}
 }
 
-function registerContainerMessageRoutes(app, client) {
-	const saving = new Set()
+function registerContainerMessageRoutes(app, client, { beforeMutation, afterMutation } = {}) {
 	async function fetchMessage(link) {
 		const ids = parseMessageLink(link)
 		if (!client.isReady()) fail(503, 'Бот не подключён к Discord. Проверьте его запуск и токен.')
@@ -142,13 +142,15 @@ function registerContainerMessageRoutes(app, client) {
 			if (!source(message).canEdit) fail(403, 'Можно изменять только сообщения этого бота. Для остальных используйте «Отправить копию».')
 			if (revision !== messageRevision(message)) fail(409, 'Сообщение изменилось после загрузки. Загрузите его заново перед сохранением.')
 			parseContainerMessage(message)
+			await beforeMutation?.(req, 'container.edit', message.url)
 			const updated = await message.edit({
 				...payload, flags: message.flags.bitfield, allowedMentions: { parse: [] }
 			})
+			await afterMutation?.(req, 'container.edit', updated.url)
 			res.json({ success: true, source: source(updated) })
 		} catch (error) { errorResponse(res, error) }
 		finally { if (lock) saving.delete(lock) }
 	})
 }
 
-module.exports = { parseMessageLink, parseContainerMessage, messageRevision, registerContainerMessageRoutes }
+module.exports = { parseMessageLink, parseContainerMessage, messageRevision, buildEditPayload, registerContainerMessageRoutes }

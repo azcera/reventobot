@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	ContainerBuilder,
 	TextDisplayBuilder,
@@ -9,8 +10,6 @@ const {
 } = require('discord.js')
 require('dotenv').config()
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES
-const archiveChannelId = process.env.PARENT_CHANNEL_ID
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000 // 7 дней в миллисекундах
 
 /**
@@ -27,8 +26,8 @@ async function getUnansweredList(guild) {
 	let unansweredList = []
 
 	let archiveChannel =
-		guild.channels.cache.get(archiveChannelId) ||
-		(await guild.channels.fetch(archiveChannelId))
+		guild.channels.cache.get(dashboard.getSetting('PARENT_CHANNEL_ID')) ||
+		(await guild.channels.fetch(dashboard.getSetting('PARENT_CHANNEL_ID')))
 
 	if (!archiveChannel || archiveChannel?.type != ChannelType.GuildText) {
 		console.error('❌ Неправильно настроен канал с архивами.')
@@ -74,7 +73,7 @@ async function getUnansweredList(guild) {
 			const hasAnyMention = hasUserMention || hasRoleMention || hasEveryone
 			const hasAdminRole =
 				author.permissions.has(PermissionFlagsBits.Administrator) ||
-				author.roles.cache.some(role => ADMIN_ROLES.includes(role.id))
+				author.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))
 
 			if ((!lastMessage.author.bot && hasAnyMention) || !hasAdminRole) {
 				// условие при котором канал считается непрочитанным
@@ -91,12 +90,12 @@ async function getUnansweredList(guild) {
 	const container = new ContainerBuilder()
 
 	container.addTextDisplayComponents(
-		new TextDisplayBuilder().setContent('# 🙊 Список неотвеченных архивов')
+		new TextDisplayBuilder().setContent(dashboard.text('unanswered.1'))
 	)
 
 	let stringList = ''
 	if (unansweredList.length === 0) {
-		stringList = 'Нет непрочитанных архивов.'
+		stringList = dashboard.text('unanswered.empty')
 	} else {
 		unansweredList.sort((a, b) => {
 			const numA = Number(String(a.name).match(/(\d+)\s*$/)?.[1] ?? 0)
@@ -111,7 +110,7 @@ async function getUnansweredList(guild) {
 	container
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(stringList))
-	return container
+	return dashboard.decorate('unanswered', container)
 }
 
 module.exports = { getUnansweredList }

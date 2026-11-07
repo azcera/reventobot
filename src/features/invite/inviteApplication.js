@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	ModalBuilder,
 	TextInputBuilder,
@@ -14,9 +15,6 @@ const {
 	editReplyWithAutoDelete
 } = require('../../utils/autoDelete')
 
-const ADMIN_ROLES = process.env.ADMIN_ROLES
-	? process.env.ADMIN_ROLES.split(',')
-	: []
 
 const MODAL_FIELDS = [
 	{
@@ -170,7 +168,7 @@ class InviteCandidate {
 					]
 				}
 			]
-			ADMIN_ROLES.forEach(roleId =>
+			dashboard.roleIds('ADMIN_ROLES').forEach(roleId =>
 				permissionOverwrites.push({
 					id: roleId,
 					allow: [
@@ -184,7 +182,7 @@ class InviteCandidate {
 			const channel = await interaction.guild.channels.create({
 				name: `заявка-${cleanName}`,
 				type: ChannelType.GuildText,
-				parent: process.env.INVITE_CATEGORY_ID,
+				parent: dashboard.getSetting('INVITE_CATEGORY_ID'),
 				permissionOverwrites
 			})
 

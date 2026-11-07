@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	Message,
 	MessageFlags,
@@ -17,6 +18,7 @@ const path = require('path')
 const { IMAGES_PATH } = require('../../config/path')
 const { replyWithAutoDelete } = require('../../utils/autoDelete')
 const pool = require('../../services/database')
+const panelKey = require('../../dashboard/panelKey')
 
 module.exports = {
 	name: 'panel',
@@ -34,7 +36,7 @@ module.exports = {
 			})
 		}
 
-		if (message.channel.id != process.env.ADMIN_PANEL_CHANNEL_ID) {
+		if (message.channel.id != dashboard.getSetting('ADMIN_PANEL_CHANNEL_ID')) {
 			return await replyWithAutoDelete(message, {
 				content:
 					'❌ Использование этой команды в данном канале не предусмотрено!'
@@ -58,13 +60,11 @@ module.exports = {
 
 			const inviteImage = new MediaGalleryBuilder().addItems(
 				new MediaGalleryItemBuilder()
-					.setURL('attachment://panel.png')
+					.setURL(dashboard.text('panel.1'))
 					.setDescription('REVENTO')
 			)
 
-			const titleText = new TextDisplayBuilder().setContent(
-				'## 📌 Админ-панель\nДля взаимодействия с ботом используйте кнопки ниже.'
-			)
+			const titleText = new TextDisplayBuilder().setContent(dashboard.text('panel.2'))
 
 			const container = new ContainerBuilder()
 				.addMediaGalleryComponents(inviteImage)
@@ -73,18 +73,18 @@ module.exports = {
 
 			for (const row of result.rows) {
 				const button = new ButtonBuilder()
-					.setLabel(row.buttonLabel)
+					.setLabel(dashboard.text(panelKey(row.buttonId, 'label'), {}, row.buttonLabel))
 					.setStyle(row.style)
 
 				if (row.buttonId.includes('http')) {
-					button.setURL(row.buttonId)
+					button.setURL(dashboard.text(panelKey(row.buttonId, 'link'), {}, row.buttonId))
 				} else {
 					button.setCustomId(row.buttonId)
 				}
 
 				const section = new SectionBuilder()
 					.addTextDisplayComponents(
-						new TextDisplayBuilder().setContent(row.text)
+						new TextDisplayBuilder().setContent(dashboard.text(panelKey(row.buttonId, 'text'), {}, row.text))
 					)
 					.setButtonAccessory(button)
 				container
@@ -92,15 +92,13 @@ module.exports = {
 					.addSeparatorComponents(new SeparatorBuilder())
 			}
 
-			const footerText = new TextDisplayBuilder().setContent(
-				'*Время необходимо указывать по МСК. Формат \`ДД.ММ.ГГГГ ЧЧ:ММ\` нужен только если дата не сегодняшняя.*'
-			)
+			const footerText = new TextDisplayBuilder().setContent(dashboard.text('panel.3'))
 
 			container.addTextDisplayComponents(footerText)
 
 			const messageData = {
 				flags: MessageFlags.IsComponentsV2,
-				components: [container],
+				components: [dashboard.decorate('panel', container)],
 				files: [localImage]
 			}
 

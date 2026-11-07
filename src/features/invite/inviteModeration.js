@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	ModalBuilder,
 	TextInputBuilder,
@@ -76,7 +77,7 @@ async function handleModerationButton(interaction) {
 			if (targetMember) {
 				// Используем MAIN_ROLE_ID, если он есть, иначе fallback на AUTO_ROLE
 				const roleId = String(
-					process.env.MAIN_ROLE_ID || process.env.AUTO_ROLE
+					dashboard.getSetting('MAIN_ROLE_ID') || dashboard.getSetting('AUTO_ROLE')
 				).trim()
 				await targetMember.roles.add(roleId).catch(console.error)
 			}
@@ -89,13 +90,13 @@ async function handleModerationButton(interaction) {
 					.setAccentColor(0x2ecc71)
 					.addTextDisplayComponents(
 						new TextDisplayBuilder().setContent(
-							`### Одобрение заявки\nВаша заявка в ${interaction.guild.name} одобрена!`
+							dashboard.text('dm.acceptTitle', { server: interaction.guild.name })
 						)
 					)
 					.addSeparatorComponents(new SeparatorBuilder())
 					.addTextDisplayComponents(
 						new TextDisplayBuilder().setContent(
-							`> Дата одобрения: <t:${Math.floor(Date.now() / 1000)}:F>`
+							dashboard.text('dm.acceptDate', { time: Math.floor(Date.now() / 1000) })
 						)
 					)
 
@@ -123,7 +124,7 @@ async function handleModerationButton(interaction) {
 				targetUserId
 			])
 
-			const additionalRolesRaw = process.env.FAMILY_ADDITIONAL_ROLES
+			const additionalRolesRaw = dashboard.getSetting('FAMILY_ADDITIONAL_ROLES')
 			const additionalRoles = additionalRolesRaw
 				? additionalRolesRaw
 						.split(',')

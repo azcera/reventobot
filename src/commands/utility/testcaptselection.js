@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const { MessageFlags, PermissionFlagsBits } = require('discord.js')
 const {
 	buildCaptureMessage,
@@ -5,7 +6,7 @@ const {
 } = require('../../features/capture/captureManager')
 
 function hasAccess(member) {
-	const roles = (process.env.ADMIN_ROLES || '')
+	const roles = (dashboard.getSetting('ADMIN_ROLES') || '')
 		.split(',')
 		.map(id => id.trim())
 		.filter(Boolean)

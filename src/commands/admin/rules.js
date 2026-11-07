@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	MessageFlags,
 	PermissionFlagsBits,
@@ -67,7 +68,7 @@ module.exports = {
 
 		const inviteImage = new MediaGalleryBuilder().addItems(
 			new MediaGalleryItemBuilder()
-				.setURL('attachment://rules.png')
+				.setURL(dashboard.text('rules.1'))
 				.setDescription('REVENTO')
 		)
 
@@ -80,14 +81,14 @@ module.exports = {
 			subIndex = 1
 			container
 				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(`## ${rule.name}`)
+					new TextDisplayBuilder().setContent(dashboard.text('rules.heading.' + mainIndex))
 				)
 				.addSeparatorComponents(new SeparatorBuilder())
 			for (const item of rule.list) {
 				container
 					.addTextDisplayComponents(
 						new TextDisplayBuilder().setContent(
-							`**Правило — ${mainIndex}-${subIndex}**\n${item}`
+							dashboard.text('rules.rule.' + mainIndex + '.' + subIndex)
 						)
 					)
 					.addSeparatorComponents(new SeparatorBuilder())
@@ -98,7 +99,7 @@ module.exports = {
 
 		await message.channel.send({
 			flags: MessageFlags.IsComponentsV2,
-			components: [container],
+			components: [dashboard.decorate('rules', container)],
 			files: [localImage]
 		})
 

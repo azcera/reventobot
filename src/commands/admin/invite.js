@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	MessageFlags,
 	PermissionFlagsBits,
@@ -50,27 +51,25 @@ module.exports = {
 
 		const inviteImage = new MediaGalleryBuilder().addItems(
 			new MediaGalleryItemBuilder()
-				.setURL('attachment://invites.png')
+				.setURL(dashboard.text('invite.1'))
 				.setDescription('REVENTO')
 		)
 
 		const reventoImage = new MediaGalleryBuilder().addItems(
 			new MediaGalleryItemBuilder()
-				.setURL('attachment://revento.png')
+				.setURL(dashboard.text('invite.2'))
 				.setDescription('REVENTO')
 		)
 
 		// 2. Кнопка подачи заявки
 		const inviteButton = new SectionBuilder()
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'## 😎 Оставить заявку на вступление\nДля этого нажмите кнопку "Подать заявку" справа и заполните необходимые данные.'
-				)
+				new TextDisplayBuilder().setContent(dashboard.text('invite.3'))
 			)
 			.setButtonAccessory(
 				new ButtonBuilder()
 					.setCustomId('open_invite_modal')
-					.setLabel('😎 Подать заявку')
+					.setLabel(dashboard.text('invite.4'))
 					.setStyle(ButtonStyle.Primary)
 			)
 
@@ -78,43 +77,37 @@ module.exports = {
 		const container = new ContainerBuilder()
 			.addMediaGalleryComponents(inviteImage)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent('## 🥶 Немного о нас:')
+				new TextDisplayBuilder().setContent(dashboard.text('invite.5'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'Мы ставим большие амбиции, так как Revento - это прежде всего семья, жаждущая побед. Перед нами стоит много преград и наша цель - их преодолеть. В составе адекватные ребята, которые также замотивированы на победу.'
-				)
+				new TextDisplayBuilder().setContent(dashboard.text('invite.6'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent('## 🪙 От нас Вы получите:')
+				new TextDisplayBuilder().setContent(dashboard.text('invite.7'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'### • Опытный и отзывчивый старший состав, готовый делиться опытом и помогать\n### • Семейный офис, большой склад на 16 тонн\n### • Богатый автопарк, вертолеты\n### • Много интересного контента - капты, рп-контент, контракты\n### • Зафулл на все семейные мероприятия'
-				)
+				new TextDisplayBuilder().setContent(dashboard.text('invite.8'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent('## ✅ Минимальные требования:')
+				new TextDisplayBuilder().setContent(dashboard.text('invite.9'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'### 1. Возраст 16+ (бывают исключения).\n### 2. Наличие рабочего микрофона и Discord.\n### 3. Знание базовых правил сервера (DM, PG, NRD).\n### 4. Адекватность и готовность участвовать в жизни семьи.'
-				)
+				new TextDisplayBuilder().setContent(dashboard.text('invite.10'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
@@ -124,7 +117,7 @@ module.exports = {
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent('## 📃 Форма заявки:')
+				new TextDisplayBuilder().setContent(dashboard.text('invite.11'))
 			)
 
 		// 🚀 4. ДИНАМИЧЕСКАЯ ГЕНЕРАЦИЯ ТЕКСТА ИЗ MODAL_FIELDS
@@ -143,7 +136,7 @@ module.exports = {
 					new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 				)
 				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(fieldText)
+					new TextDisplayBuilder().setContent(dashboard.text('invite.form.' + field.customId, {}, fieldText))
 				)
 		})
 
@@ -153,25 +146,19 @@ module.exports = {
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'## ❌ Ваша заявка будет отклонена, если:'
-				)
+				new TextDisplayBuilder().setContent(dashboard.text('invite.12'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'```css\n1. Поля будут заполнены некорректно\n2. Форма подачи заявки будет не соблюдена\n3. В заявке присутствует обман в любом виде\n4. На момент принятия заявки ваш никнейм не будет соответствовать форме (Имя | Статик)```'
-				)
+				new TextDisplayBuilder().setContent(dashboard.text('invite.13'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					'Чем больше информации вы предоставите в заявке - тем больше шансов на ее одобрение.'
-				)
+				new TextDisplayBuilder().setContent(dashboard.text('invite.14'))
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
@@ -181,7 +168,7 @@ module.exports = {
 		// 6. Отправка и очистка команды
 		await message.channel.send({
 			flags: [MessageFlags.IsComponentsV2],
-			components: [container],
+			components: [dashboard.decorate('invite', container)],
 			files: [localImage1, localImage2]
 		})
 

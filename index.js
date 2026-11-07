@@ -10,9 +10,14 @@ const fs = require('node:fs')
 require('dotenv').config()
 
 // Импорты сервисов
-const { buildWebContainer } = require('./src/services/containerService')
-const { registerContainerMessageRoutes } = require('./src/services/containerMessageService')
+const { parseMessageLink, buildEditPayload, registerContainerMessageRoutes } = require('./src/services/containerMessageService')
 const loadCommands = require('./src/utils/loadCommands')
+const { store: dashboard } = require('./src/dashboard/store')
+const { registerDashboard } = require('./src/dashboard/routes')
+const pool = require('./src/services/database')
+const dashboardReady = dashboard.init(pool).catch(error => {
+	console.error('[Dashboard] Не удалось загрузить настройки:', error.code || error.message)
+})
 
 // --- ИНИЦИАЛИЗАЦИЯ DISCORD КЛИЕНТА ---
 const client = new Client({
@@ -56,9 +61,27 @@ if (fs.existsSync(eventsPath)) {
 
 // --- НАСТРОЙКА WEB СЕРВЕРА (Express) ---
 const app = express()
-app.use(express.json())
+app.disable('x-powered-by')
+app.use((req, res, next) => {
+	res.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
+		'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'" })
+	next()
+})
+app.use(express.json({ limit: '256kb' }))
+registerDashboard(app, client, pool)
 app.use(express.static(path.join(__dirname, 'public')))
-registerContainerMessageRoutes(app, client)
+registerContainerMessageRoutes(app, client, {
+	beforeMutation: async (req, action, target) => {
+		const ids = parseMessageLink(target)
+		const dynamic = await pool.query('SELECT 1 FROM active_captures WHERE message_id = $1 LIMIT 1', [ids.messageId])
+		if (dynamic.rows.length || ids.channelId === dashboard.getSetting('ARCHIVE_SETTINGS_CHANNEL')) {
+			throw Object.assign(new Error('Этот список обновляет бот. Измените его оформление во вкладке «Шаблоны».'), { status: 409 })
+		}
+		await dashboard.audit(req.dashboardUser.id, action + '.request', target)
+	},
+	afterMutation: (req, action, target) => dashboard.audit(req.dashboardUser.id, action, target)
+		.catch(error => console.error('[Dashboard] Не удалось записать результат изменения:', error.code || error.message))
+})
 
 app.get('/', (req, res) => {
 	res.sendFile(path.join(__dirname, 'public', 'index.html'))
@@ -105,18 +128,24 @@ app.post('/api/send-container', async (req, res) => {
 			})
 		}
 
-		const messagePayload = buildWebContainer(req.body)
-		await channel.send(messagePayload)
+		const messagePayload = buildEditPayload(req.body)
+		messagePayload.components[0].toJSON()
+		messagePayload.allowedMentions = { parse: dashboard.getSetting('DASHBOARD_ALLOW_MENTIONS') ? ['users', 'roles', 'everyone'] : [] }
+		await dashboard.audit(req.dashboardUser.id, 'container.send.request', channelId)
+		const sent = await channel.send(messagePayload)
+		await dashboard.audit(req.dashboardUser.id, 'container.send', sent.url)
+			.catch(error => console.error('[Dashboard] Не удалось записать результат публикации:', error.code || error.message))
 
 		res.json({ success: true })
 	} catch (err) {
 		console.error('Ошибка при отправке контейнера с сайта:', err)
-		res.status(500).json({ error: err.message })
+		res.status(err.status || 500).json({ error: err.message })
 	}
 })
 
-const server = app.listen(3000, () => {
-	console.log('🌐 Web server is running on port 3000')
+const port = Number(process.env.PORT || 3000)
+const server = app.listen(port, () => {
+	console.log(`🌐 Web server is running on port ${port}`)
 })
 
 // --- GRACEFUL SHUTDOWN (корректное завершение работы) ---
@@ -136,10 +165,10 @@ process.on('SIGINT', shutdown)
 // --- ЗАПУСК DISCORD КЛИЕНТА ---
 // Задержка 5 секунд нужна, чтобы Express успел подняться
 setTimeout(() => {
-	client
+	dashboardReady.then(() => client
 		.login(process.env.TOKEN)
 		.then(() => console.log('✅ Discord login successful!'))
-		.catch(err => console.error('❌ Discord login error:', err))
+		.catch(err => console.error('❌ Discord login error:', err)))
 }, 5000)
 
 // --- ОБРАБОТКА ОШИБОК ---

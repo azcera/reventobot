@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	ModalBuilder,
 	TextInputBuilder,
@@ -10,9 +11,6 @@ const { parseDateTime, getDiscordTimestamp } = require('../../utils/dateUtils')
 const { sendEphemeralWithAutoDelete } = require('../../utils/autoDelete')
 const captureManager = require('./captureManager')
 const db = require('../../services/database')
-const ADMIN_ROLES = process.env.ADMIN_ROLES
-	? process.env.ADMIN_ROLES.split(',')
-	: []
 
 /**
  * Показывает модалку ручного создания реги (время, цель, maxMain).
@@ -111,7 +109,7 @@ async function submitCaptModal(interaction) {
  */
 async function handleAutoCaptButton(interaction) {
 	const hasAdminRole = interaction.member.roles.cache.some(role =>
-		ADMIN_ROLES.includes(role.id)
+		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
 	)
 
 	if (!hasAdminRole && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -197,7 +195,7 @@ async function handleAutoCaptButton(interaction) {
  */
 async function handleInlineEditTimeButton(interaction) {
 	const hasAdminRole = interaction.member.roles.cache.some(role =>
-		ADMIN_ROLES.includes(role.id)
+		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
 	)
 
 	if (

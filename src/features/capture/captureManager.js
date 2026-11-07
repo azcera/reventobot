@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	MessageFlags,
 	ActionRowBuilder,
@@ -15,7 +16,6 @@ require('dotenv').config()
 
 const pool = require('../../services/database.js')
 
-const PLUS_CHANNEL = process.env.PLUS_CHANNEL_ID
 const APPROVAL_PAGE_SIZE = 100
 
 function joinedPlayers(mainList, reserveList, mainMeta, reserveMeta) {
@@ -78,10 +78,6 @@ function approvalId(group) {
 }
 
 // Parse PRIORITY_ROLES from env: comma-separated role IDs, highest priority first
-const PRIORITY_ROLES = (process.env.PRIORITY_ROLES || '')
-	.split(',')
-	.map(id => id.trim())
-	.filter(Boolean)
 
 /**
  * Gets the priority index for a member based on their highest role.
@@ -90,10 +86,10 @@ const PRIORITY_ROLES = (process.env.PRIORITY_ROLES || '')
  * @returns {number}
  */
 function getRolePriority(member) {
-	for (let i = 0; i < PRIORITY_ROLES.length; i++) {
-		if (member.roles.cache.has(PRIORITY_ROLES[i])) return i
+	for (let i = 0; i < dashboard.roleIds('PRIORITY_ROLES').length; i++) {
+		if (member.roles.cache.has(dashboard.roleIds('PRIORITY_ROLES')[i])) return i
 	}
-	return PRIORITY_ROLES.length // lowest priority (after all configured roles)
+	return dashboard.roleIds('PRIORITY_ROLES').length // lowest priority (after all configured roles)
 }
 
 /**
@@ -111,10 +107,10 @@ function sortByRolePriority(list, guild) {
 
 			const priorityA = memberA
 				? getRolePriority(memberA)
-				: PRIORITY_ROLES.length
+				: dashboard.roleIds('PRIORITY_ROLES').length
 			const priorityB = memberB
 				? getRolePriority(memberB)
-				: PRIORITY_ROLES.length
+				: dashboard.roleIds('PRIORITY_ROLES').length
 
 			if (priorityA !== priorityB) return priorityA - priorityB
 
@@ -150,15 +146,13 @@ function buildCaptureMessage(
 		)
 	)
 	const title = new TextDisplayBuilder().setContent(
-		`## 📢 Рега на ${target ?? 'капт'}!`
+		dashboard.text('capture.title', { target: target ?? 'капт' })
 	)
 	const time = new TextDisplayBuilder().setContent(
-		'## Время проведения: ' + discordTimestamp
+		dashboard.text('capture.time', { time: discordTimestamp })
 	)
 
-	const helpText = new TextDisplayBuilder().setContent(
-		'-# Нажмите на кнопку ниже, чтобы записаться на капт.'
-	)
+	const helpText = new TextDisplayBuilder().setContent(dashboard.text('capture.1'))
 
 	// Sort main list and reserve list by role priority (then join order)
 	const mainListWithMeta = (mainList || []).map((userId, index) => ({
@@ -201,13 +195,13 @@ function buildCaptureMessage(
 			: 'Пусто'
 
 	const mainTitle = new TextDisplayBuilder().setContent(
-		`### 👥 Основной состав (${sortedMainList.length}/${maxMain})\n${mainPlayersText}`
+		dashboard.text('capture.main', { count: sortedMainList.length, limit: maxMain, players: mainPlayersText })
 	)
 	const reserveTitle = new TextDisplayBuilder().setContent(
-		`### 🤝 Резерв (${sortedReserveList.length})\n${reservePlayersText}`
+		dashboard.text('capture.reserve', { count: sortedReserveList.length, players: reservePlayersText })
 	)
 	const leftTitle = new TextDisplayBuilder().setContent(
-		`### 🚪 Покинули набор (${leftList.length})\n${leftPlayersText}`
+		dashboard.text('capture.left', { count: leftList.length, players: leftPlayersText })
 	)
 
 	const containerComponent = new ContainerBuilder()
@@ -234,15 +228,15 @@ function buildCaptureMessage(
 	const buttonsRow = new ActionRowBuilder().addComponents(
 		new ButtonBuilder()
 			.setCustomId('capt_join')
-			.setLabel('✅ Принять')
+			.setLabel(dashboard.text('capture.2'))
 			.setStyle(ButtonStyle.Success),
 		new ButtonBuilder()
 			.setCustomId('capt_leave')
-			.setLabel('❌ Выйти')
+			.setLabel(dashboard.text('capture.3'))
 			.setStyle(ButtonStyle.Danger),
 		new ButtonBuilder()
 			.setCustomId('capt_edit_time_trigger') // Название кнопки для перехвата админ права
-			.setLabel('✏️ Время')
+			.setLabel(dashboard.text('capture.4'))
 			.setStyle(ButtonStyle.Secondary)
 	)
 	const pageCount = Math.ceil(
@@ -252,12 +246,12 @@ function buildCaptureMessage(
 		buttonsRow.addComponents(
 			new ButtonBuilder()
 				.setCustomId(`capt_approval_page_${approvalPage - 1}`)
-				.setLabel('◀')
+				.setLabel(dashboard.text('capture.5'))
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(approvalPage === 0),
 			new ButtonBuilder()
 				.setCustomId(`capt_approval_page_${approvalPage + 1}`)
-				.setLabel('▶')
+				.setLabel(dashboard.text('capture.6'))
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(approvalPage >= pageCount - 1)
 		)
@@ -291,7 +285,7 @@ function buildCaptureMessage(
 
 	return {
 		flags: MessageFlags.IsComponentsV2,
-		components: [containerComponent, buttonsRow, ...menus]
+		components: [dashboard.decorate('capture', containerComponent), buttonsRow, ...menus]
 	}
 }
 
@@ -415,7 +409,7 @@ async function sendCollection(
 	sendReminders = true
 ) {
 	const guild = interaction.guild
-	const channel = guild.channels.cache.get(PLUS_CHANNEL)
+	const channel = guild.channels.cache.get(dashboard.getSetting('PLUS_CHANNEL_ID'))
 
 	const mainList = []
 	const reserveList = []
@@ -439,7 +433,7 @@ async function sendCollection(
 	if (sendReminders) {
 		for (let i = 0; i < 3; i++) {
 			await channel.send({
-				content: `<@&${process.env.AUTO_ROLE}> рега выше`
+				content: `<@&${dashboard.getSetting('AUTO_ROLE')}> рега выше`
 			})
 		}
 	}
@@ -638,7 +632,7 @@ async function handleButton(interaction) {
 }
 
 async function handleApproval(interaction) {
-	const adminRoles = (process.env.ADMIN_ROLES || '')
+	const adminRoles = (dashboard.getSetting('ADMIN_ROLES') || '')
 		.split(',')
 		.map(id => id.trim())
 		.filter(Boolean)

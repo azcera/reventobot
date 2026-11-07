@@ -1,3 +1,4 @@
+const { store: dashboard } = require('../../dashboard/store')
 const {
 	ModalBuilder,
 	TextInputBuilder,
@@ -151,7 +152,7 @@ async function submitGroupModal(interaction) {
 
 	try {
 		const pingChannelId = process.env.PING_CHANNEL_ID
-		const mentionedRoleId = process.env.AUTO_ROLE
+		const mentionedRoleId = dashboard.getSetting('AUTO_ROLE')
 		if (!pingChannelId)
 			return console.log('❌ В файле .env не указан PING_CHANNEL_ID')
 

@@ -1,10 +1,10 @@
+const { store: dashboard } = require('../dashboard/store')
 const { MessageFlags, ChannelType } = require('discord.js')
 const {
 	getNavigationContainer
 } = require('../commands/admin/navigationBuilder')
 const { editReplyWithAutoDelete, replyWithAutoDelete } = require('./autoDelete')
 require('dotenv').config()
-const parentChannelId = process.env.PARENT_CHANNEL_ID
 
 /**
  * Создаёт приватную ветку (Private Thread) внутри PARENT_CHANNEL_ID,
@@ -21,8 +21,8 @@ async function createArchiveChannel(
 	const isInteraction = !!interactionOrGuild.reply
 
 	const parentChannel =
-		guild.channels.cache.get(parentChannelId) ||
-		(await guild.channels.fetch(parentChannelId).catch(() => null))
+		guild.channels.cache.get(dashboard.getSetting('PARENT_CHANNEL_ID')) ||
+		(await guild.channels.fetch(dashboard.getSetting('PARENT_CHANNEL_ID')).catch(() => null))
 
 	if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
 		if (isInteraction) {
