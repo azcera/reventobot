@@ -97,8 +97,12 @@ test('editing text preserves working buttons, attachments, unknown components an
 	assert.deepEqual(payload.allowedMentions, { parse: [], repliedUser: false })
 	assert.equal((await f.request('/api/message', { body: { link: f.message.url, revision: loaded.revision, values: {} } })).status, 409)
 	const history = await (await f.request('/api/history')).json()
-	assert.equal(history[0].action, 'message.edit')
+	assert.equal(history[0].action, 'message.edit.failed')
 	assert.equal(history[0].actor, f.userId)
+	const failure = JSON.parse(history[0].details)
+	assert.match(failure.error, /Сообщение изменилось/)
+	assert.equal(failure.actorName, 'Администратор')
+	assert.ok(history.some(entry => entry.action === 'message.edit'))
 	f.message.author.id = 'other-bot'
 	assert.equal((await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).status, 403)
 })

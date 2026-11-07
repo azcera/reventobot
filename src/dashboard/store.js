@@ -4,6 +4,7 @@ const settingDefinitions = {
 	ADMIN_PANEL_CHANNEL_ID: { label: 'Канал админ-панели', type: 'channel', channelTypes: [0] },
 	INVITE_CATEGORY_ID: { label: 'Категория заявок', type: 'channel', channelTypes: [4] },
 	LOG_CHANNEL_ID: { label: 'Канал журнала заявок', type: 'channel', channelTypes: [0] },
+	CHANGELOG_CHANNEL_ID: { label: 'Канал журнала изменений', type: 'channel', channelTypes: [0] },
 	PARENT_CHANNEL_ID: { label: 'Канал архивов', type: 'channel', channelTypes: [0] },
 	ARCHIVE_SETTINGS_CHANNEL: { label: 'Канал списков архивов', type: 'channel', channelTypes: [0] },
 	PLUS_CHANNEL_ID: { label: 'Канал регистрации на капт', type: 'channel', channelTypes: [0] },
@@ -93,9 +94,19 @@ function createStore() {
 					if (value === null) delete next[section][key]
 					else next[section][key] = value
 				}
+				const changes = {}
+				for (const key of Object.keys(values)) {
+					const definition = section === 'templates' ? catalog[key] : settingDefinitions[key]
+					const fallback = section === 'settings' ? process.env[key] ?? definition?.default ?? '' : definition?.default
+					const before = current.value[section]?.[key] ?? fallback
+					const after = next[section]?.[key] ?? fallback
+					if (JSON.stringify(before) !== JSON.stringify(after)) changes[key] = section === 'bindings'
+						? { label: ({ rules: 'Привязка правил', invite: 'Привязка приглашения', promotion: 'Привязка системы повышения', recruit: 'Привязка памятки рекрута' })[key] || key, before: before?.link || null, after: after?.link || null }
+						: { label: definition?.label || key, before, after }
+				}
 				await db.query('UPDATE dashboard_state SET value = $1::jsonb, revision = revision + 1 WHERE id = 1', [JSON.stringify(next)])
 				await db.query('INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',
-					[actor, section, Object.keys(values).join(', '), JSON.stringify({ before: current.value[section], changes: values })])
+					[actor?.id || actor, section, Object.keys(values).join(', '), JSON.stringify({ actorName: actor?.name, fields: changes })])
 				await db.query('COMMIT')
 				state = next
 				refreshBoundFields(state)
@@ -108,10 +119,10 @@ function createStore() {
 		},
 		async audit(actor, action, target, details = {}) {
 			await pool.query('INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',
-				[actor, action, target, JSON.stringify(details)])
+				[actor?.id || actor, action, target, JSON.stringify({ ...details, actorName: actor?.name || details.actorName })])
 		},
 		async history() {
-			return (await pool.query('SELECT id, created_at, actor, action, target FROM dashboard_audit ORDER BY id DESC LIMIT 100')).rows
+			return (await pool.query('SELECT id, created_at, actor, action, target, details FROM dashboard_audit ORDER BY id DESC LIMIT 100')).rows
 		}
 	}
 }

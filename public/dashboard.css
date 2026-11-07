@@ -845,3 +845,9 @@ iframe {
 .permanent-row input { width:100%; }
 .message-preview .discord-text { overflow-wrap:anywhere; white-space:normal; }
 .message-preview { border-left:none; }
+.application-preview-container { background:#2b2d31; border:1px solid #3f4147; border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:12px; }
+.application-preview-container .preview-button { align-self:flex-start; }
+.application-preview-buttons { display:flex; gap:8px; flex-wrap:wrap; }
+.history-row pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:360px; overflow:auto; font-size:13px; }
+.history-row details { margin-top:8px; }
+.history-row summary { cursor:pointer; }

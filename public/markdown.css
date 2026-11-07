@@ -86,3 +86,6 @@
 	margin: 20px 0;
 }
 
+
+.discord-text blockquote { margin:4px 0; padding:2px 12px; border-left:4px solid #949ba4; }
+.discord-text ul { margin:4px 0; padding-left:24px; }

@@ -4,6 +4,7 @@ const { problem } = require('./auth')
 const { parseMessageLink } = require('../services/containerMessageService')
 const { snapshot, applyFields } = require('./messageEditor')
 const locks = require('../services/messageLocks')
+const { linesOf, logMessageChange } = require('./changeLog')
 
 const definitions = {
 	rules: { group: 'Правила', command: 'rules' },
@@ -39,7 +40,7 @@ async function rememberSent(kind, message) {
 	catch (error) { console.error('[Dashboard] Не удалось сохранить привязку:', error.message) }
 }
 
-async function updateMessage(kind, binding, client, guild) {
+async function updateMessage(kind, binding, client, guild, actor) {
 	const id = parseMessageLink(binding.link).messageId
 	if (locks.has(id)) throw problem(409, 'Сообщение уже сохраняется.')
 	locks.add(id)
@@ -68,15 +69,17 @@ async function updateMessage(kind, binding, client, guild) {
 			payload = applyFields(message, Object.fromEntries(binding.fields.map(field => [field.path, store.text(field.key)])))
 		}
 		for (const component of payload.components) if (component.type === 17) component.accent_color = null
+		const before = linesOf(message)
 		await message.edit(payload)
+		return await logMessageChange({ guild, actor, kind, link: binding.link, before, after: linesOf(payload) })
 	} finally { locks.delete(id) }
 }
 
-async function syncMessages(keys, client, guild, selectedKind) {
+async function syncMessages(keys, client, guild, selectedKind, actor) {
 	const results = []
 	for (const [kind, binding] of Object.entries(store.bindings)) {
 		if (!definitions[kind] || (selectedKind ? kind !== selectedKind : !keys.some(key => catalog[key]?.group === definitions[kind].group))) continue
-		try { await updateMessage(kind, binding, client, guild); results.push({ kind, ok: true }) }
+		try { const logResult = await updateMessage(kind, binding, client, guild, actor); results.push({ kind, ok: true, ...logResult }) }
 		catch (error) { results.push({ kind, ok: false, error: error.status ? error.message : 'Discord недоступен или у бота нет прав на сообщение. Повторите обновление.' }) }
 	}
 	return results

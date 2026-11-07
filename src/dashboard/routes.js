@@ -5,6 +5,7 @@ const { parseMessageLink, messageRevision } = require('../services/containerMess
 const { snapshot, applyFields, isHttpsUrl } = require('./messageEditor')
 const locks = require('../services/messageLocks')
 const permanent = require('./permanentMessages')
+const { linesOf, logMessageChange, diffLines } = require('./changeLog')
 
 const panelKey = require('./panelKey')
 
@@ -108,8 +109,10 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }) } 
 			if (!Number.isSafeInteger(revision)) throw problem(400, 'Обновите страницу перед сохранением.')
 			if (section === 'templates') validateTemplates(values)
 			else await validateSettings(values, req.guild)
-			await store.save(section, values, revision, req.dashboardUser.id)
-			const syncResults = section === 'templates' ? await permanent.syncMessages(Object.keys(values), client, req.guild) : []
+			await store.save(section, values, revision, req.dashboardUser)
+			const syncResults = section === 'templates' ? await permanent.syncMessages(Object.keys(values), client, req.guild, undefined, req.dashboardUser) : []
+			if (syncResults.length) await store.audit(req.dashboardUser, 'message.sync', Object.keys(values).join(', '), { syncResults })
+				.catch(error => console.error('[Dashboard audit]', error.message))
 			res.json({ ...store.snapshot(), syncResults })
 		} catch (error) { respondError(res, error) }
 	})
@@ -121,16 +124,16 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }) } 
 			if (binding) await permanent.fetchMessage(client, req.guild, link)
 			const id = binding && parseMessageLink(link).messageId
 			if (id && Object.entries(store.bindings).some(([other, value]) => other !== kind && parseMessageLink(value.link).messageId === id)) throw problem(400, 'Сообщение уже привязано к другому разделу.')
-			await store.save('bindings', { [kind]: binding }, revision, req.dashboardUser.id)
+			await store.save('bindings', { [kind]: binding }, revision, req.dashboardUser)
 			res.json(store.snapshot())
 		} catch (error) { respondError(res, error) }
 	})
 	app.post('/api/permanent-message/sync', async (req, res) => {
 		try {
 			if (!Object.hasOwn(permanent.definitions, req.body.kind) || !store.bindings[req.body.kind]) throw problem(400, 'Сначала привяжите сообщение.')
-			await store.audit(req.dashboardUser.id, 'message.sync.request', req.body.kind)
-			const syncResults = await permanent.syncMessages([], client, req.guild, req.body.kind)
-			await store.audit(req.dashboardUser.id, 'message.sync', req.body.kind, { syncResults })
+			await store.audit(req.dashboardUser, 'message.sync.request', req.body.kind)
+			const syncResults = await permanent.syncMessages([], client, req.guild, req.body.kind, req.dashboardUser)
+			await store.audit(req.dashboardUser, 'message.sync', req.body.kind, { syncResults })
 				.catch(error => console.error('[Dashboard] Не удалось записать результат обновления:', error.message))
 			res.json({ ...store.snapshot(), syncResults })
 		} catch (error) { respondError(res, error) }
@@ -163,12 +166,19 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }) } 
 			const message = await fetchOwnedMessage(link, req.guild)
 			if (messageRevision(message) !== revision) throw problem(409, 'Сообщение изменилось. Загрузите его заново.')
 			const payload = applyFields(message, values)
-			await store.audit(req.dashboardUser.id, 'message.edit.request', link, { fields: Object.keys(values) })
+			await store.audit(req.dashboardUser, 'message.edit.request', link, { fields: Object.keys(values) })
+			const before = linesOf(message)
 			const updated = await message.edit(payload)
-			await store.audit(req.dashboardUser.id, 'message.edit', link)
+			const after = linesOf(updated)
+			const logResult = await logMessageChange({ guild: req.guild, actor: req.dashboardUser, link: updated.url, before, after })
+			await store.audit(req.dashboardUser, 'message.edit', link, { diff: diffLines(before, after), ...logResult })
 				.catch(error => console.error('[Dashboard] Не удалось записать результат изменения:', error.code || error.message))
-			res.json(snapshot(updated))
-		} catch (error) { respondError(res, error) }
+			res.json({ ...snapshot(updated), ...logResult })
+		} catch (error) {
+			if (lock) await store.audit(req.dashboardUser, 'message.edit.failed', req.body.link, { error: error.status ? error.message : 'Не удалось обновить сообщение в Discord или записать аудит.' })
+				.catch(auditError => console.error('[Dashboard audit]', auditError.message))
+			respondError(res, error)
+		}
 		finally { if (lock) locks.delete(lock) }
 	})
 }

@@ -421,7 +421,7 @@ async function sendToDiscord(edit = false) {
 		const result = await response.json()
 		if (response.ok && result.success) {
 			if (edit) messageSource = result.source
-			setMessageStatus(edit ? 'Изменения сохранены в исходном сообщении.' : 'Сообщение опубликовано в Discord.')
+			setMessageStatus((edit ? 'Изменения сохранены в исходном сообщении.' : 'Сообщение опубликовано в Discord.') + (result.logError ? ' ' + result.logError : ''), Boolean(result.logError))
 		} else {
 			setMessageStatus(result.error || 'Не удалось отправить сообщение.', true)
 		}

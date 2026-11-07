@@ -481,7 +481,7 @@
   },
   "application.1": {
     "group": "Заявка",
-    "label": "Кнопка: ✅ Принять",
+    "label": "Кнопка принятия",
     "default": "✅ Принять",
     "type": "button",
     "variables": [],
@@ -489,7 +489,7 @@
   },
   "application.2": {
     "group": "Заявка",
-    "label": "Кнопка: 📞 Вызвать на обзвон",
+    "label": "Кнопка вызова на обзвон",
     "default": "📞 Вызвать на обзвон",
     "type": "button",
     "variables": [],
@@ -497,7 +497,7 @@
   },
   "application.3": {
     "group": "Заявка",
-    "label": "Кнопка: ❌ Отклонить",
+    "label": "Кнопка отклонения",
     "default": "❌ Отклонить",
     "type": "button",
     "variables": [],
@@ -641,7 +641,7 @@
   },
   "application.title": {
     "group": "Заявка",
-    "label": "# 📝 Заявка в семью",
+    "label": "Заголовок новой заявки",
     "default": "# 📝 Заявка в семью\nНиже выведена информация о кандидате.",
     "type": "text",
     "variables": [],
@@ -649,7 +649,7 @@
   },
   "application.help": {
     "group": "Заявка",
-    "label": " Если вы администратор: используйте кнопки ниже для управления заявкой.",
+    "label": "Подсказка модератору",
     "default": " Если вы администратор: используйте кнопки ниже для управления заявкой.",
     "type": "text",
     "variables": [],
@@ -657,7 +657,7 @@
   },
   "application.accepted": {
     "group": "Заявка",
-    "label": "# ✅ Заявка одобрена",
+    "label": "Заголовок принятой заявки",
     "default": "# ✅ Заявка одобрена",
     "type": "text",
     "variables": [],
@@ -665,7 +665,7 @@
   },
   "application.rejected": {
     "group": "Заявка",
-    "label": "# ❌ Заявка отклонена",
+    "label": "Заголовок отклонённой заявки",
     "default": "# ❌ Заявка отклонена",
     "type": "text",
     "variables": [],
@@ -673,7 +673,7 @@
   },
   "application.interview": {
     "group": "Заявка",
-    "label": "# 📞 Вызов на обзвон",
+    "label": "Заголовок вызова на обзвон",
     "default": "# 📞 Вызов на обзвон",
     "type": "text",
     "variables": [],
@@ -681,7 +681,7 @@
   },
   "application.pendingStatus": {
     "group": "Заявка",
-    "label": "application.pendingStatus",
+    "label": "Статус заявки на рассмотрении",
     "default": "\n**Статус:** На рассмотрении\nВремя отправления: <t:{time}:F> (<t:{time}:R>)",
     "type": "text",
     "variables": [
@@ -691,7 +691,7 @@
   },
   "application.acceptedStatus": {
     "group": "Заявка",
-    "label": "application.acceptedStatus",
+    "label": "Статус принятой заявки",
     "default": "\n**Статус:** Принят в семью\n**Администратор:** <@{admin}>\nВремя решения: <t:{time}:F>",
     "type": "text",
     "variables": [
@@ -702,7 +702,7 @@
   },
   "application.rejectedStatus": {
     "group": "Заявка",
-    "label": "application.rejectedStatus",
+    "label": "Статус отклонённой заявки",
     "default": "\n**Статус:** Отклонено\n**Администратор:** <@{admin}>\n**Причина:** {reason}\nВремя решения: <t:{time}:F>",
     "type": "text",
     "variables": [
@@ -714,7 +714,7 @@
   },
   "application.interviewStatus": {
     "group": "Заявка",
-    "label": "application.interviewStatus",
+    "label": "Статус вызова на обзвон",
     "default": "\n**Статус:** Вызван на обзвон\n**Администратор:** <@{admin}>\n**Комната:** <#{channel}>\nВремя вызова: <t:{time}:F>",
     "type": "text",
     "variables": [
@@ -726,7 +726,7 @@
   },
   "application.details": {
     "group": "Заявка",
-    "label": "### Пользователь: <@{user}>",
+    "label": "Анкета кандидата",
     "default": "### Пользователь: <@{user}>\n### 1. Никнейм\n{name}\n### 2. Возраст (ООС)\n{age}\n### 3. Как узнали о семье и чего ждете?\n{about}\n### 4. Где ранее играли?\n{history}",
     "type": "text",
     "variables": [
@@ -740,7 +740,7 @@
   },
   "dm.acceptTitle": {
     "group": "Личные сообщения заявок",
-    "label": "### Одобрение заявки",
+    "label": "Личное сообщение: одобрение заявки",
     "default": "### Одобрение заявки\nВаша заявка в {server} одобрена!",
     "type": "text",
     "variables": [
@@ -750,7 +750,7 @@
   },
   "dm.acceptDate": {
     "group": "Личные сообщения заявок",
-    "label": "> Дата одобрения: <t:{time}:F>",
+    "label": "Дата одобрения заявки",
     "default": "> Дата одобрения: <t:{time}:F>",
     "type": "text",
     "variables": [
@@ -760,7 +760,7 @@
   },
   "dm.rejectTitle": {
     "group": "Личные сообщения заявок",
-    "label": "### Отклонение заявки",
+    "label": "Личное сообщение: отказ",
     "default": "### Отклонение заявки\nВаша заявка в {server} отклонена!!",
     "type": "text",
     "variables": [
@@ -770,7 +770,7 @@
   },
   "dm.rejectReason": {
     "group": "Личные сообщения заявок",
-    "label": "> Причина: {reason}",
+    "label": "Причина и дата отказа",
     "default": "> Причина: {reason}\n> Дата отклонения: <t:{time}:F>",
     "type": "text",
     "variables": [
@@ -781,7 +781,7 @@
   },
   "dm.interviewTitle": {
     "group": "Личные сообщения заявок",
-    "label": "### Приглашение на обзвон в **{server}**",
+    "label": "Личное сообщение: приглашение на обзвон",
     "default": "### Приглашение на обзвон в **{server}**\nВы были вызваны на обзвон!",
     "type": "text",
     "variables": [
@@ -791,7 +791,7 @@
   },
   "dm.interviewDate": {
     "group": "Личные сообщения заявок",
-    "label": "> Голосовой канал: <#{channel}>",
+    "label": "Канал и дата обзвона",
     "default": "> Голосовой канал: <#{channel}>\n> Дата события: <t:{time}:F>",
     "type": "text",
     "variables": [

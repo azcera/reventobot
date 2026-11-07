@@ -23,7 +23,7 @@ test('imported permanent message fields persist and saving or resetting template
 	assert.equal(restarted.text(field.key), field.value)
 	response = await f.request('/api/templates', { body: { revision: config.revision, values: { [field.key]: '# Новая памятка\n**Важно**' } } })
 	config = await response.json()
-	assert.equal(response.status, 200); assert.deepEqual(config.syncResults, [{ kind: 'recruit', ok: true }])
+	assert.equal(response.status, 200); assert.deepEqual(config.syncResults.map(({ kind, ok }) => ({ kind, ok })), [{ kind: 'recruit', ok: true }])
 	assert.equal(f.message.components[0].components[0].content, '# Новая памятка\n**Важно**')
 	assert.deepEqual(f.message.components[0].components.slice(1), original[0].components.slice(1))
 	assert.equal(f.message.attachments.size, 1)
@@ -65,7 +65,7 @@ test('rules and invite sync reuse command builders, images and working buttons',
 		const key = kind === 'rules' ? 'rules.heading.1' : 'invite.4'
 		const value = kind === 'rules' ? '## Новые правила' : 'Новая заявка'
 		config = await (await f.request('/api/templates', { body: { revision: config.revision, values: { [key]: value } } })).json()
-		assert.deepEqual(config.syncResults, [{ kind, ok: true }])
+		assert.deepEqual(config.syncResults.map(({ kind, ok }) => ({ kind, ok })), [{ kind, ok: true }])
 		assert.ok(JSON.stringify(f.message.components).includes(value))
 		assert.equal(f.message.components[0].accent_color, null)
 		assert.equal(f.message.lastPayload.files, undefined)

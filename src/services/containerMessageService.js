@@ -143,12 +143,22 @@ function registerContainerMessageRoutes(app, client, { beforeMutation, afterMuta
 			if (revision !== messageRevision(message)) fail(409, 'Сообщение изменилось после загрузки. Загрузите его заново перед сохранением.')
 			parseContainerMessage(message)
 			await beforeMutation?.(req, 'container.edit', message.url)
+			const { linesOf, diffLines, logMessageChange } = require('../dashboard/changeLog')
+			const before = linesOf(message)
 			const updated = await message.edit({
 				...payload, flags: message.flags.bitfield, allowedMentions: { parse: [] }
 			})
-			await afterMutation?.(req, 'container.edit', updated.url)
-			res.json({ success: true, source: source(updated) })
-		} catch (error) { errorResponse(res, error) }
+			const after = linesOf(updated)
+			const logResult = await logMessageChange({ guild: req.guild, actor: req.dashboardUser, link: updated.url, before, after })
+			await afterMutation?.(req, 'container.edit', updated.url, { diff: diffLines(before, after), ...logResult })
+			res.json({ success: true, source: source(updated), ...logResult })
+		} catch (error) {
+			if (lock) {
+				try { await afterMutation?.(req, 'container.edit.failed', req.body.link, { error: error.status ? error.message : 'Не удалось обновить контейнер в Discord.' }) }
+				catch (auditError) { console.error('[Dashboard audit]', auditError.message) }
+			}
+			errorResponse(res, error)
+		}
 		finally { if (lock) saving.delete(lock) }
 	})
 }

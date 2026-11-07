@@ -12,13 +12,11 @@ function discordMarkdownToHtml(text) {
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
 
-	// Code blocks (``` ... ```) — до inline, чтобы не ломать содержимое
-	s = s.replace(/```([\s\S]*?)```/g, (_, code) => {
-		return '<pre><code>' + code.replace(/^\n/, '') + '</code></pre>'
-	})
-
-	// Inline code
-	s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>')
+	// Protect code from all later Markdown substitutions.
+	const codeBlocks = []
+	const protect = html => '\u0000' + (codeBlocks.push(html) - 1) + '\u0000'
+	s = s.replace(/```(?:[a-zA-Z]+\n)?([\s\S]*?)```/g, (_, code) => protect('<pre><code>' + code.replace(/^\n/, '') + '</code></pre>'))
+	s = s.replace(/`([^`\n]+)`/g, (_, code) => protect('<code>' + code + '</code>'))
 
 	// Headings (в начале строки)
 	s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>')
@@ -38,15 +36,21 @@ function discordMarkdownToHtml(text) {
 		url => `<a href="${url.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" target="_blank" rel="noopener">${url}</a>`
 	)
 
-	// Newlines → <br> but not inside pre
-	// Split by pre blocks
-	const parts = s.split(/(<pre>[\s\S]*?<\/pre>)/)
-	s = parts
-		.map(part => {
-			if (part.startsWith('<pre>')) return part
-			return part.replace(/(<\/h[1-3]>)\n/g, '$1').replace(/\n/g, '<br>')
-		})
-		.join('')
-
-	return s
+	const lines = s.split('\n')
+	const blocks = []
+	for (let i = 0; i < lines.length; i++) {
+		if (/^&gt; ?/.test(lines[i])) {
+			const quote = []
+			while (i < lines.length && /^&gt; ?/.test(lines[i])) quote.push(lines[i++].replace(/^&gt; ?/, ''))
+			i--
+			blocks.push('<blockquote>' + quote.join('<br>') + '</blockquote>')
+		} else if (/^- +/.test(lines[i])) {
+			const items = []
+			while (i < lines.length && /^- +/.test(lines[i])) items.push('<li>' + lines[i++].replace(/^- +/, '') + '</li>')
+			i--
+			blocks.push('<ul>' + items.join('') + '</ul>')
+		} else blocks.push(lines[i])
+	}
+	return blocks.join('<br>').replace(/(<\/(?:h[1-3]|ul|blockquote)>)<br>/g, '$1')
+		.replace(/\u0000(\d+)\u0000/g, (_, index) => codeBlocks[Number(index)])
 }

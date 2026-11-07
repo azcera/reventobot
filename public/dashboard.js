@@ -6,6 +6,7 @@ let currentMessage
 const templateDrafts = new Map()
 let settingsDraft = {}
 let busy = false
+let applicationPreviewState = 'pending'
 const titles = { overview: 'Обзор', builder: 'Конструктор v2', templates: 'Шаблоны сообщений', messages: 'Сообщения в Discord', settings: 'Настройки', history: 'История изменений' }
 let builderResizeObserver
 $('builderFrame').addEventListener('load', () => {
@@ -67,8 +68,29 @@ function renderHistory(id, entries) {
 		const time = node('time', new Date(entry.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))
 		time.dateTime = entry.created_at
 		const info = node('div', actions[entry.action] || entry.action)
-		info.append(node('small', 'Discord ID: ' + entry.actor))
-		const target = /^https:\/\/discord.com\/channels\//.test(entry.target) ? node('a', 'Открыть сообщение ↗') : node('span', entry.target)
+		const details = typeof entry.details === 'string' ? JSON.parse(entry.details) : entry.details || {}
+		info.append(node('small', (details.actorName || 'Имя не сохранено') + ' · Discord ID: ' + entry.actor))
+		const names = { rules: 'Правила', promotion: 'Система повышения', recruit: 'Памятка рекрута', invite: 'Приглашение' }
+		if (entry.action === 'bindings') info.firstChild.textContent = 'Изменение привязки постоянного сообщения'
+		if (entry.action === 'message.change') info.firstChild.textContent = 'Изменено сообщение: ' + (names[details.kind] || details.kind)
+		if (entry.action.startsWith('message.sync')) info.firstChild.textContent = entry.action.endsWith('.request') ? 'Запрошено обновление в Discord' : 'Результат обновления в Discord'
+		if (entry.action.endsWith('.failed')) info.firstChild.textContent = 'Не удалось изменить сообщение'
+		if (details.error) info.append(node('small', details.error, 'error'))
+		const changes = Array.isArray(details.fields) ? {} : { ...(details.fields || {}) }
+		for (const [key, after] of Object.entries(details.changes || {})) changes[key] = { label: config?.templates.find(field => field.key === key)?.label || key, before: details.before?.[key], after }
+		for (const [key, change] of Object.entries(changes)) {
+			const expand = node('details')
+			expand.append(node('summary', change.label || key))
+			const format = value => typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? 'Не задано')
+			expand.append(node('pre', 'Было:\n' + format(change.before) + '\n\nСтало:\n' + format(change.after)))
+			info.append(expand)
+		}
+		if (details.diff) { const expand = node('details'); expand.append(node('summary', 'Изменённые строки'), node('pre', details.diff)); info.append(expand) }
+		if (details.outcome) info.append(node('small', details.outcome))
+		if (details.logError) info.append(node('small', details.logError, 'error'))
+		for (const result of details.syncResults || []) info.append(node('small', (names[result.kind] || result.kind) + ': ' + (result.ok ? 'Обновлено' : result.error) + (result.logError ? ' · ' + result.logError : '')))
+		const targetLabel = names[entry.target] || entry.target.split(', ').map(key => config?.templates.find(field => field.key === key)?.label || config?.settings.find(field => field.key === key)?.label || key).join(', ')
+		const target = /^https:\/\/discord.com\/channels\//.test(entry.target) ? node('a', 'Открыть сообщение ↗') : node('span', targetLabel)
 		if (target.tagName === 'A') { target.href = entry.target; target.target = '_blank'; target.rel = 'noopener' }
 		row.append(time, info, target)
 		root.append(row)
@@ -140,6 +162,8 @@ function renderPermanentMessages() {
 }
 function showSyncResult(success) {
 	const failed = (config.syncResults || []).filter(result => !result.ok)
+	const logErrors = (config.syncResults || []).filter(result => result.logError)
+	if (!failed.length && logErrors.length) return notice(success + ' ' + logErrors.map(result => result.logError).join(' '), true)
 	notice(failed.length ? 'Шаблон сохранён, но обновление в Discord не завершено: ' + failed.map(result => permanentGroups[result.kind] + ': ' + result.error).join(' ') + ' Нажми «Обновить в Discord» после устранения причины.' : success, failed.length > 0)
 }
 const examples = { user: '123456789012345678', name: 'Tony | 132961', age: '18', about: 'Хочу развиваться вместе с семьёй', history: 'Revento', admin: '123456789012345678', server: 'REVENTO', channel: '123456789012345678', time: '18:00 МСК', target: 'капт', count: '3', limit: '20', players: '1. @Tony\n2. @Alex\n3. @Sam', reason: 'Ошибка в анкете', part: '2' }
@@ -185,9 +209,51 @@ function groupDraft() {
 function renderTemplates() {
 	const fields = groupFields()
 	const values = groupDraft()
-	const update = () => preview($('templatePreview'), fields, values, true)
+	const update = () => {
+		if (['Заявка', 'Личные сообщения заявок'].includes($('templateGroup').value)) return previewApplication($('templatePreview'), values)
+		preview($('templatePreview'), fields, values, true)
+	}
 	fieldsForm($('templateFields'), fields, values, update)
 	update()
+}
+function previewApplication(root, values) {
+	root.replaceChildren()
+	const dm = $('templateGroup').value === 'Личные сообщения заявок'
+	const states = dm ? { accepted: 'Принята', rejected: 'Отклонена', interview: 'Обзвон' } : { pending: 'На рассмотрении', accepted: 'Принята', rejected: 'Отклонена', interview: 'Обзвон' }
+	if (!states[applicationPreviewState]) applicationPreviewState = Object.keys(states)[0]
+	const select = node('select')
+	select.setAttribute('aria-label', 'Состояние заявки в предпросмотре')
+	for (const [key, label] of Object.entries(states)) select.add(new Option(label, key))
+	select.value = applicationPreviewState
+	select.addEventListener('change', () => { applicationPreviewState = select.value; previewApplication(root, values) })
+	root.append(select, node('p', 'Пример сообщения · Tony | 132961', 'muted'))
+	const container = node('div', null, 'application-preview-container')
+	const sample = { ...examples, admin: '987654321098765432', time: String(Math.floor(Date.now() / 1000)) }
+	const text = key => (values[key] ?? config.templates.find(field => field.key === key)?.value ?? '').replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name) => sample[name] || match)
+	const display = content => {
+		const block = node('div', null, 'discord-text')
+		// Resolve sample mentions and timestamps before the safe Markdown renderer.
+		content = content.replace(/<t:\d+:[A-Za-z]>/g, match => match.endsWith(':R>') ? 'только что' : new Date(Number(sample.time) * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))
+			.replace(/<@!?\d+>/g, mention => mention.includes(sample.admin) ? '@Куратор' : '@Tony').replace(/<@&\d+>/g, '@Модератор').replace(/<#\d+>/g, '#Обзвон')
+		block.innerHTML = discordMarkdownToHtml(content)
+		container.append(block)
+	}
+	const separator = () => container.append(node('div', null, 'discord-separator'))
+	const state = applicationPreviewState
+	if (dm) {
+		const keys = { accepted: ['dm.acceptTitle', 'dm.acceptDate'], rejected: ['dm.rejectTitle', 'dm.rejectReason'], interview: ['dm.interviewTitle', 'dm.interviewDate'] }[state]
+		display(text(keys[0])); separator(); display(text(keys[1]))
+	} else {
+		display(state === 'pending' ? text('application.title') + text('application.help') : text('application.' + state))
+		separator(); display(text('application.details')); separator(); display(text('application.' + state + 'Status'))
+		if (state === 'pending') {
+			separator()
+			const buttons = node('div', null, 'application-preview-buttons')
+			for (const key of ['application.1', 'application.2', 'application.3']) buttons.append(node('span', text(key), 'preview-button'))
+			container.append(buttons)
+		}
+	}
+	root.append(container)
 }
 function renderSettings() {
 	$('settingFields').replaceChildren()
@@ -288,7 +354,7 @@ $('messageForm').addEventListener('submit', event => {
 		if (!currentMessage) return
 		const values = Object.fromEntries(currentMessage.fields.filter(field => currentMessage.values[field.path] !== field.value).map(field => [field.path, currentMessage.values[field.path]]))
 		if (!Object.keys(values).length) return notice('Нет изменений для сохранения.')
-		currentMessage = await api('message', { link: currentMessage.url, revision: currentMessage.revision, values }); renderMessage(); notice('Сообщение обновлено в Discord.')
+		currentMessage = await api('message', { link: currentMessage.url, revision: currentMessage.revision, values }); renderMessage(); notice('Сообщение обновлено в Discord.' + (currentMessage.logError ? ' ' + currentMessage.logError : ''), Boolean(currentMessage.logError))
 	})
 })
 $('refreshHistory').addEventListener('click', () => action(async () => renderHistory('historyRows', await api('history'))))

@@ -77,9 +77,9 @@ registerContainerMessageRoutes(app, client, {
 		if (dynamic.rows.length || ids.channelId === dashboard.getSetting('ARCHIVE_SETTINGS_CHANNEL')) {
 			throw Object.assign(new Error('Этот список обновляет бот. Измените его оформление во вкладке «Шаблоны».'), { status: 409 })
 		}
-		await dashboard.audit(req.dashboardUser.id, action + '.request', target)
+		await dashboard.audit(req.dashboardUser, action + '.request', target)
 	},
-	afterMutation: (req, action, target) => dashboard.audit(req.dashboardUser.id, action, target)
+	afterMutation: (req, action, target, details) => dashboard.audit(req.dashboardUser, action, target, details)
 		.catch(error => console.error('[Dashboard] Не удалось записать результат изменения:', error.code || error.message))
 })
 
@@ -131,9 +131,9 @@ app.post('/api/send-container', async (req, res) => {
 		const messagePayload = buildEditPayload(req.body)
 		messagePayload.components[0].toJSON()
 		messagePayload.allowedMentions = { parse: dashboard.getSetting('DASHBOARD_ALLOW_MENTIONS') ? ['users', 'roles', 'everyone'] : [] }
-		await dashboard.audit(req.dashboardUser.id, 'container.send.request', channelId)
+		await dashboard.audit(req.dashboardUser, 'container.send.request', channelId)
 		const sent = await channel.send(messagePayload)
-		await dashboard.audit(req.dashboardUser.id, 'container.send', sent.url)
+		await dashboard.audit(req.dashboardUser, 'container.send', sent.url)
 			.catch(error => console.error('[Dashboard] Не удалось записать результат публикации:', error.code || error.message))
 
 		res.json({ success: true })
