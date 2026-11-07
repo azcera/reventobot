@@ -95,6 +95,19 @@ test('saved Tier choice fixes multiple tiers while keeping exactly one', async (
 	assert.deepEqual(f.edits[0].roles.sort(), ['unrelated-role', rankRoles['Tier 2']].sort())
 })
 
+test('applying each admin rank preserves an existing Tier and unrelated roles', async () => {
+	for (const rank of ['Dep', 'High', 'Recruit']) {
+		const f = fixture()
+		f.setFamily([{ id: 231542, login: 'Maya Well', rankName: rank, rankId: 1 }])
+		f.member.roles.cache.set(rankRoles[rank], {}).set(rankRoles['Tier 1'], {})
+		const preview = await f.preview()
+		await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] })
+		await f.sync.wait(f.guild)
+		assert.deepEqual(f.edits[0].roles.sort(), ['unrelated-role', rankRoles[rank], rankRoles['Tier 1']].sort())
+		assert.equal((await f.preview()).rows[0].status, 'unchanged')
+	}
+})
+
 test('excluding duplicate account leaves one unambiguous binding', async () => {
 	const f = fixture(); const clone = { ...f.member, id: '444444444444444444' }; f.members.set(clone.id, clone)
 	assert.ok((await f.preview()).rows.every(row => row.status === 'conflict'))

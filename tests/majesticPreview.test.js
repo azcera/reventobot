@@ -22,15 +22,41 @@ test('rank changes replace only managed roles in both directions', () => {
 	}
 })
 
-test('each existing Tier wins over higher, lower and other Tier game ranks', () => {
+test('each existing Tier replaces ordinary and other Tier game ranks', () => {
 	for (const tier of ['Tier 1', 'Tier 2', 'Tier 3']) {
-		for (const gameRank of ['Dep', 'Test', 'Tier 1', 'Tier 2', 'Tier 3', 'Leader', 'Own.dep']) {
+		for (const gameRank of ['Test', 'Tier 1', 'Tier 2', 'Tier 3', 'Leader', 'Own.dep']) {
 			const row = preview(gameRank, [rankRoles[tier], rankRoles.Main, 'unrelated-role'])
 			assert.equal(row.preservedTier, true)
 			assert.deepEqual(row.addRoles, [])
 			assert.deepEqual(row.removeRoles, [rankRoles.Main])
 		}
 	}
+})
+
+test('Dep, High and Recruit coexist with each Tier and replace other rank roles', () => {
+	for (const rank of ['Dep', 'High', 'Recruit']) {
+		for (const tier of ['Tier 1', 'Tier 2', 'Tier 3']) {
+			const retained = preview(rank, [rankRoles[rank], rankRoles[tier], 'unrelated-role'], 'Maya | 231542')
+			assert.equal(retained.status, 'unchanged')
+			assert.deepEqual(retained.addRoles, [])
+			assert.deepEqual(retained.removeRoles, [])
+			const otherAdmin = rank === 'Dep' ? 'High' : 'Dep'
+			const changed = preview(rank, [rankRoles[tier], rankRoles[otherAdmin], rankRoles.Main, 'unrelated-role'])
+			assert.deepEqual(changed.addRoles, [rankRoles[rank]])
+			assert.deepEqual(changed.removeRoles, [rankRoles[otherAdmin], rankRoles.Main])
+			assert.equal(changed.preservedTier, true)
+			assert.equal(preview(rank, [rankRoles['Tier 1'], rankRoles['Tier 2']]).status, 'conflict')
+		}
+	}
+})
+
+test('changing admin rank with a retained Tier updates the prefix and keeps optional text', () => {
+	const row = buildPreview([character('Dep')], [member([rankRoles.High, rankRoles['Tier 2']], '[𝐇𝐢𝐠𝐡] Maya | 231542 / afk')], {
+		adminRoleIds: [rankRoles.Dep, rankRoles.High, rankRoles.Recruit]
+	})[0]
+	assert.equal(row.nickname, '[𝐃𝐞𝐩] Maya | 231542 / afk')
+	assert.deepEqual(row.addRoles, [rankRoles.Dep])
+	assert.deepEqual(row.removeRoles, [rankRoles.High])
 })
 
 test('game Tier is assigned when no Discord Tier exists', () => {

@@ -13,6 +13,7 @@ const rankRoles = Object.freeze({
 })
 const managedRoles = new Set(Object.values(rankRoles))
 const tierRoles = new Set(['Tier 1', 'Tier 2', 'Tier 3'].map(rank => rankRoles[rank]))
+const adminRanks = new Set(['Dep', 'High', 'Recruit'])
 const ignoredRanks = new Set(['Leader', 'Own.dep'])
 
 function parseNickname(nickname) {
@@ -63,9 +64,10 @@ function buildPreview(characters, members, { decisions = {}, adminRoleIds = [] }
 		row.addRoles = []
 		row.removeRoles = []
 		if (currentTiers.length || !ignoredRanks.has(rank)) {
-			const targetRole = currentTiers[0] || rankRoles[rank]
-			row.addRoles = currentRoles.includes(targetRole) ? [] : [targetRole]
-			row.removeRoles = currentRoles.filter(id => id !== targetRole)
+			const targetRoles = new Set([currentTiers[0] || rankRoles[rank]])
+			if (currentTiers.length && adminRanks.has(rank)) targetRoles.add(rankRoles[rank])
+			row.addRoles = [...targetRoles].filter(id => !currentRoles.includes(id))
+			row.removeRoles = currentRoles.filter(id => !targetRoles.has(id))
 			row.preservedTier = currentTiers.length === 1
 		} else {
 			row.roleNote = 'Leader/Own.dep: синхронизация игрового ранга отключена.'
