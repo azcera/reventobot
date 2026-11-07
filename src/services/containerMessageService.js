@@ -80,7 +80,7 @@ function parseContainerMessage(message) {
 	}
 }
 
-function buildEditPayload(data) {
+function buildEditPayload(data, allowMentions = false) {
 	if (!Array.isArray(data.items) || !data.items.length || data.items.length > 39 ||
 		data.items.some(item => !item || !['text', 'image', 'separator', 'section'].includes(item.type) ||
 			(item.type !== 'separator' && (typeof item.value !== 'string' || !item.value.trim())) ||
@@ -90,6 +90,7 @@ function buildEditPayload(data) {
 	try {
 		const payload = buildWebContainer(data)
 		payload.components[0].toJSON()
+		payload.allowedMentions = { parse: allowMentions ? ['users', 'roles', 'everyone'] : ['roles'], repliedUser: false }
 		return payload
 	} catch {
 		fail(400, 'Проверьте содержимое компонентов, ссылки, длину текста и подписи кнопок.')
@@ -146,7 +147,7 @@ function registerContainerMessageRoutes(app, client, { beforeMutation, afterMuta
 			const { linesOf, diffLines, logMessageChange } = require('../dashboard/changeLog')
 			const before = linesOf(message)
 			const updated = await message.edit({
-				...payload, flags: message.flags.bitfield, allowedMentions: { parse: [] }
+				...payload, flags: message.flags.bitfield
 			})
 			const after = linesOf(updated)
 			const logResult = await logMessageChange({ guild: req.guild, actor: req.dashboardUser, link: updated.url, before, after })

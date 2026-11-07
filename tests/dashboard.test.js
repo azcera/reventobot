@@ -85,7 +85,7 @@ test('editing text preserves working buttons, attachments, unknown components an
 	const loaded = await (await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).json()
 	assert.ok(loaded.fields.find(field => field.path.endsWith('.accessory.0.label')))
 	const updated = await f.request('/api/message', { body: { link: f.message.url, revision: loaded.revision, values: {
-		'components.0.components.0.content': '## Новая публикация',
+		'components.0.components.0.content': '## Новая публикация <@&444444444444444444>',
 		'components.0.components.1.accessory.0.label': 'Вступить'
 	} } })
 	assert.equal(updated.status, 200)
@@ -94,7 +94,8 @@ test('editing text preserves working buttons, attachments, unknown components an
 	assert.equal(payload.components[0].components[1].accessory.label, 'Вступить')
 	assert.equal(payload.components[0].components[2].items[0].media.url, 'attachment://banner.png')
 	assert.equal(Object.hasOwn(payload, 'attachments'), false)
-	assert.deepEqual(payload.allowedMentions, { parse: [], repliedUser: false })
+	assert.deepEqual(payload.allowedMentions, { parse: ['roles'], repliedUser: false })
+	assert.equal(payload.components[0].components[0].content, '## Новая публикация <@&444444444444444444>')
 	assert.equal((await f.request('/api/message', { body: { link: f.message.url, revision: loaded.revision, values: {} } })).status, 409)
 	const history = await (await f.request('/api/history')).json()
 	assert.equal(history[0].action, 'message.edit.failed')

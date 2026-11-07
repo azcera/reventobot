@@ -128,9 +128,8 @@ app.post('/api/send-container', async (req, res) => {
 			})
 		}
 
-		const messagePayload = buildEditPayload(req.body)
+		const messagePayload = buildEditPayload(req.body, dashboard.getSetting('DASHBOARD_ALLOW_MENTIONS'))
 		messagePayload.components[0].toJSON()
-		messagePayload.allowedMentions = { parse: dashboard.getSetting('DASHBOARD_ALLOW_MENTIONS') ? ['users', 'roles', 'everyone'] : [] }
 		await dashboard.audit(req.dashboardUser, 'container.send.request', channelId)
 		const sent = await channel.send(messagePayload)
 		await dashboard.audit(req.dashboardUser, 'container.send', sent.url)

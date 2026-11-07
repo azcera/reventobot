@@ -121,6 +121,7 @@ async function switchTab() {
 }
 async function loadConfig() {
 	[config, resources] = await Promise.all([api('config'), api('resources')])
+	discordMentions.setResources(resources)
 	templateDrafts.clear()
 	settingsDraft = Object.fromEntries(config.settings.map(setting => [setting.key, setting.value]))
 	renderTemplateGroups()
@@ -261,7 +262,7 @@ function previewApplication(root, values) {
 		const block = node('div', null, 'discord-text')
 		// Resolve sample mentions and timestamps before the safe Markdown renderer.
 		content = content.replace(/<t:\d+:[A-Za-z]>/g, match => match.endsWith(':R>') ? 'только что' : new Date(Number(sample.time) * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))
-			.replace(/<@!?\d+>/g, mention => mention.includes(sample.admin) ? '@Куратор' : '@Tony').replace(/<@&\d+>/g, '@Модератор').replace(/<#\d+>/g, '#Обзвон')
+			.replace(/<@!?\d+>/g, mention => mention.includes(sample.admin) ? '@Куратор' : '@Tony').replace(/<#\d+>/g, mention => mention.includes(examples.channel) ? '#Обзвон' : mention)
 		block.innerHTML = discordMarkdownToHtml(content)
 		container.append(block)
 	}

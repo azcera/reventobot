@@ -48,6 +48,12 @@ function discordCodeHighlight(code, language) {
 	})
 }
 
+let discordMentionResources = { channels: [], roles: [] }
+
+function setDiscordMentionResources(resources) {
+	discordMentionResources = resources
+}
+
 function discordMarkdownToHtml(text) {
 	if (!text) return ''
 
@@ -62,6 +68,12 @@ function discordMarkdownToHtml(text) {
 	const protect = html => '\u0000' + (codeBlocks.push(html) - 1) + '\u0000'
 	s = s.replace(/```(?:([\w#+.-]+)\n)?([\s\S]*?)```/g, (_, language, code) => protect('<pre><code>' + discordCodeHighlight(code.replace(/^\n/, ''), language || '') + '</code></pre>'))
 	s = s.replace(/`([^`\n]+)`/g, (_, code) => protect('<code>' + code + '</code>'))
+	s = s.replace(/&lt;(@&amp;|#)(\d{17,20})&gt;/g, (_, kind, id) => {
+		const role = kind === '@&amp;'
+		const resource = (discordMentionResources[role ? 'roles' : 'channels'] || []).find(item => item.id === id)
+		const name = String(resource?.name || id).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+		return protect('<span class="discord-mention">' + (role ? '@' : '#') + name + '</span>')
+	})
 
 	const heading = line => line.replace(/^(#{1,3}) (.+)$/, (_, marks, content) => '<h' + marks.length + '>' + content + '</h' + marks.length + '>')
 		.replace(/^-# (.+)$/, '<small class="discord-subtext">$1</small>')

@@ -120,10 +120,13 @@ input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--brand); 
 	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
+	gap: 0;
 }
 .discord-container.no-border {
 	border-left: none !important;
+}
+.discord-container > :not(.discord-separator) + :not(.discord-separator) {
+	margin-top: 14px;
 }
 
 .discord-text {

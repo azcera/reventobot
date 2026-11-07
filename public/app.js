@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 		if (!session.csrf) throw new Error(session.error || 'Войдите через Discord в дашборде.')
 		dashboardCsrf = session.csrf
 		const resources = await fetch('/api/resources').then(response => response.json())
+		discordMentions.setResources(resources)
 		const list = document.getElementById('channelOptions')
 		for (const channel of resources.channels || []) if ([0, 5].includes(channel.type) && channel.canSend) list.appendChild(new Option('#' + channel.name, channel.id))
 

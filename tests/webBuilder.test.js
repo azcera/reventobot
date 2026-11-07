@@ -155,3 +155,11 @@ test('headings do not add a blank line; regular text and code retain line breaks
 	assert.equal(run("discordMarkdownToHtml('```\\nline 1\\nline 2```')"), '<pre><code>line 1\nline 2</code></pre>')
 	assert.equal(run("discordMarkdownToHtml('## Заголовок\\n\\nТекст')"), '<h2>Заголовок</h2><br>Текст')
 })
+
+test('separator preview preserves small/large spacing independently of the visible line', () => {
+	const { elements, run } = builder()
+	for (const spacing of ['small', 'large']) for (const divider of [true, false]) {
+		run(`items = [{ type: 'separator', spacing: '${spacing}', divider: ${divider} }]; updatePreview()`)
+		assert.equal(elements.discordPreview.children[0].className, 'discord-separator' + (divider ? '' : ' no-line') + ' spacing-' + spacing)
+	}
+})

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { Collection, MessageFlags, MessageFlagsBitField } = require('discord.js')
 const { buildWebContainer } = require('../src/services/containerService')
 const {
-	parseMessageLink, parseContainerMessage, messageRevision, registerContainerMessageRoutes
+	parseMessageLink, parseContainerMessage, messageRevision, buildEditPayload, registerContainerMessageRoutes
 } = require('../src/services/containerMessageService')
 
 const guildId = '111111111111111111'
@@ -111,6 +111,17 @@ test('unsupported layouts and properties reject the entire import', () => {
 	}
 })
 
+test('builder publication allows roles by default and keeps other mentions opt-in', () => {
+	const data = { ...draft, items: [{ type: 'text', value: '<@&444444444444444444> <@555555555555555555> @everyone @here' }] }
+	for (const allowMentions of [undefined, false, true]) {
+		const payload = buildEditPayload(data, allowMentions)
+		assert.equal(payload.components[0].toJSON().components[0].content, data.items[0].value)
+		assert.deepEqual(payload.allowedMentions, {
+			parse: allowMentions ? ['users', 'roles', 'everyone'] : ['roles'], repliedUser: false
+		})
+	}
+})
+
 test('load returns data and revision; save updates original and refreshes revision', async () => {
 	const api = routes()
 	const loaded = await api.request('/api/container-message', { link })
@@ -119,14 +130,14 @@ test('load returns data and revision; save updates original and refreshes revisi
 	assert.equal(loaded.body.source.canEdit, true)
 	const revision = loaded.body.source.revision
 	const saved = await api.request('/api/edit-container', {
-		...draft, items: [{ type: 'text', value: 'Изменено' }], link, revision
+		...draft, items: [{ type: 'text', value: 'Изменено <@&444444444444444444>' }], link, revision
 	})
 	assert.equal(saved.statusCode, 200)
 	assert.equal(api.edits, 1)
 	assert.equal(api.fetches, 2)
 	assert.notEqual(saved.body.source.revision, revision)
-	assert.deepEqual(api.editPayload.allowedMentions, { parse: [] })
-	assert.equal(api.current.components[0].components[0].content, 'Изменено')
+	assert.deepEqual(api.editPayload.allowedMentions, { parse: ['roles'], repliedUser: false })
+	assert.equal(api.current.components[0].components[0].content, 'Изменено <@&444444444444444444>')
 	assert.equal(api.editPayload.flags, MessageFlags.IsComponentsV2)
 })
 

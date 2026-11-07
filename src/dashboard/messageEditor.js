@@ -39,7 +39,7 @@ function applyFields(message, values) {
 	const current = snapshot(message)
 	if (!values || typeof values !== 'object' || Array.isArray(values)) throw problem(400, 'Некорректные поля сообщения.')
 	const payload = { components: message.components.map(component => structuredClone(component.toJSON ? component.toJSON() : component)),
-		allowedMentions: { parse: [], repliedUser: false } }
+		allowedMentions: { parse: ['roles'], repliedUser: false } }
 	const allowed = new Map(current.fields.map(field => [field.path, field]))
 	for (const [path, value] of Object.entries(values)) {
 		const field = allowed.get(path)

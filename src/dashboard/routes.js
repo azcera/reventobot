@@ -94,6 +94,7 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }) } 
 	})
 	app.get('/api/resources', async (req, res) => {
 		try {
+			await req.guild.roles.fetch()
 			const channels = await req.guild.channels.fetch()
 			res.json({ channels: [...channels.values()].filter(Boolean).map(channel => ({ id: channel.id, name: channel.name, type: channel.type,
 				canSend: Boolean(channel.permissionsFor(client.user)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])) })),

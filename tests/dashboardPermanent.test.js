@@ -21,13 +21,13 @@ test('imported permanent message fields persist and saving or resetting template
 	const restarted = createStore(); await restarted.init(f.pool)
 	assert.equal(restarted.bindings.recruit.link, f.message.url)
 	assert.equal(restarted.text(field.key), field.value)
-	response = await f.request('/api/templates', { body: { revision: config.revision, values: { [field.key]: '# Новая памятка\n**Важно**' } } })
+	response = await f.request('/api/templates', { body: { revision: config.revision, values: { [field.key]: '# Новая памятка\n**Важно** <@&444444444444444444>' } } })
 	config = await response.json()
 	assert.equal(response.status, 200); assert.deepEqual(config.syncResults.map(({ kind, ok }) => ({ kind, ok })), [{ kind: 'recruit', ok: true }])
-	assert.equal(f.message.components[0].components[0].content, '# Новая памятка\n**Важно**')
+	assert.equal(f.message.components[0].components[0].content, '# Новая памятка\n**Важно** <@&444444444444444444>')
 	assert.deepEqual(f.message.components[0].components.slice(1), original[0].components.slice(1))
 	assert.equal(f.message.attachments.size, 1)
-	assert.deepEqual(f.message.lastPayload.allowedMentions.parse, [])
+	assert.deepEqual(f.message.lastPayload.allowedMentions, { parse: ['roles'], repliedUser: false })
 	response = await f.request('/api/templates', { body: { revision: config.revision, values: { [field.key]: null } } })
 	assert.equal(response.status, 200)
 	assert.equal(f.message.components[0].components[0].content, field.default)
@@ -63,10 +63,11 @@ test('rules and invite sync reuse command builders, images and working buttons',
 		for (const other of Object.keys(bindings)) await store.save('bindings', { [other]: null }, store.revision, 'admin')
 		let config = await (await f.request('/api/permanent-message', { body: { kind, link: f.message.url, revision: store.revision } })).json()
 		const key = kind === 'rules' ? 'rules.heading.1' : 'invite.4'
-		const value = kind === 'rules' ? '## Новые правила' : 'Новая заявка'
+		const value = (kind === 'rules' ? '## Новые правила' : 'Новая заявка') + ' <@&444444444444444444>'
 		config = await (await f.request('/api/templates', { body: { revision: config.revision, values: { [key]: value } } })).json()
 		assert.deepEqual(config.syncResults.map(({ kind, ok }) => ({ kind, ok })), [{ kind, ok: true }])
 		assert.ok(JSON.stringify(f.message.components).includes(value))
+		assert.deepEqual(f.message.lastPayload.allowedMentions, { parse: ['roles'], repliedUser: false })
 		assert.equal(f.message.components[0].accent_color, null)
 		assert.equal(f.message.lastPayload.files, undefined)
 		if (kind === 'invite') {

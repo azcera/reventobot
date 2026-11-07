@@ -49,7 +49,7 @@ async function updateMessage(kind, binding, client, guild, actor) {
 		let payload
 		if (definitions[kind].command) {
 			const built = await require('../commands/admin/' + definitions[kind].command).buildPayload()
-			payload = { components: built.components.map(component => component.toJSON()), allowedMentions: { parse: [], repliedUser: false } }
+			payload = { components: built.components.map(component => component.toJSON()), allowedMentions: { parse: ['roles'], repliedUser: false } }
 			const resolveMedia = components => {
 				for (const component of components) {
 					for (const item of component.items || []) if (item.media?.url.startsWith('attachment://')) {
