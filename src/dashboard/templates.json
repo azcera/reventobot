@@ -587,6 +587,14 @@
     ],
     "maxLength": 500
   },
+  "capture.queue": {
+    "group": "Регистрация на капт",
+    "label": "Очередь желающих и подтверждённый состав",
+    "default": "### 👥 Желающие: {count} · Подтверждено: {approved}/{limit}\n-# Сортировка {mode} · Страница {page}/{pages} · ✅ — вписан в состав\n{players}",
+    "type": "text",
+    "variables": ["count", "approved", "limit", "mode", "page", "pages", "players"],
+    "maxLength": 500
+  },
   "capture.main": {
     "group": "Регистрация на капт",
     "label": "### 👥 Основной состав ({count}/{limit})",

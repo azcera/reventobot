@@ -9,6 +9,7 @@ const client = {
 		if (sql.includes('SET approved_users =')) {
 			row.approved_users = JSON.parse(params[0])
 			row.approval_page = params[1]
+			row.sort_mode = params[7]
 			;[
 				row.main_list,
 				row.reserve_list,
@@ -34,7 +35,7 @@ require.cache[dbPath] = {
 	id: dbPath,
 	filename: dbPath,
 	loaded: true,
-	exports: { connect: async () => client }
+	exports: { connect: async () => client, query: (...args) => client.query(...args) }
 }
 const manager = require('../src/features/capture/captureManager')
 const guild = { members: { cache: new Map() } }
@@ -221,7 +222,7 @@ test('clearing the last approval restores the original join order', async () => 
 	assert.deepEqual(row.reserve_list, ids.slice(3, 5))
 })
 
-test('more than 100 participants use pages in the same message', () => {
+test('more than 50 participants use pages in the same message', () => {
 	const players = Array.from({ length: 101 }, (_, i) => String(2000 + i))
 	const first = manager.buildCaptureMessage(
 		'now',
@@ -243,12 +244,124 @@ test('more than 100 participants use pages in the same message', () => {
 		[],
 		[],
 		[],
-		1
+		2
 	)
-	assert.equal(first.components.length, 6)
+	assert.equal(first.components.length, 4)
 	assert.equal(second.components.length, 3)
 	assert.equal(
 		second.components[2].toJSON().components[0].options[0].value,
 		players[100]
 	)
+})
+
+test('both orders rank the whole queue and keep role ties in join order', t => {
+	const previous = process.env.PRIORITY_ROLES
+	process.env.PRIORITY_ROLES = 'strong,regular'
+	t.after(() => {
+		if (previous === undefined) delete process.env.PRIORITY_ROLES
+		else process.env.PRIORITY_ROLES = previous
+	})
+	const rankedGuild = { members: { cache: new Map([
+		['early', { displayName: 'Early', roles: { cache: new Map([['regular', {}]]) } }],
+		['strong1', { displayName: 'Strong 1', roles: { cache: new Map([['strong', {}]]) } }],
+		['strong2', { displayName: 'Strong 2', roles: { cache: new Map([['strong', {}]]) } }]
+	]) } }
+	const build = mode => manager.buildCaptureMessage(
+		'now', ['early'], ['strong2', 'strong1'], [], 'test', 1, rankedGuild,
+		[{ joinedAt: 1 }], [{ joinedAt: 3 }, { joinedAt: 2 }], ['early'], 0, mode
+	)
+	const priority = build('priority')
+	const text = JSON.stringify(priority.components[0].toJSON())
+	assert.match(text, /1\. <@strong1> — запись №2/)
+	assert.match(text, /2\. <@strong2> — запись №3/)
+	assert.match(text, /3\. <@early> — запись №1 ✅/)
+	assert.match(text, /Сортировать по времени/)
+	assert.deepEqual(priority.components[2].toJSON().components[0].options.map(o => o.value),
+		['strong1', 'strong2', 'early'])
+	const time = build('time')
+	const timeText = JSON.stringify(time.components[0].toJSON())
+	assert.match(timeText, /1\. <@early> — приоритет №3 ✅/)
+	assert.match(timeText, /2\. <@strong1> — приоритет №1/)
+	assert.match(timeText, /3\. <@strong2> — приоритет №2/)
+	assert.match(timeText, /Сортировать по приоритету/)
+	assert.deepEqual(time.components[2].toJSON().components[0].options.map(o => o.value),
+		['early', 'strong1', 'strong2'])
+})
+
+test('sort mode persists through joins, approvals, time edits and reloads', async () => {
+	row = {
+		message_id: 'm', discord_timestamp: 'now', target: 'test', max_main: 20,
+		main_list: [ids[0]], reserve_list: [ids[1]], left_list: [],
+		main_list_meta: [{ joinedAt: 1 }], reserve_list_meta: [{ joinedAt: 2 }],
+		approved_users: [ids[0]], approval_page: 0
+	}
+	let payload
+	const interaction = {
+		member: admin, guild, message: { id: 'm' }, user: { id: 'new' },
+		customId: 'capt_sort_toggle', isStringSelectMenu: () => false, isButton: () => true,
+		deferUpdate: async () => {}, followUp: async value => assert.fail(value.content),
+		editReply: async value => { payload = value }
+	}
+	const before = structuredClone(row)
+	await manager.handleApproval(interaction)
+	assert.deepEqual(row, { ...before, sort_mode: 'time' })
+	assert.match(JSON.stringify(payload.components[0].toJSON()), /приоритет №1 ✅/)
+	interaction.customId = 'capt_join'
+	await manager.handleButton(interaction)
+	assert.equal(row.sort_mode, 'time')
+	assert.match(JSON.stringify(payload.components[0].toJSON()), /<@new> — приоритет №3/)
+	interaction.customId = payload.components[2].toJSON().components[0].custom_id
+	interaction.isStringSelectMenu = () => true
+	interaction.values = [ids[0], ids[1]]
+	await manager.handleApproval(interaction)
+	assert.equal(row.sort_mode, 'time')
+	assert.deepEqual(row.approved_users, [ids[0], ids[1]])
+	await manager.updateCollectionTime('m', 'channel', 'later', {
+		guilds: { cache: { first: () => guild } },
+		channels: { cache: new Map([['channel', { messages: { fetch: async () => ({
+			edit: async value => { payload = value }
+		}) } }]]) }
+	})
+	assert.match(JSON.stringify(payload.components[0].toJSON()), /по времени записи/)
+	assert.match(JSON.stringify(payload.components[0].toJSON()), /later/)
+	delete require.cache[require.resolve('../src/features/capture/captureManager')]
+	const reloaded = require('../src/features/capture/captureManager')
+	interaction.customId = 'capt_leave'
+	await reloaded.handleButton(interaction)
+	assert.equal(row.sort_mode, 'time')
+	assert.match(JSON.stringify(payload.components[0].toJSON()), /по времени записи/)
+	interaction.customId = 'capt_sort_toggle'
+	await reloaded.handleApproval(interaction)
+	assert.equal(row.sort_mode, 'priority')
+	assert.deepEqual(row.approved_users, [ids[0], ids[1]])
+	let reply
+	await manager.handleApproval({
+		customId: 'capt_sort_toggle',
+		member: { permissions: { has: () => false }, roles: { cache: new Map() } },
+		reply: async value => { reply = value }
+	})
+	assert.match(reply.content, /нет прав/)
+	assert.equal(row.sort_mode, 'priority')
+})
+
+test('approval cannot exceed the capture limit across menus', async () => {
+	row = {
+		message_id: 'm', discord_timestamp: 'now', max_main: 20,
+		main_list: ids.slice(0, 20), reserve_list: ids.slice(20), left_list: [],
+		main_list_meta: [], reserve_list_meta: [], approved_users: ids.slice(0, 20),
+		approval_page: 0, sort_mode: 'time'
+	}
+	const payload = manager.buildCaptureMessage('now', row.main_list, row.reserve_list,
+		[], 'test', 20, guild, [], [], row.approved_users, 0, 'time')
+	const before = structuredClone(row)
+	let reply
+	await manager.handleApproval({
+		member: admin, guild, message: { id: 'm' },
+		customId: payload.components[3].toJSON().components[0].custom_id,
+		values: [ids[29]], isStringSelectMenu: () => true,
+		deferUpdate: async () => {}, followUp: async value => { reply = value },
+		editReply: async () => assert.fail('must not update the message')
+	})
+	assert.match(reply.content, /не более 20/)
+	assert.deepEqual(row, before)
 })

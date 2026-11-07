@@ -49,7 +49,8 @@ module.exports = client => {
 			(interaction.isStringSelectMenu() &&
 				interaction.customId.startsWith('capt_approve_')) ||
 			(interaction.isButton() &&
-				interaction.customId.startsWith('capt_approval_page_'))
+				(interaction.customId.startsWith('capt_approval_page_') ||
+					interaction.customId === 'capt_sort_toggle'))
 		) {
 			return await captureManager.handleApproval(interaction)
 		}

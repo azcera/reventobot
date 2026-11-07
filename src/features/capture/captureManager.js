@@ -16,7 +16,7 @@ require('dotenv').config()
 
 const pool = require('../../services/database.js')
 
-const APPROVAL_PAGE_SIZE = 100
+const APPROVAL_PAGE_SIZE = 50
 
 function joinedPlayers(mainList, reserveList, mainMeta, reserveMeta) {
 	return [...mainList, ...reserveList]
@@ -59,11 +59,15 @@ function approvalGroups(
 	reserveList,
 	page,
 	mainMeta = [],
-	reserveMeta = []
+	reserveMeta = [],
+	guild,
+	sortMode = 'priority'
 ) {
-	const players = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
-		.map(player => player.userId)
-		.slice(page * APPROVAL_PAGE_SIZE, (page + 1) * APPROVAL_PAGE_SIZE)
+	const joined = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
+	const ordered = guild && sortMode !== 'time'
+		? sortByRolePriority(joined, guild)
+		: joined.map(player => player.userId)
+	const players = ordered.slice(page * APPROVAL_PAGE_SIZE, (page + 1) * APPROVAL_PAGE_SIZE)
 	const groups = []
 	for (let i = 0; i < players.length; i += 25)
 		groups.push(players.slice(i, i + 25))
@@ -131,7 +135,8 @@ function buildCaptureMessage(
 	mainListMeta = [],
 	reserveListMeta = [],
 	approvedUsers = [],
-	approvalPage = 0
+	approvalPage = 0,
+	sortMode = 'priority'
 ) {
 	const approved = new Set(approvedUsers)
 	approvalPage = Math.max(
@@ -154,51 +159,34 @@ function buildCaptureMessage(
 
 	const helpText = new TextDisplayBuilder().setContent(dashboard.text('capture.1'))
 
-	// Sort main list and reserve list by role priority (then join order)
-	const mainListWithMeta = (mainList || []).map((userId, index) => ({
-		userId,
-		joinedAt: mainListMeta[index]?.joinedAt ?? index
-	}))
-	const reserveListWithMeta = (reserveList || []).map((userId, index) => ({
-		userId,
-		joinedAt: reserveListMeta[index]?.joinedAt ?? index
-	}))
-
-	const sortedMainList = guild
-		? sortByRolePriority(mainListWithMeta, guild)
-		: mainList || []
-	const sortedReserveList = guild
-		? sortByRolePriority(reserveListWithMeta, guild)
-		: reserveList || []
-
-	const mainPlayersText =
-		sortedMainList.length > 0
-			? sortedMainList
-					.map(
-						(id, index) =>
-							`${index + 1}. <@${id}>${approved.has(id) ? ' ✅' : ''}`
-					)
-					.join('\n')
-			: 'Пусто'
-	const reservePlayersText =
-		sortedReserveList.length > 0
-			? sortedReserveList
-					.map(
-						(id, index) =>
-							`${index + 1}. <@${id}>${approved.has(id) ? ' ✅' : ''}`
-					)
-					.join('\n')
-			: 'Пусто'
+	const players = joinedPlayers(mainList, reserveList, mainListMeta, reserveListMeta)
+	const byTime = players.map(player => player.userId)
+	const byPriority = guild ? sortByRolePriority(players, guild) : byTime
+	const timeMode = sortMode === 'time'
+	const currentOrder = timeMode ? byTime : byPriority
+	const otherRanks = new Map(
+		(timeMode ? byPriority : byTime).map((id, index) => [id, index + 1])
+	)
+	const start = approvalPage * APPROVAL_PAGE_SIZE
+	const playersText = currentOrder.slice(start, start + APPROVAL_PAGE_SIZE)
+		.map((id, index) =>
+			`${start + index + 1}. <@${id}> — ${timeMode ? 'приоритет' : 'запись'} №${otherRanks.get(id)}${approved.has(id) ? ' ✅' : ''}`
+		).join('\n') || 'Пусто'
 	const leftPlayersText =
 		leftList.length > 0
 			? leftList.map((id, index) => `• <@${id}>`).join('\n')
 			: 'Пусто'
 
-	const mainTitle = new TextDisplayBuilder().setContent(
-		dashboard.text('capture.main', { count: sortedMainList.length, limit: maxMain, players: mainPlayersText })
-	)
-	const reserveTitle = new TextDisplayBuilder().setContent(
-		dashboard.text('capture.reserve', { count: sortedReserveList.length, players: reservePlayersText })
+	const queueTitle = new TextDisplayBuilder().setContent(
+		dashboard.text('capture.queue', {
+			count: players.length,
+			approved: approved.size,
+			limit: maxMain,
+			mode: timeMode ? 'по времени записи' : 'по роли и времени записи',
+			page: approvalPage + 1,
+			pages: Math.max(1, Math.ceil(players.length / APPROVAL_PAGE_SIZE)),
+			players: playersText
+		})
 	)
 	const leftTitle = new TextDisplayBuilder().setContent(
 		dashboard.text('capture.left', { count: leftList.length, players: leftPlayersText })
@@ -210,13 +198,13 @@ function buildCaptureMessage(
 
 	containerComponent
 		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(mainTitle)
-
-	if (reserveList.length > 0) {
-		containerComponent
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addTextDisplayComponents(reserveTitle)
-	}
+		.addTextDisplayComponents(queueTitle)
+		.addActionRowComponents(new ActionRowBuilder().addComponents(
+			new ButtonBuilder()
+				.setCustomId('capt_sort_toggle')
+				.setLabel(timeMode ? 'Сортировать по приоритету' : 'Сортировать по времени')
+				.setStyle(ButtonStyle.Secondary)
+		))
 
 	if (leftList.length > 0) {
 		containerComponent
@@ -260,7 +248,9 @@ function buildCaptureMessage(
 		reserveList,
 		approvalPage,
 		mainListMeta,
-		reserveListMeta
+		reserveListMeta,
+		guild,
+		sortMode
 	).map((group, index) => {
 		const start = approvalPage * APPROVAL_PAGE_SIZE + index * 25 + 1
 		const menu = new StringSelectMenuBuilder()
@@ -271,8 +261,8 @@ function buildCaptureMessage(
 			.setMinValues(0)
 			.setMaxValues(group.length)
 			.addOptions(
-				group.map(id => ({
-					label: (guild?.members.cache.get(id)?.displayName || id).slice(
+				group.map((id, index) => ({
+					label: `${start + index}. ${guild?.members.cache.get(id)?.displayName || id}`.slice(
 						0,
 						100
 					),
@@ -365,7 +355,8 @@ async function updateCollectionTime(
 		safeParse(captureData.main_list_meta, []),
 		safeParse(captureData.reserve_list_meta, []),
 		safeParse(captureData.approved_users, []),
-		captureData.approval_page || 0
+		captureData.approval_page || 0,
+		captureData.sort_mode
 	)
 
 	// Ищем канал
@@ -613,7 +604,8 @@ async function handleButton(interaction) {
 			mainListMeta,
 			reserveListMeta,
 			approvedUsers,
-			row.approval_page || 0
+			row.approval_page || 0,
+			row.sort_mode
 		)
 		await interaction.editReply(updatedMessageData)
 		await client.query('COMMIT')
@@ -643,7 +635,7 @@ async function handleApproval(interaction) {
 			!adminRoles.some(id => member.roles.cache.has(id)))
 	) {
 		return interaction.reply({
-			content: '❌ У вас нет прав для одобрения участников.',
+			content: '❌ У вас нет прав для управления набором.',
 			flags: MessageFlags.Ephemeral
 		})
 	}
@@ -677,6 +669,7 @@ async function handleApproval(interaction) {
 		let mainMeta = parse(row.main_list_meta)
 		let reserveMeta = parse(row.reserve_list_meta)
 		let approved = parse(row.approved_users)
+		let sortMode = row.sort_mode === 'time' ? 'time' : 'priority'
 		let page = Math.max(
 			0,
 			Math.min(
@@ -687,13 +680,17 @@ async function handleApproval(interaction) {
 				)
 			)
 		)
-		if (interaction.isStringSelectMenu()) {
+		if (interaction.customId === 'capt_sort_toggle') {
+			sortMode = sortMode === 'time' ? 'priority' : 'time'
+		} else if (interaction.isStringSelectMenu()) {
 			const group = approvalGroups(
 				main,
 				reserve,
 				page,
 				mainMeta,
-				reserveMeta
+				reserveMeta,
+				interaction.guild,
+				sortMode
 			).find(items => approvalId(items) === interaction.customId)
 			if (!group || interaction.values.some(id => !group.includes(id))) {
 				await client.query('ROLLBACK')
@@ -706,6 +703,13 @@ async function handleApproval(interaction) {
 				...approved.filter(id => !group.includes(id)),
 				...interaction.values
 			]
+			if (approved.length > (row.max_main || 20)) {
+				await client.query('ROLLBACK')
+				return interaction.followUp({
+					content: `❌ Можно одобрить не более ${row.max_main || 20} участников.`,
+					flags: MessageFlags.Ephemeral
+				})
+			}
 			const lists = redistributeApproved(
 				main,
 				reserve,
@@ -734,7 +738,7 @@ async function handleApproval(interaction) {
 			page = requestedPage
 		}
 		await client.query(
-			'UPDATE active_captures SET approved_users = $1, approval_page = $2, main_list = $3, reserve_list = $4, main_list_meta = $5, reserve_list_meta = $6 WHERE message_id = $7',
+			'UPDATE active_captures SET approved_users = $1, approval_page = $2, main_list = $3, reserve_list = $4, main_list_meta = $5, reserve_list_meta = $6, sort_mode = $8 WHERE message_id = $7',
 			[
 				JSON.stringify(approved),
 				page,
@@ -742,7 +746,8 @@ async function handleApproval(interaction) {
 				JSON.stringify(reserve),
 				JSON.stringify(mainMeta),
 				JSON.stringify(reserveMeta),
-				interaction.message.id
+				interaction.message.id,
+				sortMode
 			]
 		)
 		await interaction.editReply(
@@ -757,7 +762,8 @@ async function handleApproval(interaction) {
 				mainMeta,
 				reserveMeta,
 				approved,
-				page
+				page,
+				sortMode
 			)
 		)
 		await client.query('COMMIT')
