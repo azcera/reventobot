@@ -24,6 +24,7 @@ const settingDefinitions = {
 	PRIORITY_ROLES: { label: 'Приоритет ролей на капт (сверху вниз)', type: 'roles' },
 	DISCORD_NOTIFICATION_CHANNEL_IDS: { label: 'Каналы массовой Telegram-рассылки', type: 'channels', channelTypes: [0, 5] },
 	TELEGRAM_BROADCAST_ENABLED: { label: 'Доставка массовой Telegram-рассылки', type: 'boolean', default: true },
+	MAJESTIC_AUTO_NICKNAMES: { label: 'Автообновление ников Majestic каждые 5 минут', type: 'boolean', default: true },
 	DASHBOARD_ALLOW_MENTIONS: { label: 'Разрешить @everyone, @here и пользователей при ручной публикации (роли разрешены всегда)', type: 'boolean', default: false }
 }
 

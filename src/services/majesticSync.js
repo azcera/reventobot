@@ -46,14 +46,14 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		return structuredClone({ ...item.state, busy: item.busy, rankRoles,
 			configured: Boolean(readFamily || (env.MAJESTIC_SESSION_ID && env.MAJESTIC_SERVER && env.MAJESTIC_CHARACTER_ID)) })
 	}
-	async function snapshot(guild, decisions) {
+	async function snapshot(guild, decisions, { nicknamesOnly = false } = {}) {
 		const data = await family()
 		if (!data.total || data.items.length !== data.total) throw problem(502, 'Получен пустой или неполный состав Majestic. Изменения остановлены.')
 		await guild.roles.fetch()
 		const members = await guild.members.fetch({ time: 30000 })
 		const rows = buildPreview(data.items, [...members.values()].map(member => ({
 			id: member.id, nickname: member.nickname, bot: member.user.bot, roleIds: [...member.roles.cache.keys()]
-		})), { decisions, adminRoleIds: store.roleIds('ADMIN_ROLES') })
+		})), { decisions, adminRoleIds: store.roleIds('ADMIN_ROLES'), nicknamesOnly })
 		for (const row of rows) {
 			if (row.status !== 'change') continue
 			const member = members.get(row.discordId)
@@ -98,6 +98,45 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 	}
 	return {
 		async state(guild) { return view(await entry(guild.id)) },
+		async autoNicknames(guild) {
+			const item = await entry(guild.id)
+			if (item.busy || !store.getSetting('MAJESTIC_AUTO_NICKNAMES')) return null
+			const actor = { id: 'majestic-auto', name: 'Автообновление ников' }
+			return start(guild, actor, 'nicknames', async current => {
+				const report = await snapshot(guild, current.state.decisions, { nicknamesOnly: true })
+				const selected = report.rows.filter(row => row.status === 'change' && row.nickname)
+				current.state.run.total = selected.length
+				current.state.run.summary = report.summary
+				await save(guild.id, current)
+				for (const row of selected) {
+					if (!store.getSetting('MAJESTIC_AUTO_NICKNAMES')) current.state.run.stopRequested = true
+					if (current.state.run.stopRequested) break
+					const member = await guild.members.fetch({ user: row.discordId, force: true })
+					const result = { discordId: row.discordId, before: row.currentNickname, nickname: row.nickname, status: 'skipped' }
+					current.state.run.results.push(result)
+					if (member.nickname !== row.currentNickname || JSON.stringify([...member.roles.cache.keys()].sort()) !== JSON.stringify(row.currentRoleIds)) {
+						result.error = 'Ник или роли изменились после проверки.'
+					} else {
+						await store.audit(actor, 'majestic.nickname.request', row.discordId, { runId: current.state.run.id, ...result })
+						if (!store.getSetting('MAJESTIC_AUTO_NICKNAMES')) current.state.run.stopRequested = true
+						if (current.state.run.stopRequested) break
+						if (current.state.preview) current.state.preview.invalidated = true
+						result.status = 'applying'
+						await save(guild.id, current)
+						try {
+							await member.edit({ nick: row.nickname, reason: `Majestic nickname sync; run ${current.state.run.id}` })
+							result.status = 'applied'
+						} catch {
+							result.status = 'failed'
+							throw problem(502, 'Discord не подтвердил обновление ника. Следующая проверка прочитает актуальное состояние.')
+						}
+					}
+					current.state.run.completed++
+					await save(guild.id, current)
+					await store.audit(actor, 'majestic.nickname.result', row.discordId, { runId: current.state.run.id, ...result })
+				}
+			})
+		},
 		preview(guild, actor) {
 			return start(guild, actor, 'preview', async item => {
 				item.state.preview = await snapshot(guild, item.state.decisions)

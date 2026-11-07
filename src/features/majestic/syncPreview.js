@@ -23,7 +23,7 @@ function parseNickname(nickname) {
 	return { prefix: match[1] || '', static: match[3], suffix: match[4] || '' }
 }
 
-function buildPreview(characters, members, { decisions = {}, adminRoleIds = [] } = {}) {
+function buildPreview(characters, members, { decisions = {}, adminRoleIds = [], nicknamesOnly = false } = {}) {
 	const byStatic = new Map(characters.map(character => [String(character.id), character]))
 	const parsedMembers = members.filter(member => !member.bot).map(member => ({
 		...member, parsed: parseNickname(member.nickname), decision: decisions[member.id] || {}
@@ -53,8 +53,8 @@ function buildPreview(characters, members, { decisions = {}, adminRoleIds = [] }
 		const currentRoles = member.roleIds.filter(id => managedRoles.has(id))
 		let currentTiers = currentRoles.filter(id => tierRoles.has(id))
 		if (currentTiers.includes(member.decision.tierRoleId)) currentTiers = [member.decision.tierRoleId]
-		if (currentTiers.length > 1) return { ...row, status: 'conflict', reason: 'Несколько Tier-ролей: требуется ручной выбор.' }
-		if (!ignoredRanks.has(rank) && !Object.hasOwn(rankRoles, rank)) {
+		if (!nicknamesOnly && currentTiers.length > 1) return { ...row, status: 'conflict', reason: 'Несколько Tier-ролей: требуется ручной выбор.' }
+		if (!nicknamesOnly && !ignoredRanks.has(rank) && !Object.hasOwn(rankRoles, rank)) {
 			return { ...row, status: 'conflict', reason: 'Неизвестный игровой ранг.' }
 		}
 		const name = character.login.trim().split(/\s+/)[0]
@@ -63,6 +63,10 @@ function buildPreview(characters, members, { decisions = {}, adminRoleIds = [] }
 		row.nickname = nickname === member.nickname ? null : nickname
 		row.addRoles = []
 		row.removeRoles = []
+		if (nicknamesOnly) {
+			if (row.nickname) row.status = 'change'
+			return row
+		}
 		if (currentTiers.length || !ignoredRanks.has(rank)) {
 			const targetRoles = new Set([currentTiers[0] || rankRoles[rank]])
 			if (currentTiers.length && adminRanks.has(rank)) targetRoles.add(rankRoles[rank])

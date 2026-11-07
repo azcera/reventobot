@@ -29,7 +29,7 @@ function fixture() {
 		if (sql.startsWith('INSERT INTO majestic_sync_state')) saved = JSON.parse(params[1])
 		return { rows: [] }
 	} }
-	const store = { roleIds: () => [], audit: async (...args) => { audits.push(args) } }
+	const store = { roleIds: () => [], getSetting: () => true, audit: async (...args) => { audits.push(args) } }
 	const options = { pool, store, env: {}, now: () => clock, readFamily: async () => ({ total: family.length, items: family }) }
 	const sync = createMajesticSync(options)
 	async function preview() { await sync.preview(guild, actor); await sync.wait(guild); return (await sync.state(guild)).preview }
@@ -126,6 +126,7 @@ test('concurrent runs are rejected and stop prevents the next Discord mutation',
 	await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] })
 	await started
 	await assert.rejects(f.sync.preview(f.guild, f.actor), /уже выполняется/)
+	assert.equal(await f.sync.autoNicknames(f.guild), null)
 	await f.sync.stop(f.guild, f.actor); release(); await f.sync.wait(f.guild)
 	assert.equal(f.edits.length, 0)
 	assert.equal((await f.sync.state(f.guild)).run.status, 'stopped')
@@ -156,4 +157,82 @@ test('preview and existing role handler select the same final admin prefix', () 
 	assert.equal(row.nickname, '[𝐃𝐞𝐩] Maya | 1 / afk')
 	assert.equal(adminPrefix([rankRoles.Dep], admins), '[𝐃𝐞𝐩] ')
 	assert.equal(adminPrefix([rankRoles.High, rankRoles.Dep], admins), '[𝐃𝐞𝐩] ')
+})
+
+test('automatic nickname sync preserves prefix, suffix and all roles even when game rank differs', async () => {
+	const f = fixture()
+	f.member.nickname = '[𝐃𝐞𝐩] Old | 231542 / afk'
+	f.member.roles.cache.set(rankRoles.Dep, {}).set(rankRoles['Tier 1'], {})
+	f.setFamily([{ id: 231542, login: 'Maya Well', rankName: 'High', rankId: 1 }])
+	const beforeRoles = [...f.member.roles.cache.keys()]
+	await f.preview()
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits[0].nick, '[𝐃𝐞𝐩] Maya | 231542 / afk')
+	assert.equal(Object.hasOwn(f.edits[0], 'roles'), false)
+	assert.deepEqual([...f.member.roles.cache.keys()], beforeRoles)
+	const state = await f.sync.state(f.guild)
+	assert.equal(state.run.kind, 'nicknames')
+	assert.equal(state.run.results[0].status, 'applied')
+	assert.equal(state.preview.invalidated, true)
+	assert.ok(f.audits.some(entry => entry[1] === 'majestic.nickname.result'))
+})
+
+test('automatic sync does nothing for unchanged nicknames and does not invalidate a role-only preview', async () => {
+	const f = fixture(); f.member.nickname = 'Maya | 231542'
+	await f.preview()
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 0)
+	assert.equal((await f.sync.state(f.guild)).preview.invalidated, undefined)
+})
+
+test('automatic nickname sync skips duplicate statics, excluded users and absent characters', async () => {
+	const f = fixture()
+	f.members.set('other', { ...f.member, id: 'other' })
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 0)
+	assert.equal((await f.sync.state(f.guild)).run.summary.conflict, 2)
+	f.members.delete('other')
+	await f.sync.resolve(f.guild, f.actor, { discordId: f.member.id, excluded: true })
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 0)
+	assert.equal((await f.sync.state(f.guild)).run.summary.excluded, 1)
+	await f.sync.resolve(f.guild, f.actor, { discordId: f.member.id, reset: true })
+	f.setFamily([{ id: 9, login: 'Other Person', rankName: 'Main', rankId: 1 }])
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 0)
+})
+
+test('automatic nickname sync is independent of rank-role conflicts and requires only nickname permissions', async () => {
+	const f = fixture()
+	f.member.roles.cache.set(rankRoles['Tier 1'], {}).set(rankRoles['Tier 2'], {})
+	f.setFamily([{ id: 231542, login: 'Maya Well', rankName: 'Unknown Rank', rankId: 1 }])
+	const { PermissionFlagsBits } = require('discord.js')
+	f.guild.members.me.permissions.has = permission => permission === PermissionFlagsBits.ManageNicknames
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits[0].nick, 'Maya | 231542 / afk')
+	assert.equal(Object.hasOwn(f.edits[0], 'roles'), false)
+})
+
+test('disabled auto sync and incomplete family responses do not edit Discord', async () => {
+	const f = fixture()
+	f.options.store.getSetting = () => false
+	assert.equal(await f.sync.autoNicknames(f.guild), null)
+	assert.equal(f.edits.length, 0)
+	f.options.store.getSetting = () => true
+	f.setFamily([])
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 0)
+	assert.equal((await f.sync.state(f.guild)).run.status, 'failed')
+})
+
+test('automatic sync rechecks nickname and roles immediately before editing', async () => {
+	const f = fixture()
+	const fetch = f.guild.members.fetch
+	f.guild.members.fetch = async options => {
+		if (options?.user) f.member.nickname = 'Manual | 231542'
+		return fetch(options)
+	}
+	await f.sync.autoNicknames(f.guild); await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 0)
+	assert.equal((await f.sync.state(f.guild)).run.results[0].status, 'skipped')
 })

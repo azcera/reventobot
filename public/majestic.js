@@ -15,6 +15,7 @@ async function loadMajestic() {
 	majesticState = data
 	const signature = JSON.stringify(data)
 	if (signature !== majesticSignature) { majesticSignature = signature; renderMajestic() }
+	else renderMajesticControls()
 	if (data.busy && location.hash === '#majestic') majesticTimer = setTimeout(() => {
 		if (!majesticPending) loadMajestic().catch(error => notice(error.message, true))
 	}, 2000)
@@ -39,15 +40,34 @@ async function majesticAction(operation, body = {}) {
 	}
 }
 
+function majesticPreviewIssue() {
+	const report = majesticState?.preview
+	if (!report) return 'Нажми «Получить предпросмотр» или «Обновить данные», чтобы загрузить участников.'
+	if (report.invalidated) return 'Предпросмотр использован или привязки изменены. Нажми «Обновить данные» для нового выбора.'
+	if (Date.now() - report.generatedAt > 15 * 60 * 1000) return 'Предпросмотру больше 15 минут. Нажми «Обновить данные».'
+	if (!report.rows.some(row => row.status === 'change')) return 'Нет доступных изменений. Проверь конфликты и строки «Нет доступа».'
+	return ''
+}
+
 function renderMajesticControls() {
 	const locked = majesticPending || majesticState?.busy
+	const issue = majesticPreviewIssue()
+	for (const id of majesticSelected) {
+		if (issue || !majesticState.preview.rows.some(row => row.discordId === id && row.status === 'change')) majesticSelected.delete(id)
+	}
 	$('majesticPreview').disabled = Boolean(locked)
 	$('majesticRefresh').disabled = majesticPending
+	$('majesticRefresh').textContent = majesticState?.busy ? 'Обновить статус' : 'Обновить данные'
 	$('majesticStop').disabled = Boolean(majesticPending || !majesticState?.busy || majesticState?.run?.stopRequested)
-	$('majesticSelect').disabled = Boolean(locked || !majesticState?.preview || majesticState.preview.invalidated)
-	$('majesticApply').disabled = Boolean(locked || !majesticSelected.size || majesticState?.preview?.invalidated)
+	$('majesticSelect').disabled = Boolean(locked || issue)
+	$('majesticApply').disabled = Boolean(locked || issue || !majesticSelected.size)
 	$('majesticApply').textContent = `Применить выбранные (${majesticSelected.size})`
-	for (const button of $('majesticRows').querySelectorAll('button, input, select')) button.disabled = Boolean(locked)
+	$('majesticSelectionHint').textContent = locked ? 'Дождись завершения операции. Статус обновляется автоматически.' :
+		issue || 'Отметь участников флажками или нажми «Выбрать все изменения».'
+	for (const control of $('majesticRows').querySelectorAll('button, input, select')) {
+		control.disabled = Boolean(locked || (control.type === 'checkbox' && issue))
+		if (control.type === 'checkbox' && issue) control.checked = false
+	}
 }
 
 function renderMajestic() {
@@ -58,7 +78,8 @@ function renderMajestic() {
 	status.replaceChildren()
 	if (!data.configured) status.append(node('p', 'Задай MAJESTIC_SESSION_ID, MAJESTIC_SERVER и MAJESTIC_CHARACTER_ID в окружении бота или .env.majestic.local.', 'error'))
 	if (data.run) {
-		status.append(node('p', `${data.run.kind === 'apply' ? 'Применение' : 'Предпросмотр'}: ${majesticLabels[data.run.status] || data.run.status} · ${data.run.completed}/${data.run.total}`))
+		const kind = { apply: 'Применение', preview: 'Предпросмотр', nicknames: 'Автообновление ников' }[data.run.kind] || data.run.kind
+		status.append(node('p', `${kind}: ${majesticLabels[data.run.status] || data.run.status} · ${data.run.completed}/${data.run.total}`))
 		if (data.run.stopRequested) status.append(node('p', 'Запрошена остановка. Текущий запрос Discord может завершиться.'))
 		if (data.run.error) status.append(node('p', data.run.error, 'error'))
 	}
@@ -75,10 +96,11 @@ function renderMajestic() {
 		if (filter === 'issues' ? !['change', 'conflict', 'blocked'].includes(row.status) : filter !== 'all' && row.status !== filter) continue
 		const card = node('article', null, 'card majestic-row')
 		const heading = node('div', null, 'majestic-heading')
-		if (row.status === 'change' && !report.invalidated) {
+		if (row.status === 'change') {
 			const label = node('label', null, 'majestic-choice')
 			const checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.checked = majesticSelected.has(row.discordId)
 			checkbox.addEventListener('change', () => {
+				if (majesticPending || majesticState?.busy || majesticPreviewIssue()) { renderMajesticControls(); return }
 				if (checkbox.checked) majesticSelected.add(row.discordId); else majesticSelected.delete(row.discordId)
 				renderMajesticControls()
 			})
@@ -133,15 +155,25 @@ function renderMajestic() {
 
 function initMajestic() {
 	$('majesticPreview').addEventListener('click', () => majesticAction('preview'))
-	$('majesticRefresh').addEventListener('click', () => loadMajestic().catch(error => notice(error.message, true)))
+	$('majesticRefresh').addEventListener('click', async () => {
+		if (majesticPending) return
+		if (!majesticState?.busy) return majesticAction('preview')
+		try { await loadMajestic(); notice('Статус операции обновлён.') }
+		catch (error) { notice(error.message, true) }
+	})
 	$('majesticStop').addEventListener('click', () => majesticAction('stop'))
 	$('majesticFilter').addEventListener('change', renderMajestic)
 	$('majesticSelect').addEventListener('click', () => {
+		if (majesticPending || majesticState?.busy || majesticPreviewIssue()) return
 		const rows = majesticState?.preview?.rows.filter(row => row.status === 'change') || []
 		const allSelected = rows.every(row => majesticSelected.has(row.discordId))
 		majesticSelected.clear()
 		if (!allSelected) for (const row of rows) majesticSelected.add(row.discordId)
 		renderMajestic()
 	})
-	$('majesticApply').addEventListener('click', () => majesticAction('apply', { previewId: majesticState.preview.id, discordIds: [...majesticSelected] }))
+	$('majesticApply').addEventListener('click', () => {
+		const issue = majesticPreviewIssue()
+		if (issue || !majesticSelected.size) return notice(issue || 'Выбери участников для применения.', true)
+		return majesticAction('apply', { previewId: majesticState.preview.id, discordIds: [...majesticSelected] })
+	})
 }

@@ -52,9 +52,10 @@
 			<section id="history" class="view" hidden><p class="section-intro">Последние 100 действий администраторов. Запрос на публикацию записывается до обращения к Discord, успешное выполнение — отдельной строкой.</p><button id="refreshHistory" class="quiet">Обновить историю</button><div id="historyRows" class="card history"></div></section>
 			<section id="majestic" class="view" hidden>
 				<p class="section-intro">Сверь состав семьи и выбери участников для обновления. Tier 1/2/3 сохраняются. Отсутствие в семье не снимает роли.</p>
-				<div class="toolbar"><button id="majesticPreview" class="primary">Получить предпросмотр</button><button id="majesticRefresh" class="quiet">Обновить статус</button><button id="majesticStop" class="quiet" disabled>Остановить</button></div>
+				<div class="toolbar"><button id="majesticPreview" class="primary">Получить предпросмотр</button><button id="majesticRefresh" class="quiet">Обновить данные</button><button id="majesticStop" class="quiet" disabled>Остановить</button></div>
 				<div id="majesticStatus" class="card" role="status" aria-live="polite"></div>
 				<div class="toolbar"><label>Показать<select id="majesticFilter"><option value="issues">Изменения и конфликты</option><option value="all">Всех</option><option value="conflict">Конфликты</option><option value="skipped">Пропущенных</option><option value="excluded">Исключённых</option></select></label><button id="majesticSelect" class="quiet">Выбрать все изменения</button><button id="majesticApply" class="primary" disabled>Применить выбранные</button></div>
+				<p id="majesticSelectionHint" class="muted" role="status" aria-live="polite"></p>
 				<p class="muted">Привязку по static можно подтвердить или исправить в карточке участника. После решения конфликтов обнови предпросмотр. При остановке уже выполненные изменения сохраняются.</p>
 				<div id="majesticRows" class="majestic-rows"></div>
 				<div id="majesticResults" class="card"></div>

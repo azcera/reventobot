@@ -43,7 +43,7 @@ function browser() {
 	}
 	$('majesticFilter').value = 'issues'
 	const state = { busy: false, configured: true, decisions: {}, rankRoles: {}, run: null,
-		preview: { id: 'preview', generatedAt: 1, familyTotal: 1, summary: { change: 1, conflict: 1 }, rows: [
+		preview: { id: 'preview', generatedAt: Date.now(), familyTotal: 1, summary: { change: 1, conflict: 1 }, rows: [
 			{ discordId: 'user', currentNickname: '<script> | 1', status: 'change', static: '1', nickname: 'Maya | 1', addRoles: ['main'], removeRoles: [], currentRoleIds: [] },
 			{ discordId: 'conflict', currentNickname: 'Other | 2', status: 'conflict', reason: 'Конфликт', currentRoleIds: [] }
 		] } }
@@ -81,4 +81,42 @@ test('dashboard blocks applying invalidated previews and enables stopping active
 	assert.equal(b.$('majesticStop').disabled, false)
 	assert.equal(b.$('majesticPreview').disabled, true)
 	assert.equal(b.$('majesticApply').disabled, true)
+})
+
+test('stale preview keeps its checkboxes visible and explains how to renew selection', async () => {
+	const b = browser(); await b.context.loadMajestic()
+	const checkbox = b.$('majesticRows').querySelectorAll('input').find(input => input.type === 'checkbox')
+	checkbox.checked = true; checkbox.handlers.change()
+	b.state.preview.invalidated = true
+	await b.context.loadMajestic()
+	const stale = b.$('majesticRows').querySelectorAll('input').find(input => input.type === 'checkbox')
+	assert.ok(stale)
+	assert.equal(stale.disabled, true)
+	assert.match(b.$('majesticSelectionHint').textContent, /Обновить данные/)
+	assert.equal(b.$('majesticApply').disabled, true)
+})
+
+test('refresh fetches a new preview when idle and only reads progress while a run is active', async () => {
+	const b = browser(); await b.context.loadMajestic()
+	await b.$('majesticRefresh').handlers.click()
+	assert.ok(b.calls.some(call => call.operation === 'majestic/preview'))
+	b.calls.length = 0
+	b.state.busy = true; b.state.run = { kind: 'preview', status: 'running', completed: 0, total: 0 }
+	vm.runInContext("location.hash = '#overview'", b.context)
+	await b.context.loadMajestic()
+	await b.$('majesticRefresh').handlers.click()
+	assert.ok(b.calls.every(call => call.operation === 'majestic'))
+})
+
+test('status refresh preserves a valid selection and expiration blocks it without hiding it', async () => {
+	const b = browser(); await b.context.loadMajestic()
+	const checkbox = b.$('majesticRows').querySelectorAll('input').find(input => input.type === 'checkbox')
+	checkbox.checked = true; checkbox.handlers.change()
+	await b.context.loadMajestic()
+	assert.equal(b.$('majesticApply').disabled, false)
+	b.state.preview.generatedAt = Date.now() - 16 * 60 * 1000
+	await b.context.loadMajestic()
+	assert.equal(b.$('majesticSelect').disabled, true)
+	assert.equal(b.$('majesticApply').disabled, true)
+	assert.equal(b.$('majesticRows').querySelectorAll('input').find(input => input.type === 'checkbox').disabled, true)
 })

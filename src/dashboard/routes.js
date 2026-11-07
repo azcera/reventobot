@@ -86,7 +86,7 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }), m
 		} catch (error) { respondError(res, error) }
 	})
 	app.get('/api/session', (req, res) => res.json({ user: req.dashboardUser, csrf: req.csrf, guild: { id: req.guild.id, name: req.guild.name } }))
-	const sync = majestic || createMajesticSync({ pool, store })
+	const sync = client.majesticSync = majestic || client.majesticSync || createMajesticSync({ pool, store })
 	app.get('/api/majestic', async (req, res) => {
 		try { res.json(await sync.state(req.guild)) } catch { res.status(503).json({ error: 'Не удалось загрузить состояние Majestic из базы.' }) }
 	})
