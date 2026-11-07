@@ -1,5 +1,12 @@
 const catalog = require('./templates.json')
 
+function templateDefinition(key) {
+	if (Object.hasOwn(catalog, key)) return catalog[key]
+	const match = /^rules\.(?:heading\.([1-9]\d*)|rule\.([1-9]\d*)\.([1-9]\d*))$/.exec(key)
+	if (!match) return null
+	return { group: 'Правила', label: match[1] ? 'Раздел ' + match[1] : 'Правило ' + match[2] + '-' + match[3], type: 'text', maxLength: 4000, variables: [] }
+}
+
 const settingDefinitions = {
 	ADMIN_PANEL_CHANNEL_ID: { label: 'Канал админ-панели', type: 'channel', channelTypes: [0] },
 	INVITE_CATEGORY_ID: { label: 'Категория заявок', type: 'channel', channelTypes: [4] },
@@ -50,7 +57,16 @@ function createStore() {
 				Object.hasOwn(variables, name) ? String(variables[name]) : match)
 		},
 		snapshot() {
-			return { revision, bindings: this.bindings, templates: Object.entries(catalog).map(([key, value]) => ({
+			const fields = { ...catalog }
+			for (const key of Object.keys(state.templates)) if (templateDefinition(key)) fields[key] = templateDefinition(key)
+			return { revision, bindings: this.bindings, templates: Object.entries(fields).sort(([a], [b]) => {
+				if (a.startsWith('rules.') !== b.startsWith('rules.')) return a.startsWith('rules.') ? -1 : 1
+				if (a === 'rules.1' || b === 'rules.1') return a === b ? 0 : a === 'rules.1' ? -1 : 1
+				const order = key => { const parts = key.split('.'); return [Number(parts[2]), parts[1] === 'heading' ? 0 : Number(parts[3])] }
+				if (!/^rules\.(heading|rule)\./.test(a) || !/^rules\.(heading|rule)\./.test(b)) return 0
+				const x = order(a), y = order(b)
+				return x[0] - y[0] || x[1] - y[1]
+			}).map(([key, value]) => ({
 				key, ...value, value: state.templates[key] ?? value.default
 			})), settings: Object.entries(settingDefinitions).map(([key, value]) => ({ key, ...value, value: getSetting(key) })) }
 		},
@@ -96,7 +112,7 @@ function createStore() {
 				}
 				const changes = {}
 				for (const key of Object.keys(values)) {
-					const definition = section === 'templates' ? catalog[key] : settingDefinitions[key]
+					const definition = section === 'templates' ? templateDefinition(key) : settingDefinitions[key]
 					const fallback = section === 'settings' ? process.env[key] ?? definition?.default ?? '' : definition?.default
 					const before = current.value[section]?.[key] ?? fallback
 					const after = next[section]?.[key] ?? fallback
@@ -128,4 +144,4 @@ function createStore() {
 }
 
 const store = createStore()
-module.exports = { store, createStore, catalog, settingDefinitions }
+module.exports = { store, createStore, catalog, settingDefinitions, templateDefinition }

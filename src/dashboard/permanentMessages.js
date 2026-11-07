@@ -1,5 +1,5 @@
 const { MessageFlags } = require('discord.js')
-const { store, catalog } = require('./store')
+const { store, templateDefinition } = require('./store')
 const { problem } = require('./auth')
 const { parseMessageLink } = require('../services/containerMessageService')
 const { snapshot, applyFields } = require('./messageEditor')
@@ -78,7 +78,7 @@ async function updateMessage(kind, binding, client, guild, actor) {
 async function syncMessages(keys, client, guild, selectedKind, actor) {
 	const results = []
 	for (const [kind, binding] of Object.entries(store.bindings)) {
-		if (!definitions[kind] || (selectedKind ? kind !== selectedKind : !keys.some(key => catalog[key]?.group === definitions[kind].group))) continue
+		if (!definitions[kind] || (selectedKind ? kind !== selectedKind : !keys.some(key => templateDefinition(key)?.group === definitions[kind].group))) continue
 		try { const logResult = await updateMessage(kind, binding, client, guild, actor); results.push({ kind, ok: true, ...logResult }) }
 		catch (error) { results.push({ kind, ok: false, error: error.status ? error.message : 'Discord недоступен или у бота нет прав на сообщение. Повторите обновление.' }) }
 	}

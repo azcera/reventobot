@@ -89,3 +89,15 @@
 
 .discord-text blockquote { margin:4px 0; padding:2px 12px; border-left:4px solid #949ba4; }
 .discord-text ul { margin:4px 0; padding-left:24px; }
+.discord-text .discord-subtext { display:block; color:#949ba4; font-size:12px; }
+.discord-text .discord-spoiler { background:#1e1f22; color:transparent; border-radius:3px; cursor:pointer; }
+.discord-text .discord-spoiler:not(.revealed) * { visibility:hidden; }
+.discord-text .discord-spoiler.revealed { background:#4e5058; color:inherit; }
+.discord-text .discord-spoiler:focus-visible { outline:2px solid #5865f2; }
+.discord-text .code-string { color:#e6db74; }
+.discord-text .code-comment { color:#949ba4; }
+.discord-text .code-number { color:#ae81ff; }
+.discord-text .code-property { color:#66d9ef; }
+.discord-text .code-keyword { color:#f92672; }
+.discord-text .code-addition { color:#a6e22e; }
+.discord-text .code-deletion { color:#f92672; }

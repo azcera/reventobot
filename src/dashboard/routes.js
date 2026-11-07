@@ -1,6 +1,6 @@
 const { PermissionsBitField } = require('discord.js')
 const { createAuth, problem } = require('./auth')
-const { store, catalog, settingDefinitions } = require('./store')
+const { store, catalog, settingDefinitions, templateDefinition } = require('./store')
 const { parseMessageLink, messageRevision } = require('../services/containerMessageService')
 const { snapshot, applyFields, isHttpsUrl } = require('./messageEditor')
 const locks = require('../services/messageLocks')
@@ -12,7 +12,7 @@ const panelKey = require('./panelKey')
 function validateTemplates(values) {
 	if (!values || typeof values !== 'object' || Array.isArray(values) || !Object.keys(values).length) throw problem(400, 'Выберите шаблон.')
 	for (const [key, value] of Object.entries(values)) {
-		const field = Object.hasOwn(catalog, key) ? catalog[key] : null
+		const field = templateDefinition(key)
 		if (!field) throw problem(400, 'Неизвестный шаблон.')
 		if (value === null) continue
 		if (field.type === 'color') {
@@ -24,9 +24,20 @@ function validateTemplates(values) {
 		const variables = [...value.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g)].map(match => match[1])
 		if (!key.startsWith('permanent.') && (variables.some(name => !field.variables.includes(name)) || field.variables.some(name => !variables.includes(name)))) throw problem(400, 'Сохраните все переменные шаблона без изменения их названий.')
 	}
+	const fields = new Map(store.snapshot().templates.map(field => [field.key, field]))
+	for (const [key, value] of Object.entries(values)) {
+		if (value === null && !Object.hasOwn(catalog, key)) fields.delete(key)
+		else fields.set(key, { ...templateDefinition(key), key, value: value ?? catalog[key].default })
+	}
+	const rules = [...fields.values()].filter(field => /^rules\.(heading|rule)\./.test(field.key))
+	if (rules.length > 18) throw problem(400, 'В одном сообщении правил можно разместить не более 18 заголовков и пунктов суммарно.')
+	for (const field of rules) {
+		const match = /^rules\.rule\.(\d+)\./.exec(field.key)
+		if (match && !fields.has('rules.heading.' + match[1])) throw problem(400, 'Сначала добавьте раздел для нового правила.')
+	}
 	for (const group of ['Правила', 'Приглашение', 'Навигация', 'Админ-панель']) {
-		const length = Object.entries(catalog).filter(([, field]) => field.group === group && field.type === 'text')
-			.reduce((sum, [key, field]) => sum + (Object.hasOwn(values, key) ? values[key] ?? field.default : store.text(key)).length, 0)
+		const length = [...fields.values()].filter(field => field.group === group && field.type === 'text')
+			.reduce((sum, field) => sum + field.value.length, 0)
 		const limit = group === 'Приглашение' ? 2700 : 3800
 		if (length > limit) throw problem(400, `Слишком много текста в разделе «${group}». Оставьте не более ${limit} символов.`)
 	}

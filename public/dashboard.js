@@ -196,6 +196,7 @@ function fieldsForm(root, fields, values, onInput) {
 		if (input.tagName === 'INPUT') input.type = field.type === 'url' && !input.value.startsWith('attachment://') ? 'url' : 'text'
 		input.addEventListener('input', () => { values[key] = input.value; onInput() })
 		label.append(input)
+		label.dataset.key = key
 		if (field.variables?.length) label.append(node('span', 'Сохраняй переменные: ' + field.variables.map(name => '{' + name + '}').join(', '), 'hint'))
 		root.append(label)
 	}
@@ -214,6 +215,32 @@ function renderTemplates() {
 		preview($('templatePreview'), fields, values, true)
 	}
 	fieldsForm($('templateFields'), fields, values, update)
+	if ($('templateGroup').value === 'Правила') {
+		const add = (section) => {
+			const keys = groupFields().map(field => field.key)
+			const index = section == null ? Math.max(0, ...keys.map(key => Number(/^rules\.heading\.(\d+)$/.exec(key)?.[1] || 0))) + 1
+				: Math.max(0, ...keys.map(key => Number(new RegExp('^rules\\.rule\\.' + section + '\\.(\\d+)$').exec(key)?.[1] || 0))) + 1
+			const key = section == null ? 'rules.heading.' + index : 'rules.rule.' + section + '.' + index
+			const value = section == null ? '## Новый раздел' : '**Правило — ' + section + '-' + index + '**\nНовое правило'
+			const field = { key, group: 'Правила', label: section == null ? 'Раздел ' + index : 'Правило ' + section + '-' + index, type: 'text', maxLength: 4000, value: '', variables: [] }
+			const position = section == null ? config.templates.findLastIndex(field => field.group === 'Правила') + 1
+				: config.templates.findLastIndex(field => field.key === 'rules.heading.' + section || field.key.startsWith('rules.rule.' + section + '.')) + 1
+			config.templates.splice(position, 0, field)
+			values[key] = value
+			renderTemplates()
+			$('templateFields').querySelector('[data-key="' + key + '"] textarea')?.focus()
+		}
+		for (const field of fields) {
+			const match = /^rules\.heading\.(\d+)$/.exec(field.key)
+			if (!match) continue
+			const button = node('button', '+ Добавить правило в раздел ' + match[1], 'quiet'); button.type = 'button'
+			button.addEventListener('click', () => add(Number(match[1])))
+			$('templateFields').querySelector('[data-key="' + field.key + '"]').append(button)
+		}
+		const button = node('button', '+ Добавить раздел', 'quiet'); button.type = 'button'
+		button.addEventListener('click', () => add())
+		$('templateFields').append(button)
+	}
 	update()
 }
 function previewApplication(root, values) {
