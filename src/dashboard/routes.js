@@ -6,6 +6,7 @@ const { snapshot, applyFields, isHttpsUrl } = require('./messageEditor')
 const locks = require('../services/messageLocks')
 const permanent = require('./permanentMessages')
 const { linesOf, logMessageChange, diffLines } = require('./changeLog')
+const { createMajesticSync } = require('../services/majesticSync')
 
 const panelKey = require('./panelKey')
 
@@ -67,7 +68,7 @@ async function validateSettings(values, guild) {
 	}
 }
 
-function registerDashboard(app, client, pool, { auth = createAuth({ client }) } = {}) {
+function registerDashboard(app, client, pool, { auth = createAuth({ client }), majestic } = {}) {
 	auth.register(app)
 	app.use('/api', auth.middleware)
 	app.use('/api', async (req, res, next) => {
@@ -85,6 +86,14 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }) } 
 		} catch (error) { respondError(res, error) }
 	})
 	app.get('/api/session', (req, res) => res.json({ user: req.dashboardUser, csrf: req.csrf, guild: { id: req.guild.id, name: req.guild.name } }))
+	const sync = majestic || createMajesticSync({ pool, store })
+	app.get('/api/majestic', async (req, res) => {
+		try { res.json(await sync.state(req.guild)) } catch { res.status(503).json({ error: 'Не удалось загрузить состояние Majestic из базы.' }) }
+	})
+	for (const operation of ['preview', 'resolve', 'apply', 'stop']) app.post('/api/majestic/' + operation, async (req, res) => {
+		try { res.json(await sync[operation](req.guild, req.dashboardUser, req.body)) }
+		catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : 'Операция Majestic недоступна. Проверьте базу и подключение Discord.' }) }
+	})
 	app.post('/api/logout', auth.logout)
 	app.get('/api/overview', async (req, res) => {
 		try {
@@ -161,7 +170,8 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }) } 
 		const message = await channel.messages.fetch({ message: ids.messageId, force: true, cache: false })
 		if (message.author.id !== client.user.id || message.webhookId) throw problem(403, 'Редактировать можно только сообщения этого бота.')
 		const dynamic = await pool.query('SELECT 1 FROM active_captures WHERE message_id = $1 LIMIT 1', [message.id])
-		if (dynamic.rows.length || channel.id === store.getSetting('ARCHIVE_SETTINGS_CHANNEL')) throw problem(409, 'Этот список обновляет бот. Измените его оформление во вкладке «Шаблоны».')
+		const war = await pool.query('SELECT 1 FROM family_wars WHERE announcement_id = $1 OR registration_id = $1 LIMIT 1', [message.id])
+		if (dynamic.rows.length || war.rows.length || channel.id === store.getSetting('ARCHIVE_SETTINGS_CHANNEL')) throw problem(409, 'Этот список обновляет бот. Измените его оформление во вкладке «Шаблоны».')
 		return message
 	}
 	app.get('/api/message', async (req, res) => {

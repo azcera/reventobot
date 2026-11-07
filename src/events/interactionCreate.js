@@ -38,6 +38,11 @@ module.exports = client => {
 			return
 		}
 
+		if (interaction.isButton() && (interaction.customId.startsWith('capt_api_') || interaction.customId.startsWith('war_'))) {
+			if (!client.familyWars) return interaction.reply({ content: 'Модуль каптов ещё не готов. Повторите позже.', flags: MessageFlags.Ephemeral })
+			return client.familyWars.handle(interaction)
+		}
+
 		if (
 			interaction.isButton() &&
 			['capt_join', 'capt_leave'].includes(interaction.customId)

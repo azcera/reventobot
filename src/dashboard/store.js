@@ -15,6 +15,7 @@ const settingDefinitions = {
 	PARENT_CHANNEL_ID: { label: 'Канал архивов', type: 'channel', channelTypes: [0] },
 	ARCHIVE_SETTINGS_CHANNEL: { label: 'Канал списков архивов', type: 'channel', channelTypes: [0] },
 	PLUS_CHANNEL_ID: { label: 'Канал регистрации на капт', type: 'channel', channelTypes: [0] },
+	CAPT_INFO_CHANNEL_ID: { label: 'Канал объявлений каптов из Majestic API', type: 'channel', channelTypes: [0] },
 	ADMIN_ROLES: { label: 'Роли модераторов бота (не дают доступ в дашборд)', type: 'roles' },
 	MAIN_ROLE_ID: { label: 'Роль после принятия заявки', type: 'role' },
 	FAMILY_ADDITIONAL_ROLES: { label: 'Дополнительные роли после принятия', type: 'roles' },

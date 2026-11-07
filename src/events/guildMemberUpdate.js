@@ -8,6 +8,7 @@ const {
 	Events
 } = require('discord.js')
 const { parseDisplayName } = require('../utils/parseDisplayName')
+const { adminPrefix } = require('../utils/adminPrefix')
 
 
 /**
@@ -28,19 +29,9 @@ let handleMakeAdmin = async (oldMember, newMember) => {
 
 	if (!addedRole && !removedRole) return
 
-	const cleanName = newMember.displayName.replace(/^\[.*\]\s*/g, '').trim()
+	const cleanName = newMember.displayName.replace(/^\[[^\]]*\]\s*/, '').trim()
 
-	let newPrefix = ''
-
-	if (addedRole) {
-		if (addedRole.id === dashboard.roleIds('ADMIN_ROLES')[0]) {
-			newPrefix = '[𝐃𝐞𝐩] ' // dep
-		} else if (addedRole.id === dashboard.roleIds('ADMIN_ROLES')[1]) {
-			newPrefix = '[𝐇𝐢𝐠𝐡] ' // high
-		} else if (addedRole.id === dashboard.roleIds('ADMIN_ROLES')[2]) {
-			newPrefix = '[𝐑𝐞𝐜] ' // recruit
-		}
-	}
+	const newPrefix = adminPrefix([...newMember.roles.cache.keys()], dashboard.roleIds('ADMIN_ROLES'))
 	const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32)
 
 	if (newMember.displayName !== finalNickname && newMember.manageable) {

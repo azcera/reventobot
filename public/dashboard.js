@@ -7,7 +7,7 @@ const templateDrafts = new Map()
 let settingsDraft = {}
 let busy = false
 let applicationPreviewState = 'pending'
-const titles = { overview: 'Обзор', builder: 'Конструктор v2', templates: 'Шаблоны сообщений', messages: 'Сообщения в Discord', settings: 'Настройки', history: 'История изменений' }
+const titles = { overview: 'Обзор', builder: 'Конструктор v2', templates: 'Шаблоны сообщений', messages: 'Сообщения в Discord', settings: 'Настройки', history: 'История изменений', majestic: 'Majestic — синхронизация' }
 let builderResizeObserver
 $('builderFrame').addEventListener('load', () => {
 	builderResizeObserver?.disconnect()
@@ -117,6 +117,7 @@ async function switchTab() {
 		if (tab === 'overview') await overview()
 		if (tab === 'builder' && !$('builderFrame').getAttribute('src')) $('builderFrame').src = '/builder.html'
 		if (tab === 'history') renderHistory('historyRows', await api('history'))
+		if (tab === 'majestic') await loadMajestic()
 	} catch (error) { notice(error.message, true) }
 }
 async function loadConfig() {
@@ -394,6 +395,7 @@ window.addEventListener('beforeunload', event => {
 	if (dirty) { event.preventDefault(); event.returnValue = '' }
 })
 async function start() {
+	initMajestic()
 	const error = new URLSearchParams(location.search).get('error')
 	if (error) { $('loginStatus').textContent = error; history.replaceState(null, '', location.pathname) }
 	try {

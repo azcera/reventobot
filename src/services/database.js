@@ -19,6 +19,7 @@ pool
 
 const initDb = async () => {
 	try {
+		await pool.query(require('./familyWars').FAMILY_WAR_SCHEMA)
 		await pool.query(`
             CREATE TABLE IF NOT EXISTS family_applications (
                 user_id TEXT PRIMARY KEY,

@@ -74,7 +74,8 @@ registerContainerMessageRoutes(app, client, {
 	beforeMutation: async (req, action, target) => {
 		const ids = parseMessageLink(target)
 		const dynamic = await pool.query('SELECT 1 FROM active_captures WHERE message_id = $1 LIMIT 1', [ids.messageId])
-		if (dynamic.rows.length || ids.channelId === dashboard.getSetting('ARCHIVE_SETTINGS_CHANNEL')) {
+		const war = await pool.query('SELECT 1 FROM family_wars WHERE announcement_id = $1 OR registration_id = $1 LIMIT 1', [ids.messageId])
+		if (dynamic.rows.length || war.rows.length || ids.channelId === dashboard.getSetting('ARCHIVE_SETTINGS_CHANNEL')) {
 			throw Object.assign(new Error('Этот список обновляет бот. Измените его оформление во вкладке «Шаблоны».'), { status: 409 })
 		}
 		await dashboard.audit(req.dashboardUser, action + '.request', target)
@@ -151,6 +152,7 @@ const server = app.listen(port, () => {
 const shutdown = async () => {
 	console.log('\n🛑 Получен сигнал остановки. Завершаю работу...')
 	await client.stopTelegramBroadcast?.()
+	await client.familyWars?.stop()
 	client.destroy()
 	server.close(() => {
 		console.log('✅ Сервер остановлен.')
