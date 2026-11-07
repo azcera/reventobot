@@ -17,14 +17,9 @@ const {
  * @returns {{flags, components}}
  */
 function buildWebContainer(data) {
-	const { noColor, accentColor, items } = data
+	const { items } = data
 	const container = new ContainerBuilder()
 
-	if (!noColor) {
-		container.setAccentColor(
-			accentColor ? parseInt(accentColor.replace('#', '0x')) : 0x5865f2
-		)
-	}
 
 	for (const item of items) {
 		if (item.type === 'text') {

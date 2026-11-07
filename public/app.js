@@ -7,13 +7,6 @@ let dashboardCsrf = ''
 // Инициализация обработчиков после загрузки DOM
 document.addEventListener('DOMContentLoaded', async () => {
 	document
-		.getElementById('accentColor')
-		.addEventListener('input', updatePreview)
-	document
-		.getElementById('noColor')
-		.addEventListener('change', e => toggleColorInput(e.target.checked))
-
-	document
 		.getElementById('addTextBtn')
 		.addEventListener('click', () => addItem('text'))
 	document
@@ -56,13 +49,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 		const session = await fetch('/api/session').then(response => response.json())
 		if (!session.csrf) throw new Error(session.error || 'Войдите через Discord в дашборде.')
 		dashboardCsrf = session.csrf
-		const [resources, config] = await Promise.all([
-			fetch('/api/resources').then(response => response.json()),
-			fetch('/api/config').then(response => response.json())
-		])
+		const resources = await fetch('/api/resources').then(response => response.json())
 		const list = document.getElementById('channelOptions')
 		for (const channel of resources.channels || []) if ([0, 5].includes(channel.type) && channel.canSend) list.appendChild(new Option('#' + channel.name, channel.id))
-		document.getElementById('accentColor').value = config.settings?.find(setting => setting.key === 'DASHBOARD_ACCENT_COLOR')?.value || '#ee60db'
+
 	} catch (error) {
 		setMessageStatus(error.message, true)
 		document.getElementById('sendBtn').disabled = true
@@ -71,11 +61,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 	updatePreview()
 	renderInputs()
 })
-
-function toggleColorInput(disabled) {
-	document.getElementById('accentColor').disabled = disabled
-	updatePreview()
-}
 
 function addItem(type) {
 	const id = Date.now() + Math.random().toString(36).substr(2, 5)
@@ -248,70 +233,10 @@ function escapeAttr(str) {
 		.replace(/>/g, '&gt;')
 }
 
-/**
- * Простой Discord-подобный markdown → HTML для превью.
- * Поддерживает: # ## ###, **bold**, *italic*, __underline__, ~~strike~~,
- * `inline code`, ```code blocks```, ссылки.
- */
-function discordMarkdownToHtml(text) {
-	if (!text) return ''
-
-	// Сначала экранируем HTML
-	let s = String(text)
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-
-	// Code blocks (``` ... ```) — до inline, чтобы не ломать содержимое
-	s = s.replace(/```([\s\S]*?)```/g, (_, code) => {
-		return '<pre><code>' + code.replace(/^\n/, '') + '</code></pre>'
-	})
-
-	// Inline code
-	s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>')
-
-	// Headings (в начале строки)
-	s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-	s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-	s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-
-	// Bold ** ** or __ __ (underline is __ in Discord for underline, ** for bold)
-	// Discord: **bold** *italic* __underline__ ~~strikethrough~~
-	s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-	s = s.replace(/__(.+?)__/g, '<u>$1</u>')
-	s = s.replace(/\*(.+?)\*/g, '<em>$1</em>')
-	s = s.replace(/~~(.+?)~~/g, '<s>$1</s>')
-
-	// Simple URLs
-	s = s.replace(
-		/(https?:\/\/[^\s<]+)/g,
-		url => `<a href="${url.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" target="_blank" rel="noopener">${url}</a>`
-	)
-
-	// Newlines → <br> but not inside pre
-	// Split by pre blocks
-	const parts = s.split(/(<pre>[\s\S]*?<\/pre>)/)
-	s = parts
-		.map(part => {
-			if (part.startsWith('<pre>')) return part
-			return part.replace(/(<\/h[1-3]>)\n/g, '$1').replace(/\n/g, '<br>')
-		})
-		.join('')
-
-	return s
-}
 
 function updatePreview() {
 	const preview = document.getElementById('discordPreview')
-	const color = document.getElementById('accentColor').value
-	const noColor = document.getElementById('noColor').checked
-
-	if (noColor) {
-		preview.classList.add('no-border')
-	} else {
-		preview.classList.remove('no-border')
-		preview.style.borderLeftColor = color
-	}
+	preview.classList.add('no-border')
 
 	preview.innerHTML = ''
 
@@ -426,7 +351,6 @@ function beginRequest() {
 	return () => {
 		controls.forEach((control, index) => { control.disabled = disabled[index] })
 		requestPending = false
-		document.getElementById('accentColor').disabled = document.getElementById('noColor').checked
 		updateMessageMode()
 	}
 }
@@ -450,8 +374,6 @@ async function loadMessage() {
 		document.getElementById('channelId').value = messageSource.channelId
 		localStorage.setItem('reventobot_channelId', messageSource.channelId)
 		resolveChannelName(messageSource.channelId)
-		document.getElementById('accentColor').value = result.accentColor
-		document.getElementById('noColor').checked = result.noColor
 		document.getElementById('insertAfter').value = ''
 		renderInputs()
 		document.getElementById('itemsContainer').scrollTop = 0
@@ -470,8 +392,7 @@ async function sendToDiscord(edit = false) {
 	if (requestPending) return
 	if (edit && !messageSource?.canEdit) return
 	const channelId = document.getElementById('channelId').value.trim()
-	const accentColor = document.getElementById('accentColor').value
-	const noColor = document.getElementById('noColor').checked
+	const noColor = true
 
 	if (!edit && !channelId) {
 		alert('❌ Пожалуйста, заполните ID текстового канала Discord!')
@@ -492,7 +413,7 @@ async function sendToDiscord(edit = false) {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': dashboardCsrf },
 			body: JSON.stringify({
-				channelId, noColor, accentColor, items,
+				channelId, noColor, items,
 				...(edit ? { link: messageSource.url, revision: messageSource.revision } : {})
 			})
 		})

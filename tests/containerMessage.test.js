@@ -81,12 +81,11 @@ test('message links only accept Discord HTTPS server message URLs', () => {
 	}
 })
 
-test('builder messages round-trip with component order, values, black accent and no accent', () => {
+test('builder messages round-trip with component order and values without adding an accent', () => {
 	for (const noColor of [false, true]) {
 		const original = message({ ...draft, noColor })
 		const parsed = parseContainerMessage(original)
-		assert.equal(parsed.noColor, noColor)
-		if (!noColor) assert.equal(parsed.accentColor, '#000000')
+		assert.equal(parsed.noColor, true)
 		assert.deepEqual(buildWebContainer(parsed).components[0].toJSON(), original.components[0])
 	}
 })

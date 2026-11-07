@@ -119,30 +119,6 @@
     "variables": [],
     "maxLength": 512
   },
-  "invite.2": {
-    "group": "Приглашение",
-    "label": "attachment://revento.png",
-    "default": "attachment://revento.png",
-    "type": "url",
-    "variables": [],
-    "maxLength": 512
-  },
-  "invite.3": {
-    "group": "Приглашение",
-    "label": "## 😎 Оставить заявку на вступление",
-    "default": "## 😎 Оставить заявку на вступление\nДля этого нажмите кнопку \"Подать заявку\" справа и заполните необходимые данные.",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
-  },
-  "invite.4": {
-    "group": "Приглашение",
-    "label": "Кнопка: 😎 Подать заявку",
-    "default": "😎 Подать заявку",
-    "type": "button",
-    "variables": [],
-    "maxLength": 80
-  },
   "invite.5": {
     "group": "Приглашение",
     "label": "## 🥶 Немного о нас:",
@@ -191,10 +167,58 @@
     "variables": [],
     "maxLength": 4000
   },
+  "invite.2": {
+    "group": "Приглашение",
+    "label": "attachment://revento.png",
+    "default": "attachment://revento.png",
+    "type": "url",
+    "variables": [],
+    "maxLength": 512
+  },
   "invite.11": {
     "group": "Приглашение",
     "label": "## 📃 Форма заявки:",
     "default": "## 📃 Форма заявки:",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_name": {
+    "group": "Приглашение",
+    "label": "Описание поля: Никнейм",
+    "default": "### 1. Никнейм\n> Только имя (без фамилии и статика)\n> **Пример:** ||Tony||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_static": {
+    "group": "Приглашение",
+    "label": "Описание поля: Статик ID",
+    "default": "### 2. Статик ID\n> Ваш уникальный числовой идентификатор (можно посмотреть справа вверху в игре после символа '#')\n> **Пример:** ||132961||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_age": {
+    "group": "Приглашение",
+    "label": "Описание поля: Возраст (ООС)",
+    "default": "### 3. Возраст (ООС)\n> **Пример:** ||18||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_info": {
+    "group": "Приглашение",
+    "label": "Описание поля: Как узнали о семье и чего ждете?",
+    "default": "### 4. Как узнали о семье и чего ждете?\n> Расскажите о ваших ожиданиях\n> **Пример:** ||Узнал через маркет, хочу развиваться||",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.form.invite_history": {
+    "group": "Приглашение",
+    "label": "Описание поля: Где ранее играли?",
+    "default": "### 5. Где ранее играли?\n> Указывайте проекты и семьи\n> **Пример:** ||Revento, Sweet, Gucci (5rp)||",
     "type": "text",
     "variables": [],
     "maxLength": 4000
@@ -222,6 +246,22 @@
     "type": "text",
     "variables": [],
     "maxLength": 4000
+  },
+  "invite.3": {
+    "group": "Приглашение",
+    "label": "## 😎 Оставить заявку на вступление",
+    "default": "## 😎 Оставить заявку на вступление\nДля этого нажмите кнопку \"Подать заявку\" справа и заполните необходимые данные.",
+    "type": "text",
+    "variables": [],
+    "maxLength": 4000
+  },
+  "invite.4": {
+    "group": "Приглашение",
+    "label": "Кнопка: 😎 Подать заявку",
+    "default": "😎 Подать заявку",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
   },
   "panel.1": {
     "group": "Админ-панель",
@@ -759,101 +799,5 @@
       "time"
     ],
     "maxLength": 500
-  },
-  "rules.color": {
-    "group": "Правила",
-    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
-    "default": "",
-    "type": "color",
-    "variables": [],
-    "maxLength": 7
-  },
-  "invite.color": {
-    "group": "Приглашение",
-    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
-    "default": "",
-    "type": "color",
-    "variables": [],
-    "maxLength": 7
-  },
-  "panel.color": {
-    "group": "Админ-панель",
-    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
-    "default": "",
-    "type": "color",
-    "variables": [],
-    "maxLength": 7
-  },
-  "navigation.color": {
-    "group": "Навигация",
-    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
-    "default": "",
-    "type": "color",
-    "variables": [],
-    "maxLength": 7
-  },
-  "capture.color": {
-    "group": "Регистрация на капт",
-    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
-    "default": "",
-    "type": "color",
-    "variables": [],
-    "maxLength": 7
-  },
-  "archives.color": {
-    "group": "Списки архивов",
-    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
-    "default": "",
-    "type": "color",
-    "variables": [],
-    "maxLength": 7
-  },
-  "unanswered.color": {
-    "group": "Неотвеченные архивы",
-    "label": "Цвет контейнера (#5865f2 или пусто — без цвета)",
-    "default": "",
-    "type": "color",
-    "variables": [],
-    "maxLength": 7
-  },
-  "invite.form.invite_name": {
-    "group": "Приглашение",
-    "label": "Описание поля: Никнейм",
-    "default": "### 1. Никнейм\n> Только имя (без фамилии и статика)\n> **Пример:** ||Tony||",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
-  },
-  "invite.form.invite_static": {
-    "group": "Приглашение",
-    "label": "Описание поля: Статик ID",
-    "default": "### 2. Статик ID\n> Ваш уникальный числовой идентификатор (можно посмотреть справа вверху в игре после символа '#')\n> **Пример:** ||132961||",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
-  },
-  "invite.form.invite_age": {
-    "group": "Приглашение",
-    "label": "Описание поля: Возраст (ООС)",
-    "default": "### 3. Возраст (ООС)\n> **Пример:** ||18||",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
-  },
-  "invite.form.invite_info": {
-    "group": "Приглашение",
-    "label": "Описание поля: Как узнали о семье и чего ждете?",
-    "default": "### 4. Как узнали о семье и чего ждете?\n> Расскажите о ваших ожиданиях\n> **Пример:** ||Узнал через маркет, хочу развиваться||",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
-  },
-  "invite.form.invite_history": {
-    "group": "Приглашение",
-    "label": "Описание поля: Где ранее играли?",
-    "default": "### 5. Где ранее играли?\n> Указывайте проекты и семьи\n> **Пример:** ||Revento, Sweet, Gucci (5rp)||",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
   }
 }

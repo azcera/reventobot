@@ -5,7 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Revento — конструктор компонентов v2</title>
 		<link rel="icon" type="image/png" href="/revento-logo.png" />
-		<link rel="stylesheet" href="/theme.css" />
+		<link rel="stylesheet" href="/markdown.css"><link rel="stylesheet" href="/theme.css" />
 		<link
 			rel="stylesheet"
 			href="style.css"
@@ -45,25 +45,6 @@
 			</div>
 
 			<datalist id="channelOptions"></datalist>
-			<div class="color-section">
-				<div style="display: flex; flex-direction: column; gap: 8px">
-					<label for="accentColor">Цвет сообщения</label>
-					<input
-						type="color"
-						id="accentColor"
-						value="#ee60db"
-					/>
-				</div>
-				<div style="margin-left: auto">
-					<label class="checkbox-container">
-						<input
-							type="checkbox"
-							id="noColor"
-						/>
-						Без боковой полоски
-					</label>
-				</div>
-			</div>
 
 			<div class="component-toolbar">
 				<div class="insert-controls">
@@ -131,6 +112,7 @@
 		</div>
 
 		<!-- Подключение логики -->
+		<script src="/markdown.js"></script>
 		<script src="app.js"></script>
 	</body>
 </html>

@@ -22,7 +22,7 @@ function builder(overrides = {}) {
 		}
 	}
 	const elements = Object.fromEntries(
-		['itemsContainer', 'insertAfter', 'componentCount', 'discordPreview', 'accentColor', 'noColor',
+		['itemsContainer', 'insertAfter', 'componentCount', 'discordPreview',
 			'messageLink', 'messageStatus', 'loadMessageBtn', 'saveMessageBtn', 'detachMessageBtn', 'sendBtn', 'channelId', 'channelNameHint']
 			.map(id => [id, element()])
 	)
@@ -38,6 +38,7 @@ function builder(overrides = {}) {
 		setTimeout: () => 1, clearTimeout() {},
 		...overrides
 	})
+	vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/markdown.js'), 'utf8'), context)
 	vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'), context)
 	return { elements, run: code => vm.runInContext(code, context) }
 }
@@ -65,14 +66,12 @@ const importedMessage = {
 		channelId: '222222222222222222', revision: 'a'.repeat(64), canEdit: true }
 }
 
-test('successful import populates draft, channel, color and editing controls', async () => {
+test('successful import populates draft, channel and editing controls without color settings', async () => {
 	const { elements, run } = builder({ fetch: async () => ({ ok: true, json: async () => structuredClone(importedMessage) }) })
 	elements.messageLink.value = importedMessage.source.url
 	await run('loadMessage()')
 	assert.equal(run('items[0].value'), 'Загружено')
 	assert.equal(elements.channelId.value, importedMessage.source.channelId)
-	assert.equal(elements.noColor.checked, true)
-	assert.equal(elements.accentColor.disabled, true)
 	assert.equal(elements.saveMessageBtn.hidden, false)
 	assert.equal(elements.saveMessageBtn.disabled, false)
 	assert.equal(elements.sendBtn.textContent, 'Отправить копию')

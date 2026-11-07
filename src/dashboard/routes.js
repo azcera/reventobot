@@ -4,6 +4,7 @@ const { store, catalog, settingDefinitions } = require('./store')
 const { parseMessageLink, messageRevision } = require('../services/containerMessageService')
 const { snapshot, applyFields, isHttpsUrl } = require('./messageEditor')
 const locks = require('../services/messageLocks')
+const permanent = require('./permanentMessages')
 
 const panelKey = require('./panelKey')
 
@@ -20,7 +21,7 @@ function validateTemplates(values) {
 		if (typeof value !== 'string' || !value.trim() || value.length > field.maxLength) throw problem(400, `Проверьте длину поля «${field.label}».`)
 		if (field.type === 'url' && value !== field.default && !isHttpsUrl(value)) throw problem(400, 'Нужна HTTPS-ссылка.')
 		const variables = [...value.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g)].map(match => match[1])
-		if (variables.some(name => !field.variables.includes(name)) || field.variables.some(name => !variables.includes(name))) throw problem(400, 'Сохраните все переменные шаблона без изменения их названий.')
+		if (!key.startsWith('permanent.') && (variables.some(name => !field.variables.includes(name)) || field.variables.some(name => !variables.includes(name)))) throw problem(400, 'Сохраните все переменные шаблона без изменения их названий.')
 	}
 	for (const group of ['Правила', 'Приглашение', 'Навигация', 'Админ-панель']) {
 		const length = Object.entries(catalog).filter(([, field]) => field.group === group && field.type === 'text')
@@ -108,7 +109,30 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }) } 
 			if (section === 'templates') validateTemplates(values)
 			else await validateSettings(values, req.guild)
 			await store.save(section, values, revision, req.dashboardUser.id)
+			const syncResults = section === 'templates' ? await permanent.syncMessages(Object.keys(values), client, req.guild) : []
+			res.json({ ...store.snapshot(), syncResults })
+		} catch (error) { respondError(res, error) }
+	})
+	app.post('/api/permanent-message', async (req, res) => {
+		try {
+			const { kind, link, revision } = req.body
+			if (!Object.hasOwn(permanent.definitions, kind) || !Number.isSafeInteger(revision)) throw problem(400, 'Проверьте вид сообщения и обновите данные.')
+			const binding = link ? permanent.bindingFor(kind, await fetchOwnedMessage(link, req.guild)) : null
+			if (binding) await permanent.fetchMessage(client, req.guild, link)
+			const id = binding && parseMessageLink(link).messageId
+			if (id && Object.entries(store.bindings).some(([other, value]) => other !== kind && parseMessageLink(value.link).messageId === id)) throw problem(400, 'Сообщение уже привязано к другому разделу.')
+			await store.save('bindings', { [kind]: binding }, revision, req.dashboardUser.id)
 			res.json(store.snapshot())
+		} catch (error) { respondError(res, error) }
+	})
+	app.post('/api/permanent-message/sync', async (req, res) => {
+		try {
+			if (!Object.hasOwn(permanent.definitions, req.body.kind) || !store.bindings[req.body.kind]) throw problem(400, 'Сначала привяжите сообщение.')
+			await store.audit(req.dashboardUser.id, 'message.sync.request', req.body.kind)
+			const syncResults = await permanent.syncMessages([], client, req.guild, req.body.kind)
+			await store.audit(req.dashboardUser.id, 'message.sync', req.body.kind, { syncResults })
+				.catch(error => console.error('[Dashboard] Не удалось записать результат обновления:', error.message))
+			res.json({ ...store.snapshot(), syncResults })
 		} catch (error) { respondError(res, error) }
 	})
 	app.get('/api/history', async (req, res) => {

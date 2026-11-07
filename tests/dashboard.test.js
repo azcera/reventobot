@@ -108,7 +108,7 @@ test('field editor rejects ID/structure changes, invalid links and excessive tex
 	const original = structuredClone(f.message.components)
 	assert.throws(() => applyFields(f.message, { 'components.0.components.1.accessory.0.custom_id': 'evil' }), /Недопустимое поле/)
 	assert.throws(() => applyFields(f.message, { 'components.0.components.0.content': 'a'.repeat(4001) }), /слишком длинный/)
-	assert.throws(() => applyFields(f.message, { 'components.0.accent_color': '#ffff' }), /Цвет/)
+	assert.throws(() => applyFields(f.message, { 'components.0.accent_color': '#ffff' }), /Недопустимое поле/)
 	assert.throws(() => applyFields(f.message, { 'components.0.components.0.content': 'a'.repeat(3999) }), /Общая длина/)
 	f.message.components[0].components[1].accessory = { type: 2, style: 5, label: 'Link', url: 'https://example.com' }
 	assert.throws(() => applyFields(f.message, { 'components.0.components.1.accessory.0.url': 'javascript:alert(1)' }), /HTTPS/)
@@ -124,7 +124,7 @@ test('dynamic capture and archive publications are routed to template editing', 
 
 test('template and settings changes persist, affect rendering immediately and reject old revisions', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()
-	const response = await f.request('/api/templates', { body: { revision: 0, values: { 'capture.title': '## Набор на {target}', 'capture.color': '#112233' } } })
+	const response = await f.request('/api/templates', { body: { revision: 0, values: { 'capture.title': '## Набор на {target}' } } })
 	assert.equal(response.status, 200)
 	assert.equal(store.text('capture.title', { target: 'мероприятие' }), '## Набор на мероприятие')
 	const setting = await f.request('/api/settings', { body: { revision: 1, values: { ADMIN_PANEL_CHANNEL_ID: f.channelId, TELEGRAM_BROADCAST_ENABLED: false } } })

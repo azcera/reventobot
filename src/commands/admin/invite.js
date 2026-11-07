@@ -39,6 +39,12 @@ module.exports = {
 		}
 
 		// 1. Подготовка изображений
+		const payload = await this.buildPayload()
+		const sent = await message.channel.send(payload)
+		await require('../../dashboard/permanentMessages').rememberSent('invite', sent)
+		await message.delete().catch(() => {})
+	},
+	async buildPayload() {
 		const imagePath1 = path.join(IMAGES_PATH, 'invites.png')
 		const imagePath2 = path.join(IMAGES_PATH, 'revento.png')
 
@@ -166,12 +172,10 @@ module.exports = {
 			.addSectionComponents(inviteButton)
 
 		// 6. Отправка и очистка команды
-		await message.channel.send({
+		return {
 			flags: [MessageFlags.IsComponentsV2],
 			components: [dashboard.decorate('invite', container)],
 			files: [localImage1, localImage2]
-		})
-
-		await message.delete().catch(() => {})
+		}
 	}
 }

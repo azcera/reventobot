@@ -15,8 +15,12 @@ const settingDefinitions = {
 	PRIORITY_ROLES: { label: 'Приоритет ролей на капт (сверху вниз)', type: 'roles' },
 	DISCORD_NOTIFICATION_CHANNEL_IDS: { label: 'Каналы массовой Telegram-рассылки', type: 'channels', channelTypes: [0, 5] },
 	TELEGRAM_BROADCAST_ENABLED: { label: 'Доставка массовой Telegram-рассылки', type: 'boolean', default: true },
-	DASHBOARD_ALLOW_MENTIONS: { label: 'Разрешить @everyone и роли при ручной публикации', type: 'boolean', default: false },
-	DASHBOARD_ACCENT_COLOR: { label: 'Цвет новых контейнеров', type: 'color', default: '#ee60db' }
+	DASHBOARD_ALLOW_MENTIONS: { label: 'Разрешить @everyone и роли при ручной публикации', type: 'boolean', default: false }
+}
+
+function refreshBoundFields(state) {
+	for (const key of Object.keys(catalog)) if (key.startsWith('permanent.')) delete catalog[key]
+	for (const binding of Object.values(state.bindings || {})) for (const field of binding.fields || []) catalog[field.key] = field
 }
 
 function createStore() {
@@ -33,10 +37,10 @@ function createStore() {
 		get ready() { return ready },
 		get revision() { return revision },
 		getSetting,
+		get bindings() { return structuredClone(state.bindings || {}) },
 		roleIds(key) { return String(getSetting(key)).split(',').map(id => id.trim()).filter(Boolean) },
 		decorate(key, container) {
-			const color = this.text(key + '.color')
-			return color ? container.setAccentColor(parseInt(color.slice(1), 16)) : container.clearAccentColor()
+			return container.clearAccentColor()
 		},
 		text(key, variables = {}, fallback) {
 			const source = state.templates[key] ?? catalog[key]?.default ?? fallback
@@ -45,7 +49,7 @@ function createStore() {
 				Object.hasOwn(variables, name) ? String(variables[name]) : match)
 		},
 		snapshot() {
-			return { revision, templates: Object.entries(catalog).map(([key, value]) => ({
+			return { revision, bindings: this.bindings, templates: Object.entries(catalog).map(([key, value]) => ({
 				key, ...value, value: state.templates[key] ?? value.default
 			})), settings: Object.entries(settingDefinitions).map(([key, value]) => ({ key, ...value, value: getSetting(key) })) }
 		},
@@ -62,6 +66,7 @@ function createStore() {
 			INSERT INTO dashboard_state (id) VALUES (1) ON CONFLICT DO NOTHING`)
 			const result = await pool.query('SELECT revision, value FROM dashboard_state WHERE id = 1')
 			state = result.rows[0].value
+			refreshBoundFields(state)
 			revision = result.rows[0].revision
 			ready = true
 		},
@@ -73,10 +78,17 @@ function createStore() {
 				const current = result.rows[0]
 				if (current.revision !== expectedRevision) {
 					state = current.value
+					refreshBoundFields(state)
 					revision = current.revision
 					throw Object.assign(new Error('Настройки изменены другим пользователем. Обновите страницу.'), { status: 409 })
 				}
 				const next = { ...current.value, [section]: { ...current.value[section] } }
+				if (section === 'bindings') {
+					next.templates = { ...current.value.templates }
+					for (const [kind, binding] of Object.entries(values)) {
+						for (const field of [...(current.value.bindings?.[kind]?.fields || []), ...(binding?.fields || [])]) delete next.templates[field.key]
+					}
+				}
 				for (const [key, value] of Object.entries(values)) {
 					if (value === null) delete next[section][key]
 					else next[section][key] = value
@@ -86,6 +98,7 @@ function createStore() {
 					[actor, section, Object.keys(values).join(', '), JSON.stringify({ before: current.value[section], changes: values })])
 				await db.query('COMMIT')
 				state = next
+				refreshBoundFields(state)
 				revision = current.revision + 1
 				return revision
 			} catch (error) {

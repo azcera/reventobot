@@ -7,6 +7,20 @@ const templateDrafts = new Map()
 let settingsDraft = {}
 let busy = false
 const titles = { overview: 'Обзор', builder: 'Конструктор v2', templates: 'Шаблоны сообщений', messages: 'Сообщения в Discord', settings: 'Настройки', history: 'История изменений' }
+let builderResizeObserver
+$('builderFrame').addEventListener('load', () => {
+	builderResizeObserver?.disconnect()
+	const frame = $('builderFrame')
+	const layout = frame.contentDocument?.querySelector('.builder-layout')
+	if (!layout) return
+	const resize = () => {
+		const height = Math.ceil(layout.getBoundingClientRect().height)
+		if (height > 0) frame.style.height = (height + frame.offsetHeight - frame.clientHeight) + 'px'
+	}
+	builderResizeObserver = new ResizeObserver(resize)
+	builderResizeObserver.observe(layout)
+	resize()
+})
 
 function node(tag, text, className) {
 	const element = document.createElement(tag)
@@ -87,13 +101,46 @@ async function loadConfig() {
 	[config, resources] = await Promise.all([api('config'), api('resources')])
 	templateDrafts.clear()
 	settingsDraft = Object.fromEntries(config.settings.map(setting => [setting.key, setting.value]))
+	renderTemplateGroups()
+	renderTemplates()
+	renderSettings()
+	renderPermanentMessages()
+}
+function renderTemplateGroups() {
 	const select = $('templateGroup')
 	const previous = select.value
 	select.replaceChildren()
 	for (const group of new Set(config.templates.map(field => field.group))) select.add(new Option(group, group))
 	if ([...select.options].some(option => option.value === previous)) select.value = previous
-	renderTemplates()
-	renderSettings()
+}
+const permanentGroups = { rules: 'Правила', invite: 'Приглашение', promotion: 'Система повышения', recruit: 'Памятка рекрута' }
+function renderPermanentMessages() {
+	const root = $('permanentMessages')
+	root.replaceChildren(node('h3', 'Постоянные сообщения'))
+	root.append(node('p', 'Укажи ссылку один раз. Привязки сохраняются после перезапуска бота.', 'muted'))
+	for (const [kind, group] of Object.entries(permanentGroups)) {
+		const form = node('form', null, 'permanent-row')
+		const label = node('label', group)
+		const input = node('input'); input.type = 'url'; input.placeholder = 'https://discord.com/channels/…/…/…'; input.value = config.bindings?.[kind]?.link || ''
+		label.append(input); form.append(label)
+		const bind = node('button', 'Сохранить привязку', 'quiet'); bind.type = 'submit'; form.append(bind)
+		form.addEventListener('submit', event => {
+			event.preventDefault()
+			if (config.templates.some(field => field.group === group && templateDrafts.get(group)?.[field.key] !== undefined && templateDrafts.get(group)[field.key] !== field.value) && !confirm('Изменение привязки сбросит несохранённые правки этого раздела. Продолжить?')) return
+			action(async () => { config = await api('permanent-message', { kind, link: input.value.trim(), revision: config.revision }); templateDrafts.delete(group); renderTemplateGroups(); renderPermanentMessages(); if ([...$('templateGroup').options].some(option => option.value === group)) $('templateGroup').value = group; renderTemplates(); notice(input.value.trim() ? 'Привязка сохранена. Шаблон можно редактировать ниже.' : 'Привязка удалена.') })
+		})
+		if (config.bindings?.[kind]) {
+			const open = node('button', 'Открыть шаблон', 'quiet'); open.type = 'button'
+			open.addEventListener('click', () => { $('templateGroup').value = group; renderTemplates() }); form.append(open)
+			const sync = node('button', 'Обновить в Discord', 'quiet'); sync.type = 'button'
+			sync.addEventListener('click', () => action(async () => { config = await api('permanent-message/sync', { kind }); showSyncResult('Сообщение обновлено.') })); form.append(sync)
+		}
+		root.append(form)
+	}
+}
+function showSyncResult(success) {
+	const failed = (config.syncResults || []).filter(result => !result.ok)
+	notice(failed.length ? 'Шаблон сохранён, но обновление в Discord не завершено: ' + failed.map(result => permanentGroups[result.kind] + ': ' + result.error).join(' ') + ' Нажми «Обновить в Discord» после устранения причины.' : success, failed.length > 0)
 }
 const examples = { user: '123456789012345678', name: 'Tony | 132961', age: '18', about: 'Хочу развиваться вместе с семьёй', history: 'Revento', admin: '123456789012345678', server: 'REVENTO', channel: '123456789012345678', time: '18:00 МСК', target: 'капт', count: '3', limit: '20', players: '1. @Tony\n2. @Alex\n3. @Sam', reason: 'Ошибка в анкете', part: '2' }
 function preview(root, fields, values, variables = false) {
@@ -109,10 +156,8 @@ function preview(root, fields, values, variables = false) {
 		}
 		if (field.type === 'button' || field.label === 'Подпись кнопки') { root.append(node('span', value, 'preview-button')); continue }
 		const block = node('div', null, 'preview-field')
-		for (const line of value.split('\n')) {
-			const heading = line.match(/^(#{1,3}) (.+)$/)
-			block.append(node(heading ? 'h2' : 'div', heading ? heading[2] : line || '\u00a0'))
-		}
+		block.classList.add('discord-text')
+		block.innerHTML = discordMarkdownToHtml(value)
 		root.append(block)
 	}
 }
@@ -214,12 +259,12 @@ $('templateForm').addEventListener('submit', event => {
 	action(async () => {
 		const values = Object.fromEntries(groupFields().filter(field => groupDraft()[field.key] !== field.value).map(field => [field.key, groupDraft()[field.key]]))
 		if (!Object.keys(values).length) return notice('Нет изменений для сохранения.')
-		config = await api('templates', { revision: config.revision, values }); templateDrafts.delete($('templateGroup').value); renderTemplates(); notice('Шаблон сохранён. Следующие сообщения будут использовать новый текст.')
+		config = await api('templates', { revision: config.revision, values }); templateDrafts.delete($('templateGroup').value); renderTemplates(); showSyncResult('Шаблон сохранён. Привязанные сообщения обновлены в Discord.')
 	})
 })
 $('resetTemplate').addEventListener('click', () => {
 	if (!confirm('Восстановить исходный шаблон этого раздела?')) return
-	action(async () => { config = await api('templates', { revision: config.revision, values: Object.fromEntries(groupFields().map(field => [field.key, null])) }); templateDrafts.delete($('templateGroup').value); renderTemplates(); notice('Исходный шаблон восстановлен.') })
+	action(async () => { config = await api('templates', { revision: config.revision, values: Object.fromEntries(groupFields().map(field => [field.key, null])) }); templateDrafts.delete($('templateGroup').value); renderTemplates(); showSyncResult('Исходный шаблон восстановлен, привязанные сообщения обновлены.') })
 })
 $('settingsForm').addEventListener('submit', event => {
 	event.preventDefault()

@@ -60,6 +60,12 @@ module.exports = {
 				content: '❌ У вас нет прав для использования этой команды!'
 			})
 		}
+		const payload = await this.buildPayload()
+		const sent = await message.channel.send(payload)
+		await require('../../dashboard/permanentMessages').rememberSent('rules', sent)
+		await message.delete().catch(() => {})
+	},
+	async buildPayload() {
 		const imagePath = path.join(IMAGES_PATH, 'rules.png')
 
 		const localImage = new AttachmentBuilder(imagePath, {
@@ -97,12 +103,10 @@ module.exports = {
 			mainIndex++
 		}
 
-		await message.channel.send({
+		return {
 			flags: MessageFlags.IsComponentsV2,
 			components: [dashboard.decorate('rules', container)],
 			files: [localImage]
-		})
-
-		return await message.delete().catch(() => {})
+		}
 	}
 }

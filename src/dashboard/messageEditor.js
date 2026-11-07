@@ -21,8 +21,7 @@ function editableFields(components, prefix = 'components', result = []) {
 			add('label', 'Подпись кнопки', 80)
 			if (component.style === 5) add('url', 'Ссылка кнопки', 512, 'url')
 		}
-		if (component.type === 17) result.push({ path: `${path}.accent_color`, label: 'Цвет контейнера (пусто — без цвета)',
-			value: component.accent_color == null ? '' : '#' + component.accent_color.toString(16).padStart(6, '0'), maxLength: 7, type: 'color' })
+
 		if (component.components) editableFields(component.components, path + '.components', result)
 		if (component.accessory) editableFields([component.accessory], path + '.accessory', result)
 	})
@@ -66,6 +65,7 @@ function applyFields(message, values) {
 	}
 	count(payload.components)
 	if (textLength > 4000) throw problem(400, 'Общая длина текста компонентов не должна превышать 4000 символов.')
+	for (const component of payload.components) if (component.type === 17) component.accent_color = null
 	return payload
 }
 

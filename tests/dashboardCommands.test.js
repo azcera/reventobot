@@ -28,7 +28,7 @@ test('existing command modules pick up edited templates and preserve attachments
 	assert.match(components(payload.components[0]), /Отправить анкету/)
 	assert.match(components(payload.components[0]), /open_invite_modal/)
 	assert.equal(payload.files.length, 2)
-	assert.equal(payload.components[0].toJSON().accent_color, 0x123456)
+	assert.equal(payload.components[0].toJSON().accent_color ?? null, null)
 	await rules.execute(request, [])
 	assert.match(components(request.channel.payload.components[0]), /Правила нашего сервера/)
 	assert.equal(request.channel.payload.files.length, 1)
