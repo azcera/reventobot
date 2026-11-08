@@ -520,6 +520,69 @@ test('testcapt info attack selects the latest finished attack from API rather th
 	assert.match(replies.pop(), /не вернул.*атакующей/)
 })
 
+test('testcapt info attack retries the gateway member limit before replying', async () => {
+	const f = fixture(), waits = [], replies = []
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z',
+		attackersId: 1698, defendersId: 1331 })])
+	const service = createFamilyWars({ ...f.options, sleep: async ms => waits.push(ms) })
+	let requests = 0
+	f.guild.members.fetch = async () => {
+		if (++requests === 1) throw Object.assign(new Error('rate limited'), {
+			name: 'GatewayRateLimitError', data: { opcode: 8, retry_after: 16.313 } })
+		return f.members
+	}
+	await require('../src/commands/admin/testcapt').execute({ guild: f.guild, member: f.member,
+		client: { familyWars: service }, reply: async payload => replies.push(payload) }, ['info', 'attack'])
+	assert.equal(requests, 2)
+	assert.deepEqual(waits, [16563])
+	assert.match(plain(replies[0]), /Просмотр последнего завершённого капта/)
+})
+
+test('capture previews share member loads and reuse the live cache for thirty seconds', async () => {
+	const f = fixture()
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z' })])
+	let requests = 0, release
+	f.guild.members.fetch = () => { requests++; return new Promise(resolve => { release = () => resolve(f.members) }) }
+	const message = { guild: f.guild, member: f.member, reply: async () => {} }
+	const first = f.service.createTestRegistration(message, { preview: true })
+	const second = f.service.createTestRegistration(message, { preview: true })
+	await new Promise(resolve => setImmediate(resolve))
+	assert.equal(requests, 1)
+	release()
+	await Promise.all([first, second])
+	await f.service.createTestRegistration(message, { preview: true })
+	assert.equal(requests, 1)
+	f.setClock('2026-11-08T12:00:35Z')
+	f.guild.members.fetch = async () => { requests++; return f.members }
+	await f.service.createTestRegistration(message, { preview: true })
+	assert.equal(requests, 2)
+})
+
+test('capture member retries are bounded, reject invalid limits and allow recovery', async () => {
+	for (const [name, data, expectedRequests] of [
+		['GatewayRateLimitError', { opcode: 8, retry_after: 1 }, 3],
+		['Error', { opcode: 8, retry_after: 1 }, 1],
+		['GatewayRateLimitError', { opcode: 1, retry_after: 1 }, 1],
+		['GatewayRateLimitError', { opcode: 8, retry_after: -1 }, 1],
+		['GatewayRateLimitError', { opcode: 8, retry_after: 61 }, 1],
+		['GatewayRateLimitError', { opcode: 8, retry_after: NaN }, 1]
+	]) {
+		const f = fixture(), waits = []
+		f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z' })])
+		const service = createFamilyWars({ ...f.options, sleep: async ms => waits.push(ms) })
+		const error = Object.assign(new Error('fetch failed'), { name, data })
+		let requests = 0
+		f.guild.members.fetch = async () => { requests++; throw error }
+		const message = { guild: f.guild, member: f.member, reply: async () => {} }
+		await assert.rejects(service.createTestRegistration(message, { preview: true }), error)
+		assert.equal(requests, expectedRequests)
+		assert.equal(waits.length, expectedRequests - 1)
+		f.guild.members.fetch = async () => { requests++; return f.members }
+		await service.createTestRegistration(message, { preview: true })
+		assert.equal(requests, expectedRequests + 1)
+	}
+})
+
 test('testcapt info previews latest finished announcement with historical time, map, result and MVPs', async () => {
 	const f = fixture(), replies = []
 	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z', score: { 1698: 0, 1331: 10 }, winner: 1331,

@@ -1,4 +1,5 @@
 const { createHash } = require('node:crypto')
+const { setTimeout: delay } = require('node:timers/promises')
 const { PermissionFlagsBits, MessageFlags, TextDisplayBuilder } = require('discord.js')
 const { SERVER, rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, registrationClosed, bindingIndex } = require('../features/capture/familyWarData')
 const { announcement, registrationMessage } = require('../features/capture/familyWarMessages')
@@ -18,8 +19,33 @@ function hasButton(message, marker) {
 }
 
 function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = fetch,
-	now = Date.now, logger = console, setTimer = setTimeout, clearTimer = clearTimeout }) {
+	now = Date.now, logger = console, setTimer = setTimeout, clearTimer = clearTimeout, sleep = delay }) {
 	const locks = new Map()
+	const memberLoads = new WeakMap()
+	async function loadMembers(guild) {
+		const previous = memberLoads.get(guild)
+		if (previous?.pending) return previous.pending
+		if (previous && now() - previous.loadedAt < 30000) return guild.members.cache
+		const state = {}
+		memberLoads.set(guild, state)
+		state.pending = (async () => {
+			for (let attempt = 0; ; attempt++) {
+				try {
+					const members = await guild.members.fetch({ time: 30000 })
+					state.loadedAt = now()
+					return members
+				} catch (error) {
+					const seconds = error?.data?.retry_after
+					if (error?.name !== 'GatewayRateLimitError' || error.data?.opcode !== 8 ||
+						!Number.isFinite(seconds) || seconds < 0 || seconds > 60 || attempt >= 2) throw error
+					await sleep(Math.ceil(seconds * 1000) + 250)
+				}
+			}
+		})()
+		try { return await state.pending }
+		catch (error) { memberLoads.delete(guild); throw error }
+		finally { state.pending = null }
+	}
 	let schema, timer, closeTimer, polling, stopped = true
 	const rules = rulesFromEnv(env)
 	function ensureSchema() {
@@ -192,7 +218,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 					}
 					if ((row.registration_id && !row.registration.closedAt) || row.registration_state === 'sending' ||
 						(war.status === 'finished' && row.announcement_id && !row.registration.announcementFinished)) {
-						if (!rosterLoaded) { await guild.members.fetch({ time: 30000 }); bindings = await decisions(guild.id); rosterLoaded = true }
+						if (!rosterLoaded) { await loadMembers(guild); bindings = await decisions(guild.id); rosterLoaded = true }
 						if (!row.registration_id && row.registration_state === 'sending') await deliver(row, 'registration', registrationMessage(war, row.registration, guild, bindings, store, now()))
 					}
 					// Bindings and role priorities can change even when API data stays identical.
@@ -230,7 +256,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		const previous = await load(source.key, message.guild.id)
 		source = normalizeWar(source.raw, rules, previous?.data, now())
 		if (preview) {
-			await message.guild.members.fetch({ time: 30000 })
+			await loadMembers(message.guild)
 			const payload = announcement(source, null, now(), message.guild.members.cache.values(), await decisions(message.guild.id))
 			payload.components[0].addTextDisplayComponents(new TextDisplayBuilder().setContent(`🧪 Просмотр последнего завершённого капта №${source.apiId}.`))
 			return message.reply(payload)
@@ -246,7 +272,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 				registration: { joins: {}, declined: {}, seen: {}, sortMode: 'priority', page: 0 },
 				registration_channel_id: store.getSetting('PLUS_CHANNEL_ID')
 			}
-			await message.guild.members.fetch({ time: 30000 })
+			await loadMembers(message.guild)
 			const bindings = await decisions(message.guild.id)
 			noteRoster(row)
 			if (!row.registration_id) await deliver(row, 'registration', registrationMessage(row.data, row.registration, message.guild, bindings, store, now()))
@@ -275,7 +301,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 				if (row.registration.closedAt || registrationClosed(row.data, now())) return respond('Регистрация закрыта: до начала осталось не больше 3 минут, либо капт завершён, устарел или относится к нейтральной территории.')
 				const guild = interaction.guild
 				// Joining/leaving/sorting uses the cache maintained by GuildMembers events.
-				if (create) await guild.members.fetch({ time: 30000 })
+				if (create) await loadMembers(guild)
 				const bindings = await decisions(guild.id)
 				const reg = row.registration
 				reg.joins ||= {}; reg.declined ||= {}
