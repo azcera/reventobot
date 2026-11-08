@@ -225,7 +225,8 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 				if ((create || ['war_join', 'war_leave'].includes(match[1])) &&
 					(row.data.closed || row.data.neutral || moscowDay(row.data.startAt) < moscowDay(now()))) return respond('Капт завершён, устарел или относится к нейтральной территории.')
 				const guild = interaction.guild
-				await guild.members.fetch({ time: 30000 })
+				// Joining/leaving/sorting uses the cache maintained by GuildMembers events.
+				if (create) await guild.members.fetch({ time: 30000 })
 				const bindings = await decisions(guild.id)
 				const reg = row.registration
 				reg.joins ||= {}; reg.declined ||= {}

@@ -184,6 +184,28 @@ test('creating registration is idempotent and joining stays waiting until API co
 	assert.match(plain(f.changes.findLast(next => plain(next).includes('war_join_'))), /Ожидание: 1/)
 })
 
+test('registration buttons work while full guild member requests are rate limited', async () => {
+	const f = fixture()
+	await f.service.poll()
+	await f.click('capt_api', f.row().announcement_id)
+	let requests = 0
+	f.guild.members.fetch = async () => {
+		requests++
+		throw new Error('Request with opcode 8 was rate limited. Retry after 20.127 seconds.')
+	}
+	for (let i = 0; i < 3; i++) {
+		assert.deepEqual(await f.click('war_join'), [])
+		assert.ok(f.row().registration.joins[f.member.id])
+		assert.match(plain(f.changes.at(-1)), /Ожидание: 1/)
+		assert.deepEqual(await f.click('war_sort'), [])
+		assert.deepEqual(await f.click('war_leave'), [])
+		assert.equal(f.row().registration.joins[f.member.id], undefined)
+		assert.match(plain(f.changes.at(-1)), /Ожидание: 0/)
+	}
+	assert.equal(requests, 0)
+	assert.deepEqual(f.logs, [])
+})
+
 test('game roster includes users who never clicked join and refuses ambiguous Discord bindings', () => {
 	const f = fixture()
 	f.members.set('other', { ...f.member, id: 'other' })
