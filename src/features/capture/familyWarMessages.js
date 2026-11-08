@@ -28,7 +28,8 @@ function registrationMessage(war, registration, guild, decisions, store, now = D
 	const waiting = rows.filter(row => !row.confirmed)
 	const list = entries => entries.map((row, index) => {
 		const label = row.userId ? `<@${row.userId}>` : `${text(row.name)} | ${row.static}`
-		return `${index + 1}. ${row.confirmed ? '✅' : '⏳'} ${label}${row.declined ? ' — отказ в Discord' : ''}${row.conflict ? ' — ⚠️ проверьте привязку static' : ''}`
+		const marker = row.confirmed ? (registration.joins?.[row.userId] && !row.declined ? '✅' : '🎮') : '⏳'
+		return `${index + 1}. ${marker} ${label}${row.declined ? ' — отказ в Discord' : ''}${row.conflict ? ' — ⚠️ проверьте привязку static' : ''}`
 	}).join('\n') || 'Пока пусто'
 	const closed = registrationClosed(war, now) || Boolean(registration.closedAt)
 	const freshness = (war.rosterFresh ? '' : '\n⚠️ API не передал состав. ' + (war.rosterUpdatedAt ? 'Показан последний известный.' : 'Подтверждённый состав пока неизвестен.')) +
@@ -36,7 +37,7 @@ function registrationMessage(war, registration, guild, decisions, store, now = D
 	const container = new ContainerBuilder()
 		.addTextDisplayComponents(textBlock(store.text('capture.title', { target: `капт против ${text(war.enemy)}` })),
 			textBlock(store.text('capture.time', { time: timestamp(war.startAt) })),
-			textBlock(`Карта: ${text(war.map)} (${text(war.zone)}) · Статус API: ${text(war.status || 'не указан')}\n✅ — состав игры · ⏳ — ожидание. ${closed ? 'Регистрация закрыта. Обновление остановлено.' : 'Время и состав обновляются автоматически.'}${freshness}`))
+			textBlock(`Карта: ${text(war.map)} (${text(war.zone)}) · Статус API: ${text(war.status || 'не указан')}\n🎮 — в игре без подтверждения в Discord · ✅ — в игре и нажал «Принять» · ⏳ — нажал «Принять», ожидает записи в игре. ${closed ? 'Регистрация закрыта. Обновление остановлено.' : 'Время и состав обновляются автоматически.'}${freshness}`))
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(textBlock(`Сортировка ${registration.sortMode === 'time' ? 'по времени записи' : 'по роли и времени записи'}`),
 			textBlock(`### В игре: ${confirmed.length}\n${list(confirmed)}`))

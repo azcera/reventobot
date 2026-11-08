@@ -117,7 +117,7 @@ test('testcapt preserves the saved roster when API omits it and repeated executi
 	const message = { id: '999999999999999999', guild: f.guild, member: f.member, reply: async text => replies.push(text) }
 	await Promise.all([f.service.createTestRegistration(message), f.service.createTestRegistration(message)])
 	assert.equal(f.sent.length, 1)
-	assert.match(plain(f.sent[0]), /✅ <@222222222222222222>/)
+	assert.match(plain(f.sent[0]), /🎮 <@222222222222222222>/)
 	assert.equal(replies.length, 2)
 })
 
@@ -233,6 +233,27 @@ test('leaving a game-confirmed player marks refusal but never changes the API ro
 	await f.service.poll(); await f.click('capt_api', f.row().announcement_id); await f.click('war_leave')
 	assert.equal(f.row().data.roster.length, 1)
 	assert.match(plain(f.changes.findLast(next => plain(next).includes('war_join_'))), /отказ в Discord/)
+})
+
+test('game roster distinguishes Discord acceptance and resets the marker after leaving', async () => {
+	const f = fixture()
+	f.setCaptures([rawWar({ players: { 1698: [{ id: 231542, name: 'Maya Well' }, { id: 9, name: 'No Discord' }] } })])
+	await f.service.poll(); await f.click('capt_api', f.row().announcement_id)
+	const output = () => plain(f.changes.findLast(next => plain(next).includes('war_join_')))
+	assert.match(output(), /🎮 <@222222222222222222>/)
+	assert.match(output(), /🎮 No Discord \| 9/)
+	assert.doesNotMatch(output(), /✅ <@222222222222222222>/)
+	await f.click('war_join')
+	assert.match(output(), /✅ <@222222222222222222>/)
+	assert.match(output(), /🎮 No Discord \| 9/)
+	assert.match(output(), /В игре: 2/)
+	assert.match(output(), /Ожидание: 0/)
+	await f.click('war_leave')
+	assert.match(output(), /🎮 <@222222222222222222> — отказ в Discord/)
+	assert.doesNotMatch(output(), /✅ <@222222222222222222>/)
+	await f.click('war_join')
+	assert.match(output(), /✅ <@222222222222222222>/)
+	assert.doesNotMatch(output(), /отказ в Discord/)
 })
 
 test('API errors do not erase stored snapshots; non-admin cannot create or change sort', async () => {
