@@ -171,6 +171,38 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		}, nextPollAt(now()) - now())
 		timer.unref?.()
 	}
+	async function createTestRegistration(message) {
+		if (!message.guild || message.guild.id !== env.GUILD_ID) return
+		const admin = message.member.permissions.has(PermissionFlagsBits.Administrator) ||
+			store.roleIds('ADMIN_ROLES').some(id => message.member.roles.cache.has(id))
+		if (!admin) return message.reply('Недостаточно прав.')
+		await ensureSchema()
+		const captures = await fetchWars()
+		const wars = captures.map(raw => normalizeWar(raw, rules, null, now())).filter(war =>
+			war && war.closed && !war.neutral && war.startAt <= now())
+		wars.sort((a, b) => b.startAt - a.startAt || b.apiId - a.apiId)
+		let source = wars[0]
+		if (!source) return message.reply('API не вернул ни одного завершённого капта нашей семьи.')
+		const previous = await load(source.key, message.guild.id)
+		source = normalizeWar(source.raw, rules, previous?.data, now())
+		if (!source.rosterUpdatedAt) return message.reply('Состав последнего завершённого капта неизвестен: API и база не содержат снимка для проверки.')
+		const key = `${SERVER}:${message.id}`
+		return locked(`${message.guild.id}:${key}`, async () => {
+			let row = await load(key, message.guild.id)
+			if (!row) row = {
+				guild_id: message.guild.id, war_key: key,
+				data: { ...source, key, apiId: message.id, closed: false, startAt: now(),
+					testSource: { apiId: source.apiId, startAt: source.startAt } },
+				registration: { joins: {}, declined: {}, seen: {}, sortMode: 'priority', page: 0 },
+				registration_channel_id: store.getSetting('PLUS_CHANNEL_ID')
+			}
+			await message.guild.members.fetch({ time: 30000 })
+			const bindings = await decisions(message.guild.id)
+			noteRoster(row)
+			if (!row.registration_id) await deliver(row, 'registration', registrationMessage(row.data, row.registration, message.guild, bindings, store, now()))
+			return message.reply(`Тестовая регистрация по капту №${source.apiId}: ${url(row)}`)
+		})
+	}
 	async function handle(interaction) {
 		const match = /^(capt_api|war_join|war_leave|war_sort|war_page)_RU8_([1-9]\d*)(?:_(-?\d+))?$/.exec(interaction.customId)
 		if (!match || !interaction.guild || interaction.guild.id !== env.GUILD_ID) return
@@ -222,7 +254,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		}
 	}
 	return {
-		poll, handle,
+		poll, handle, createTestRegistration,
 		start() { if (stopped) { stopped = false; schedule() } },
 		async stop() { stopped = true; clearTimer(timer); await polling?.catch(() => {}) }
 	}

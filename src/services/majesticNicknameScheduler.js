@@ -1,5 +1,5 @@
-const INTERVAL_MS = 5 * 60 * 1000
-const actor = { id: 'majestic-auto', name: 'Автообновление ников' }
+const INTERVAL_MS = 10 * 60 * 1000
+const actor = { id: 'majestic-auto', name: 'Автосинхронизация Majestic' }
 
 function createMajesticNicknameScheduler({ client, sync, store, env = process.env,
 	logger = console, setTimer = setTimeout, clearTimer = clearTimeout }) {
@@ -23,7 +23,7 @@ function createMajesticNicknameScheduler({ client, sync, store, env = process.en
 			await sync.wait(guild)
 		})()
 		try { await active }
-		catch { logger.error('[Majestic] Не удалось запустить автообновление ников. Проверьте базу и подключение Discord.') }
+		catch { logger.error('[Majestic] Не удалось запустить автосинхронизацию. Проверьте базу и подключение Discord.') }
 		finally { active = null; runningGuild = null; schedule(INTERVAL_MS) }
 	}
 	return {

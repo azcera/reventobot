@@ -78,7 +78,7 @@ function renderMajestic() {
 	status.replaceChildren()
 	if (!data.configured) status.append(node('p', 'Задай MAJESTIC_SESSION_ID, MAJESTIC_SERVER и MAJESTIC_CHARACTER_ID в окружении бота или .env.majestic.local.', 'error'))
 	if (data.run) {
-		const kind = { apply: 'Применение', preview: 'Предпросмотр', nicknames: 'Автообновление ников' }[data.run.kind] || data.run.kind
+		const kind = { apply: 'Применение', preview: 'Предпросмотр', nicknames: 'Автообновление ников', sync: 'Автосинхронизация ников и рангов' }[data.run.kind] || data.run.kind
 		status.append(node('p', `${kind}: ${majesticLabels[data.run.status] || data.run.status} · ${data.run.completed}/${data.run.total}`))
 		if (data.run.stopRequested) status.append(node('p', 'Запрошена остановка. Текущий запрос Discord может завершиться.'))
 		if (data.run.error) status.append(node('p', data.run.error, 'error'))

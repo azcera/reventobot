@@ -38,6 +38,7 @@ function registrationMessage(war, registration, guild, decisions, store, now = D
 			textBlock(`Карта: ${text(war.map)} (${text(war.zone)}) · Статус API: ${text(war.status || 'не указан')}\n✅ — состав игры · ⏳ — ожидание. Время и состав обновляются автоматически.${freshness}`))
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(textBlock(`### В игре: ${confirmed} · Ожидание: ${rows.length - confirmed}\nСортировка ${registration.sortMode === 'time' ? 'по времени записи' : 'по роли и времени записи'} · Страница ${page + 1}/${pages}\n${content}`))
+	if (war.testSource) container.addTextDisplayComponents(textBlock(`🧪 Тестовая регистрация. Снимок капта №${war.testSource.apiId} от ${timestamp(war.testSource.startAt)}. Состав зафиксирован; кнопки активны до конца текущего дня по Москве.`))
 	const controls = new ActionRowBuilder().addComponents(
 		new ButtonBuilder().setCustomId(`war_join_${suffix(war)}`).setLabel(store.text('capture.2')).setStyle(ButtonStyle.Success).setDisabled(closed),
 		new ButtonBuilder().setCustomId(`war_leave_${suffix(war)}`).setLabel(store.text('capture.3')).setStyle(ButtonStyle.Danger).setDisabled(closed),

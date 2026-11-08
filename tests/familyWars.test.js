@@ -44,9 +44,9 @@ function fixture() {
 		fetchImpl: async () => { fetches++; if (failFetch) throw new Error('network unavailable'); return { ok: true, json: async () => ({ code: 200, status: true, result: { serverId: 'RU8', captures } }) } } }
 	const service = createFamilyWars(options)
 	const row = () => saved.get(guildId + ':RU8:45767')
-	async function click(kind, messageId, isAdmin = true) {
+	async function click(kind, messageId, isAdmin = true, apiId = 45767) {
 		const replies = []
-		await service.handle({ customId: `${kind}_RU8_45767`, guild,
+		await service.handle({ customId: `${kind}_RU8_${apiId}`, guild,
 			user: { id: userId }, member: { ...member, permissions: { has: () => isAdmin } },
 			message: { id: messageId || row().registration_id }, deferReply: async () => {}, deferUpdate: async () => {},
 			editReply: async value => replies.push(value.content), followUp: async value => replies.push(value.content) })
@@ -55,6 +55,69 @@ function fixture() {
 	return { service, options, row, click, saved, sent, logs, changes, member, members, guild, channel,
 		setCaptures(value) { captures = value }, setClock(value) { clock = Date.parse(value) }, setFailure(value) { failFetch = value }, fetches: () => fetches }
 }
+
+test('testcapt copies the latest finished roster, isolates it and uses real join buttons after restart', async () => {
+	const f = fixture()
+	const finished = rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z',
+		players: { 1698: [{ id: 231542, name: 'Maya Well' }] } })
+	f.setCaptures([finished, rawWar({ id: 2, status: 'finished', startAt: '2026-11-06T12:30:00Z', players: { 1698: [] } }), rawWar()])
+	await f.service.poll()
+	const original = structuredClone(f.row())
+	const replies = []
+	const message = { id: '999999999999999999', guild: f.guild, member: f.member,
+		client: { familyWars: f.service }, reply: async text => replies.push(text) }
+	await require('../src/commands/admin/testcapt').execute(message)
+	const row = () => f.saved.get(f.guild.id + ':RU8:' + message.id)
+	assert.deepEqual(row().data.roster, original.data.roster)
+	assert.equal(row().data.testSource.apiId, 45767)
+	assert.match(replies[0], /Тестовая регистрация/)
+	assert.match(plain(f.sent.at(-1)), /Тестовая регистрация/)
+	const controls = JSON.parse(plain(f.sent.at(-1)))[0].components.flatMap(component => component.components || [])
+	assert.equal(controls.find(button => button.custom_id?.startsWith('war_join')).disabled, false)
+	const restarted = createFamilyWars(f.options)
+	const join = async () => restarted.handle({ customId: `war_join_RU8_${message.id}`, guild: f.guild,
+		user: { id: f.member.id }, member: f.member, message: { id: row().registration_id },
+		deferUpdate: async () => {}, followUp: async () => {} })
+	await join()
+	assert.match(plain(f.changes.at(-1)), /✅ <@222222222222222222>/)
+	assert.match(plain(f.changes.at(-1)), /Ожидание: 0/)
+	f.member.nickname = 'Maya | 999'
+	await join()
+	assert.match(plain(f.changes.at(-1)), /⏳ <@222222222222222222>/)
+	assert.match(plain(f.changes.at(-1)), /Ожидание: 1/)
+	await f.service.poll()
+	assert.deepEqual(row().data.roster, original.data.roster)
+	assert.deepEqual(f.row(), original)
+})
+
+test('testcapt refuses unauthorized users and missing historical roster', async () => {
+	const f = fixture(), replies = []
+	const message = { id: '999999999999999999', guild: f.guild,
+		member: { ...f.member, permissions: { has: () => false } }, reply: async text => replies.push(text) }
+	await f.service.createTestRegistration(message)
+	assert.match(replies.pop(), /прав/)
+	assert.equal(f.fetches(), 0)
+	message.member = f.member
+	await f.service.createTestRegistration(message)
+	assert.match(replies.pop(), /ни одного завершённого/)
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z' })])
+	await f.service.createTestRegistration(message)
+	assert.match(replies.pop(), /Состав.*неизвестен/)
+	assert.equal(f.sent.length, 0)
+})
+
+test('testcapt preserves the saved roster when API omits it and repeated execution sends once', async () => {
+	const f = fixture(), replies = []
+	const finished = { status: 'finished', startAt: '2026-11-07T12:30:00Z' }
+	f.setCaptures([rawWar({ ...finished, players: { 1698: [{ id: 231542, name: 'Maya Well' }] } })])
+	await f.service.poll()
+	f.setCaptures([rawWar(finished)])
+	const message = { id: '999999999999999999', guild: f.guild, member: f.member, reply: async text => replies.push(text) }
+	await Promise.all([f.service.createTestRegistration(message), f.service.createTestRegistration(message)])
+	assert.equal(f.sent.length, 1)
+	assert.match(plain(f.sent[0]), /✅ <@222222222222222222>/)
+	assert.equal(replies.length, 2)
+})
 
 test('poll schedule stays at second 05 with Moscow boundaries, dates and year rollover', () => {
 	for (const [from, to] of [

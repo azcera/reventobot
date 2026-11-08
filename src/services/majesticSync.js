@@ -150,39 +150,55 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		async autoNicknames(guild) {
 			const item = await entry(guild.id)
 			if (item.busy || !store.getSetting('MAJESTIC_AUTO_NICKNAMES')) return null
-			const actor = { id: 'majestic-auto', name: 'Автообновление ников' }
-			return start(guild, actor, 'nicknames', async current => {
-				const report = await snapshot(guild, current.state.decisions, { nicknamesOnly: true })
-				const selected = report.rows.filter(row => row.status === 'change' && row.nickname)
+			const actor = { id: 'majestic-auto', name: 'Автосинхронизация Majestic' }
+			return start(guild, actor, 'sync', async current => {
+				const report = await snapshot(guild, current.state.decisions)
+				for (const row of report.rows) {
+					if (current.state.run.stopRequested || !store.getSetting('MAJESTIC_AUTO_NICKNAMES')) {
+						current.state.run.stopRequested = true
+						break
+					}
+					// gameRank is present only for an unambiguous static found in the family.
+					if (!row.static || !row.gameRank || current.state.decisions[row.discordId]?.static) continue
+					await audit(actor, 'majestic.bind.auto', row.discordId, { static: row.static })
+					current.state.decisions[row.discordId] = { ...current.state.decisions[row.discordId], static: row.static }
+					if (current.state.preview) current.state.preview.invalidated = true
+				}
+				const selected = report.rows.filter(row => row.status === 'change')
 				current.state.run.total = selected.length
 				current.state.run.summary = report.summary
 				await save(guild.id, current)
 				for (const row of selected) {
 					if (!store.getSetting('MAJESTIC_AUTO_NICKNAMES')) current.state.run.stopRequested = true
 					if (current.state.run.stopRequested) break
-					const result = { discordId: row.discordId, before: row.currentNickname, nickname: row.nickname, status: 'skipped' }
+					const result = { discordId: row.discordId, before: row.currentNickname, nickname: row.nickname,
+						addRoles: row.addRoles, removeRoles: row.removeRoles, status: 'skipped' }
 					current.state.run.results.push(result)
 					const member = await memberForChange(guild, row, result)
 					if (member && (member.nickname !== row.currentNickname || JSON.stringify([...member.roles.cache.keys()].sort()) !== JSON.stringify(row.currentRoleIds))) {
 						result.error = 'Ник или роли изменились после проверки.'
 					} else if (member) {
-						await audit(actor, 'majestic.nickname.request', row.discordId, { runId: current.state.run.id, ...result })
+						await audit(actor, 'majestic.member.request', row.discordId, { runId: current.state.run.id, ...result })
 						if (!store.getSetting('MAJESTIC_AUTO_NICKNAMES')) current.state.run.stopRequested = true
 						if (current.state.run.stopRequested) break
 						if (current.state.preview) current.state.preview.invalidated = true
 						result.status = 'applying'
 						await save(guild.id, current)
+						const payload = { reason: `Majestic auto sync; run ${current.state.run.id}` }
+						if (row.nickname) payload.nick = row.nickname
+						if (row.addRoles.length || row.removeRoles.length) payload.roles = [...member.roles.cache.keys()]
+							.filter(id => id !== guild.id && !row.removeRoles.includes(id)).concat(row.addRoles)
 						try {
-							await diagnose('discord.nickname.edit:' + row.discordId, guild.id, () => member.edit({ nick: row.nickname, reason: `Majestic nickname sync; run ${current.state.run.id}` }))
+							await diagnose('discord.member.edit:' + row.discordId, guild.id, () => member.edit(payload))
 							result.status = 'applied'
 						} catch {
 							result.status = 'failed'
-							result.error = 'Discord не подтвердил обновление ника. Следующая проверка прочитает актуальное состояние.'
+							result.error = 'Discord не подтвердил изменение ника или ролей. Следующая проверка прочитает актуальное состояние.'
 						}
 					}
 					current.state.run.completed++
 					await save(guild.id, current)
-					await audit(actor, 'majestic.nickname.result', row.discordId, { runId: current.state.run.id, ...result })
+					await audit(actor, 'majestic.member.result', row.discordId, { runId: current.state.run.id, ...result })
 				}
 			})
 		},

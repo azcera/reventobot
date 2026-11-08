@@ -13,11 +13,12 @@ function fixture() {
 	return { timers, calls, scheduler, sync, store, env }
 }
 
-test('nickname scheduler starts immediately then waits five minutes after completion', async () => {
+test('sync scheduler starts immediately then waits ten minutes after completion', async () => {
 	const f = fixture(); f.scheduler.start(); f.scheduler.start()
 	assert.equal(f.timers.length, 1); assert.equal(f.timers[0].delay, 0)
 	await f.timers[0].callback()
 	assert.deepEqual(f.calls, [['sync', 'guild'], ['wait']])
+	assert.equal(INTERVAL_MS, 10 * 60 * 1000)
 	assert.equal(f.timers[1].delay, INTERVAL_MS)
 	await f.scheduler.stop()
 	await f.timers[1].callback()
