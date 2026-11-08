@@ -29,7 +29,7 @@ module.exports = client => {
 			try {
 				await registerAdminApplicationCommands(client, guild, store)
 			} catch (error) {
-				console.error('❌ Ошибка регистрации команд приложения или обновления панели:', error)
+				console.error('❌ Ошибка регистрации команд приложения:', error)
 			}
 			try {
 				await updateLists(guild)

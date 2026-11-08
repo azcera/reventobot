@@ -7,6 +7,22 @@ const { applyFields } = require('../src/dashboard/messageEditor')
 const { createBroadcastService } = require('../src/services/telegramBroadcastService')
 const { memoryPool, createFixture } = require('./helpers/dashboardFixture')
 
+test('schedule API returns local recurring events and upcoming Moscow times behind existing authentication', async t => {
+	const f = await createFixture(); t.after(() => f.close())
+	assert.equal((await f.request('/api/schedule')).status, 401)
+	await f.login()
+	const response = await f.request('/api/schedule')
+	assert.equal(response.status, 200)
+	assert.equal(response.headers.get('cache-control'), 'no-store')
+	const data = await response.json()
+	assert.equal(data.project, 'MAJESTIC')
+	assert.equal(data.timezone, 'Europe/Moscow')
+	assert.equal(data.events.length, 20)
+	assert.equal(data.upcoming.length, 16)
+	assert.ok(data.upcoming.every(event => event.timestamp > data.generatedAt))
+	assert.deepEqual(data.upcoming.map(event => event.timestamp), data.upcoming.map(event => event.timestamp).sort((a, b) => a - b))
+})
+
 test('OAuth login binds state to browser, does not replay, protects cookies, enforces CSRF and logs out', async t => {
 	const f = await createFixture(); t.after(() => f.close())
 	assert.equal((await f.request('/api/session')).status, 401)

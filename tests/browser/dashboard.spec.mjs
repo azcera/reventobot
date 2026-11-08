@@ -127,6 +127,42 @@ test('errors, guides and discard confirmations are accessible modal dialogs', as
 	expect(errors).toEqual([])
 })
 
+test('modal keeps its close tooltip inside and locks background scrolling', async ({ page, isMobile }) => {
+	await setup(page)
+	await page.goto('/#builder')
+	await page.evaluate(() => { document.body.style.minHeight = '300vh'; window.scrollTo(0, 200) })
+	await page.getByRole('button', { name: 'Руководство по разделу' }).click()
+	const dialog = page.getByRole('dialog')
+	await expect(dialog).toBeVisible()
+	const close = dialog.getByRole('button', { name: 'Закрыть окно' })
+	if (isMobile) { await page.keyboard.press('Tab'); await close.focus() }
+	else await close.hover()
+	const tooltip = close.getByRole('tooltip')
+	await expect(tooltip).toBeVisible()
+	const bounds = await dialog.boundingBox()
+	const tip = await tooltip.boundingBox()
+	expect(tip.x).toBeGreaterThanOrEqual(bounds.x)
+	expect(tip.y).toBeGreaterThanOrEqual(bounds.y)
+	expect(tip.x + tip.width).toBeLessThanOrEqual(bounds.x + bounds.width)
+	expect(tip.y + tip.height).toBeLessThanOrEqual(bounds.y + bounds.height)
+	expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+	expect(await page.evaluate(() => [document.documentElement, document.body].map(element => getComputedStyle(element).overflowY))).toEqual(['hidden', 'hidden'])
+	const scrollY = await page.evaluate(() => window.scrollY)
+	await page.mouse.move(2, 2)
+	await page.mouse.wheel(0, 500)
+	await page.keyboard.press('PageDown')
+	await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollY)
+	await dialog.evaluate(element => { element.scrollTop = element.scrollHeight })
+	if (await dialog.evaluate(element => element.scrollHeight > element.clientHeight)) {
+		expect(await dialog.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+	}
+	await page.keyboard.press('Escape')
+	await expect(dialog).toHaveCount(0)
+	expect(await page.evaluate(() => [document.documentElement, document.body].every(element => getComputedStyle(element).overflowY !== 'hidden'))).toBe(true)
+	await page.evaluate(() => window.scrollBy(0, 100))
+	expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollY)
+})
+
 test('builder import edits the original with its revision and copies through a separate endpoint', async ({ page }) => {
 	const { calls, errors } = await setup(page)
 	await page.goto('/#builder')

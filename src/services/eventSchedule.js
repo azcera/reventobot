@@ -5,8 +5,8 @@ const {
 } = require('discord.js')
 const path = require('path')
 const { IMAGES_PATH } = require('../config/path')
+const events = require('../config/eventSchedule')
 
-const SOURCE = 'https://mitsuki-hub.ru/api/schedule?project=MAJESTIC'
 const UPDATE_INTERVAL = 15 * 60000
 const DAY = 86400000
 const MSK = 3 * 3600000
@@ -38,6 +38,11 @@ function selectionId(event) {
 	return `${event.id}_${Math.floor(event.timestamp / 1000)}`
 }
 
+function getSchedule(now = Date.now()) {
+	return { project: 'MAJESTIC', timezone: 'Europe/Moscow', generatedAt: now,
+		events: structuredClone(events), upcoming: upcomingEvents(events, now) }
+}
+
 function buildSchedule(events, updatedAt, stale, now = Date.now()) {
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
@@ -67,37 +72,16 @@ function buildSchedule(events, updatedAt, stale, now = Date.now()) {
 	}
 }
 
-function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Date.now }) {
-	let events = [], updatedAt = 0, lastAttempt = 0, stale = true, timer, queue = Promise.resolve()
+function createEventSchedule({ client, pool, store, now = Date.now }) {
+	let timer, queue = Promise.resolve()
 	function serialized(task) {
 		const result = queue.then(task)
 		queue = result.catch(() => {})
 		return result
 	}
-	async function refresh() {
-		if (lastAttempt && now() - lastAttempt < UPDATE_INTERVAL) return
-		lastAttempt = now()
-		try {
-			const response = await fetchImpl(SOURCE, { signal: AbortSignal.timeout(10000), cache: 'no-store' })
-			if (!response.ok) throw new Error(`HTTP ${response.status}`)
-			const data = await response.json()
-			if (!Array.isArray(data.events) || !data.events.length || data.events.length > 30 ||
-				data.events.some(event => !event || !/^[a-zA-Z0-9-]{1,40}$/.test(event.id) ||
-					typeof event.label !== 'string' || !event.label.length || event.label.length > 100 ||
-					typeof event.time !== 'string' || event.time.length > 30 ||
-					(event.note != null && (typeof event.note !== 'string' || event.note.length > 200)) ||
-					!Array.isArray(event.days) || event.days.some(day => !WEEKDAYS.includes(day))) ||
-				!upcomingEvents(data.events, now()).length) throw new Error('Некорректное расписание')
-			events = data.events
-			updatedAt = now()
-			stale = false
-		} catch (error) {
-			stale = true
-			console.error('[Schedule] Не удалось обновить расписание:', error.message)
-		}
-	}
 	async function updateChannel(channel, messageId) {
-		const payload = buildSchedule(events, updatedAt, stale, now())
+		const snapshot = getSchedule(now())
+		const payload = buildSchedule(snapshot.events, snapshot.generatedAt, false, snapshot.generatedAt)
 		if (messageId) {
 			try {
 				const message = await channel.messages.fetch(messageId)
@@ -119,8 +103,6 @@ function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Dat
 		}
 	}
 	async function tick() {
-		await refresh()
-		if (!events.length) return
 		const { rows } = await pool.query('SELECT channel_id, message_id FROM event_schedule_messages')
 		for (const row of rows) {
 			try {
@@ -139,13 +121,10 @@ function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Dat
 		async stop() { clearInterval(timer); await queue },
 		canCreateGroup(member) { return canCreateGroup(member, store) },
 		resolveSelection(id) {
-			if (stale || now() - updatedAt > UPDATE_INTERVAL + 60000) return null
 			return upcomingEvents(events, now()).find(event => selectionId(event) === id) || null
 		},
 		publish(channel) {
 			return serialized(async () => {
-				await refresh()
-				if (stale || !events.length) throw new Error('Не удалось получить актуальное расписание Mitsuki Hub. Повторите позже.')
 				const { rows } = await pool.query('SELECT message_id FROM event_schedule_messages WHERE channel_id = $1', [channel.id])
 				await updateChannel(channel, rows[0]?.message_id)
 			})
@@ -153,4 +132,4 @@ function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Dat
 	}
 }
 
-module.exports = { createEventSchedule, upcomingEvents, buildSchedule, canCreateGroup, selectionId }
+module.exports = { createEventSchedule, upcomingEvents, buildSchedule, canCreateGroup, selectionId, getSchedule }

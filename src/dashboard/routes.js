@@ -7,6 +7,7 @@ const permanent = require('./permanentMessages')
 const navigation = require('./navigationMessages')
 const { createMajesticSync } = require('../services/majesticSync')
 const { syncRolePrefixes } = require('../services/rolePrefixSync')
+const { getSchedule } = require('../services/eventSchedule')
 
 function validateTemplates(values) {
 	if (!values || typeof values !== 'object' || Array.isArray(values) || !Object.keys(values).length) throw problem(400, 'Выберите шаблон.')
@@ -106,6 +107,7 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client, pool
 		} catch (error) { respondError(res, error) }
 	})
 	app.get('/api/session', (req, res) => res.json({ user: req.dashboardUser, csrf: req.csrf, guild: { id: req.guild.id, name: req.guild.name } }))
+	app.get('/api/schedule', (req, res) => res.set('Cache-Control', 'no-store').json(getSchedule()))
 	const sync = client.majesticSync = majestic || client.majesticSync || createMajesticSync({ pool, store })
 	app.get('/api/majestic', async (req, res) => {
 		try { res.json(await sync.state(req.guild)) } catch { res.status(503).json({ error: 'Не удалось загрузить состояние Majestic из базы.' }) }

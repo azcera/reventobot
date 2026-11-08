@@ -11,27 +11,19 @@ require.cache[autoDeletePath] = { id: autoDeletePath, filename: autoDeletePath, 
 	replyWithAutoDelete: (interaction, payload) => interaction.reply(payload),
 	followUpEphemeralWithAutoDelete: (interaction, payload) => interaction.followUp(payload)
 } }
-const { registerAdminApplicationCommands, stripPanelActions } = require('../src/services/adminApplicationCommands')
+const { registerAdminApplicationCommands } = require('../src/services/adminApplicationCommands')
 const { store: dashboard } = require('../src/dashboard/store')
 
 function fixture() {
-	const registered = [], edited = [], replies = [], modals = [], moved = []
-	const store = { roleIds: () => ['admin-role'], getSetting: () => 'panel-channel' }
-	const button = id => ({ type: 2, style: 1, label: id, custom_id: id })
-	const section = id => ({ type: 9, components: [{ type: 10, content: id }], accessory: button(id) })
-	const panel = { type: 17, components: [
-		{ type: 10, content: 'Панель' }, ...['capt', 'group', 'move-all', 'keep'].map(section),
-		{ type: 1, components: [button('capt'), button('keep-row')] }
-	] }
-	const message = { author: { id: 'bot' }, components: [{ toJSON: () => panel }], edit: async payload => edited.push(payload) }
-	const messages = new Collection([['panel', message], ['foreign', { ...message, author: { id: 'other' }, edit: () => assert.fail('foreign message changed') }]])
+	const registered = [], replies = [], modals = [], moved = []
+	const store = { roleIds: () => ['admin-role'], getSetting: () => assert.fail('obsolete panel setting requested') }
 	const target = { id: 'target', type: ChannelType.GuildVoice, name: '🔊 Общий', members: new Collection() }
 	const source = { id: 'source', type: ChannelType.GuildVoice, name: '🔊 Другой', members: new Collection([
 		['person', { voice: { setChannel: async channel => moved.push(channel.id) } }]
 	]) }
 	const guild = { id: 'guild', commands: { create: async data => registered.push(data) },
 		members: { me: { permissions: { has: () => true } } },
-		channels: { fetch: async () => ({ messages: { fetch: async () => messages } }), cache: new Collection([[target.id, target], [source.id, source]]) } }
+		channels: { fetch: async () => assert.fail('obsolete panel channel requested'), cache: new Collection([[target.id, target], [source.id, source]]) } }
 	let listener
 	const client = { user: { id: 'bot' }, commands: new Collection([['unrelated', { name: 'unrelated' }]]), on: (event, callback) => { listener = callback } }
 	function interaction(commandName, kind = 'command') {
@@ -43,23 +35,17 @@ function fixture() {
 			showModal: async modal => modals.push(modal.toJSON()), deferReply: async () => {},
 			reply: async payload => replies.push(payload), editReply: async payload => replies.push(payload) }
 	}
-	return { client, guild, store, registered, edited, replies, modals, moved, panel, message, interaction,
+	return { client, guild, store, registered, replies, modals, moved, interaction,
 		async register() { await registerAdminApplicationCommands(client, guild, store) },
 		listen() { require('../src/events/interactionCreate')(client); return event => listener(event) } }
 }
 
-test('registers slash and user commands without replacing other commands and removes panel buttons', async () => {
+test('registers slash and user commands without replacing other commands or accessing the deleted panel', async () => {
 	const f = fixture()
 	await f.register()
 	assert.deepEqual(f.registered.map(command => command.name), ['capt', 'group', 'move-all', 'Создать архив', 'Открыть архив'])
 	assert.deepEqual(f.registered.slice(-2).map(command => command.type), [2, 2])
 	assert.ok(f.client.commands.has('unrelated'))
-	assert.equal(f.edited.length, 1)
-	const after = f.edited[0].components[0]
-	assert.deepEqual(after.components.filter(component => component.accessory).map(component => component.accessory.custom_id), ['keep'])
-	assert.deepEqual(after.components.at(-1).components.map(component => component.custom_id), ['keep-row'])
-	assert.equal(f.panel.components.length, 6, 'input panel is not mutated')
-	assert.deepEqual(stripPanelActions(after), after, 'removal is idempotent')
 })
 
 test('commands open existing capture modal, direct three-field group modal and voice channel selector', async () => {

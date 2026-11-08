@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { Collection } = require('discord.js')
-const { upcomingEvents, buildSchedule, createEventSchedule, canCreateGroup, selectionId } = require('../src/services/eventSchedule')
+const { upcomingEvents, buildSchedule, createEventSchedule, canCreateGroup, selectionId, getSchedule } = require('../src/services/eventSchedule')
 
 const now = Date.parse('2026-11-08T20:46:00+03:00')
 const events = [
@@ -63,8 +63,24 @@ test('administrator and configured roles are accepted, regular members denied', 
 	assert.equal(canCreateGroup(member(false, ['member']), store), false)
 })
 
-test('publication survives restart, refreshes from source and refuses stale selections', async () => {
-	let currentTime = now, stored, sends = 0, edits = 0, sourceEvents = events, fail = false
+test('local schedule includes all recurring slots, special windows and Moscow rollover', () => {
+	const snapshot = getSchedule(now)
+	assert.equal(snapshot.timezone, 'Europe/Moscow')
+	assert.equal(snapshot.events.length, 20)
+	assert.equal(new Set(snapshot.events.map(event => event.id)).size, 20)
+	assert.deepEqual(snapshot.upcoming.slice(0, 4).map(event => [event.label, event.time]), [
+		['Тайники', '22:00'], ['Цеха', '22:45'], ['Дроп', '00:00'], ['Тайники', '02:00']
+	])
+	assert.deepEqual(snapshot.events.find(event => event.id === 'captures').days, ['пн', 'ср', 'пт', 'сб'])
+	assert.equal(snapshot.events.find(event => event.id === 'supply').is247, true)
+	assert.equal(snapshot.events.find(event => event.id === 'island').window, true)
+	assert.equal(snapshot.events.find(event => event.id === 'contraband').note, 'В 30 мин. каждого часа')
+	assert.equal(getSchedule(Date.parse('2026-12-31T23:59:00+03:00')).upcoming[0].timestamp, Date.parse('2027-01-01T00:00:00+03:00'))
+})
+
+test('publication works without external requests, survives restart and refuses expired selections', async t => {
+	t.mock.method(globalThis, 'fetch', async () => assert.fail('schedule must not make external requests'))
+	let currentTime = now, stored, sends = 0, edits = 0
 	const attachments = new Collection()
 	const channel = {
 		id: 'channel', messages: { fetch: async id => {
@@ -86,7 +102,6 @@ test('publication survives restart, refreshes from source and refuses stale sele
 	}
 	const dependencies = {
 		client: { channels: { fetch: async () => channel } }, store: { roleIds: () => [] }, now: () => currentTime,
-		fetchImpl: async () => ({ ok: !fail, status: fail ? 503 : 200, json: async () => ({ events: sourceEvents }) }),
 		pool: { query: async (sql, params) => {
 			if (sql.startsWith('INSERT')) stored = { channel_id: params[0], message_id: params[1] }
 			return { rows: sql.startsWith('SELECT') && stored ? [stored] : [] }
@@ -98,11 +113,10 @@ test('publication survives restart, refreshes from source and refuses stale sele
 		await Promise.all([service.publish(channel), service.publish(channel)])
 		assert.equal(sends, 1)
 		assert.equal(edits, 1)
-		const selection = selectionId(upcomingEvents(events, now)[0])
+		const selection = selectionId(getSchedule(now).upcoming[0])
 		assert.equal(service.resolveSelection(selection).label, 'Тайники')
 		assert.equal(service.resolveSelection('stash_1'), null)
-		currentTime += 15 * 60000
-		sourceEvents = events.filter(event => event.id !== 'stash')
+		currentTime = Date.parse('2026-11-08T22:00:00+03:00')
 		await service.publish(channel)
 		assert.equal(service.resolveSelection(selection), null)
 		await service.stop()
@@ -110,9 +124,9 @@ test('publication survives restart, refreshes from source and refuses stale sele
 		await service.start()
 		assert.equal(sends, 1)
 		assert.equal(edits, 3)
-		currentTime += 15 * 60000
-		fail = true
-		await assert.rejects(service.publish(channel), /актуальное расписание/)
-		assert.equal(service.resolveSelection(selectionId(upcomingEvents(sourceEvents, currentTime)[0])), null)
+		currentTime += 2 * 86400000
+		await service.publish(channel)
+		assert.equal(edits, 4)
+		assert.ok(service.resolveSelection(selectionId(getSchedule(currentTime).upcoming[0])))
 	} finally { await service.stop() }
 })

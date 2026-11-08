@@ -2,7 +2,7 @@ const { replyWithAutoDelete } = require('../../utils/autoDelete')
 
 module.exports = {
 	name: 'schedule',
-	description: 'Публикует обновляемое расписание Mitsuki Hub в текущем канале',
+	description: 'Публикует обновляемое расписание Majestic RP в текущем канале',
 	async execute(message) {
 		const schedule = message.client.eventSchedule
 		if (!schedule) return replyWithAutoDelete(message, { content: '❌ Расписание ещё не готово. Повторите позже.' })
@@ -12,7 +12,7 @@ module.exports = {
 			await message.delete().catch(() => {})
 		} catch (error) {
 			console.error('[Schedule] Публикация:', error)
-			await replyWithAutoDelete(message, { content: '❌ Не удалось опубликовать расписание. Проверьте доступность сайта и права бота в канале.' })
+			await replyWithAutoDelete(message, { content: '❌ Не удалось опубликовать расписание. Проверьте подключение к базе и права бота в канале.' })
 		}
 	}
 }

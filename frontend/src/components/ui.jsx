@@ -57,7 +57,7 @@ function Modal({ item, dismiss }) {
 			if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dismiss(false)
 		}}>
 		<div className="relative p-6 sm:p-8">
-			<IconButton icon={X} label="Закрыть окно" className="absolute right-4 top-4" onClick={() => dismiss(false)} />
+			<IconButton icon={X} label="Закрыть окно" className="modal-close absolute right-4 top-4" onClick={() => dismiss(false)} />
 			<div className="modal-glyph"><Icon aria-hidden="true" /></div>
 			<h2 id={titleId} className="mb-3 pr-7 text-xl font-semibold tracking-tight">{item.title}</h2>
 			{item.message && <p id={descriptionId} className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{item.message}</p>}

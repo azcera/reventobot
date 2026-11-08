@@ -1,0 +1,11 @@
+const { optionsMap } = require('../features/capture/groupOptions')
+
+// Время регулярных событий совпадает с формой создания группа.
+const labels = { 'ДРОП': 'Дроп', 'ДИЛЕРЫ': 'Дилеры', 'ЦЕХА': 'Цеха', 'ТАЙНИКИ': 'Тайники' }
+module.exports = [
+	...Object.entries(optionsMap).map(([id, event]) => ({ id, label: labels[event.target], time: event.time, days: [] })),
+	{ id: 'supply', label: 'Поставки', time: '24/7', is247: true, days: [], note: 'Безопасный час 15:00–16:00' },
+	{ id: 'contraband', label: 'Контрабанда', time: '24/7', is247: true, days: [], note: 'В 30 мин. каждого часа' },
+	{ id: 'island', label: 'Остров | ФЗ', time: '16:00–23:00', window: true, days: [], note: 'Нападение запрещено' },
+	{ id: 'captures', label: 'Капты', time: '15:00–21:00', window: true, days: ['пн', 'ср', 'пт', 'сб'] }
+]

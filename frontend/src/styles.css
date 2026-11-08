@@ -16,6 +16,7 @@
 
 @layer base {
 	:root { color-scheme: dark; }
+	:root:has(.modal[open]), :root:has(.modal[open]) body { overflow: hidden; }
 	body { @apply m-0 bg-bg font-sans text-sm text-text antialiased; }
 	button, a, summary { -webkit-tap-highlight-color: transparent; }
 	button, summary { @apply cursor-pointer; }
@@ -128,7 +129,8 @@
 	.empty-state > svg { @apply mb-1 size-7 text-muted/60; }
 	.empty-state h3 { @apply text-sm font-medium; }
 	.empty-state p { @apply max-w-sm text-xs leading-relaxed text-muted; }
-	.modal { @apply fixed inset-0 m-auto max-h-[calc(100dvh-32px)] w-[520px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-2xl border border-line bg-panel p-0 text-text shadow-2xl; }
+	.modal { @apply fixed inset-0 m-auto max-h-[calc(100dvh-32px)] w-[520px] max-w-[calc(100vw-32px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-panel p-0 text-text shadow-2xl; }
+	.modal-close .icon-tooltip { @apply bottom-auto left-auto right-0 top-full mb-0 mt-2 translate-x-0; }
 	.modal::backdrop { background: #0b0a10c9; backdrop-filter: blur(6px); }
 	.modal-glyph { @apply mb-5 flex size-11 items-center justify-center rounded-xl bg-brand-soft text-brand; }
 	.modal-glyph svg { @apply size-5; }
