@@ -21,6 +21,7 @@ function classify(snapshot, applications) {
 			reasons.set(member.id, snapshot.linked.get(member.id) ? 'не в составе семьи' : 'ник не по форме: нужен формат Имя | static')
 		}
 	}
+	manual.sort((a, b) => reasons.get(a.id).localeCompare(reasons.get(b.id), 'ru'))
 	return { manual, automatic, reasons }
 }
 
@@ -79,10 +80,16 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 		const pages = Math.max(1, Math.ceil(report.manual.length / 25))
 		for (let page = 0; page < pages; page++) {
 			const members = report.manual.slice(page * 25, (page + 1) * 25)
+			const groups = new Map()
+			for (const member of members) {
+				const reason = report.reasons.get(member.id)
+				if (!groups.has(reason)) groups.set(reason, [])
+				groups.get(reason).push(member)
+			}
 			const text = `## Участники вне семьи — ${report.manual.length}\n` +
 				`Страница ${page + 1}/${pages}. Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
 				(failed ? `⚠️ Не удалось автоматически кикнуть: ${failed}. Проверьте права и журнал бота.\n` : '') +
-				(members.map((member, index) => `${page * 25 + index + 1}. <@${member.id}> → ${report.reasons.get(member.id)}`).join('\n') || 'Список пуст.')
+				([...groups].map(([reason, group]) => `### ${reason}\n${group.map(member => `- <@${member.id}>`).join('\n')}`).join('\n\n') || 'Список пуст.')
 			const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
 			container.addActionRowComponents(new ActionRowBuilder().addComponents(
 				...['kick', 'roles'].map(action => new ButtonBuilder().setCustomId(`${PREFIX}open_${action}_${page}`)

@@ -79,8 +79,9 @@ test('publishes reasons and selection labels without the FRIEND and former-membe
 	await f.service.refresh(f.guild)
 	const payload = f.sent[0].components[0].toJSON()
 	const text = payload.components[0].content
-	assert.ok(text.includes(`<@${ids[0]}> → ник не по форме: нужен формат Имя | static`))
-	assert.ok(text.includes(`<@${ids[1]}> → не в составе семьи`))
+	assert.ok(text.includes(`### ник не по форме: нужен формат Имя | static\n- <@${ids[0]}>`))
+	assert.ok(text.includes(`### не в составе семьи\n- <@${ids[1]}>`))
+	assert.doesNotMatch(text, / → /)
 	assert.doesNotMatch(text, /FRIEND|Бывшие участники/)
 	assert.deepEqual(payload.components[1].components.map(button => button.label), ['Выбрать для кика', 'Выбрать для снятия ролей'])
 })
@@ -157,6 +158,28 @@ test('pagination supports more than 25 outsiders and messages can be identified 
 	const { data } = await f.open('kick', 2)
 	assert.equal(data.options.length, 10)
 	assert.deepEqual(data.options.map(option => option.value), [...f.members.keys()].slice(50))
+})
+
+test('groups mixed reasons before pagination and selects the same members shown on each page', async () => {
+	const f = fixture(60)
+	const ids = [...f.members.keys()]
+	const outside = ids.filter((id, index) => index % 2 === 1)
+	const malformed = ids.filter((id, index) => index % 2 === 0)
+	for (const id of outside) f.snapshot.linked.set(id, '999')
+	await f.service.refresh(f.guild)
+	const grouped = [...outside, ...malformed]
+	assert.equal(f.sent.length, 3)
+	for (let page = 0; page < 3; page++) {
+		const text = f.sent[page].components[0].toJSON().components[0].content
+		const expected = grouped.slice(page * 25, (page + 1) * 25)
+		assert.deepEqual([...text.matchAll(/<@(\d+)>/g)].map(match => match[1]), expected)
+		assert.equal((text.match(/### не в составе семьи/g) || []).length, page < 2 ? 1 : 0)
+		assert.equal((text.match(/### ник не по форме/g) || []).length, page > 0 ? 1 : 0)
+		for (const action of ['kick', 'roles']) {
+			const { data } = await f.open(action, page)
+			assert.deepEqual(data.options.map(option => option.value), expected)
+		}
+	}
 })
 
 test('family/API/database failures stop all moderation and leave existing list untouched', async () => {
