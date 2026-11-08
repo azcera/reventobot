@@ -1,12 +1,16 @@
 const {
 	ContainerBuilder, SectionBuilder, TextDisplayBuilder, ButtonBuilder,
-	ButtonStyle, MessageFlags, PermissionFlagsBits, escapeMarkdown
+	ButtonStyle, MessageFlags, PermissionFlagsBits, SeparatorBuilder, escapeMarkdown
 } = require('discord.js')
 
 const SOURCE = 'https://mitsuki-hub.ru/api/schedule?project=MAJESTIC'
 const DAY = 86400000
 const MSK = 3 * 3600000
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
+const EVENT_EMOJI = {
+	'Дроп': '📍', 'Тайники': '🔒', 'Дилеры': '💊', 'Цеха': '🏭',
+	'Поставки': '🚚', 'Контрабанда': '🛡️', 'Остров | ФЗ': '💀', 'Капты': '⚔️'
+}
 
 function canCreateGroup(member, store) {
 	return !!member && (member.permissions.has(PermissionFlagsBits.Administrator) ||
@@ -33,22 +37,24 @@ function selectionId(event) {
 function buildSchedule(events, updatedAt, stale, now = Date.now()) {
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
-	const container = new ContainerBuilder().addTextDisplayComponents(
-		new TextDisplayBuilder().setContent('## 📅 Расписание Majestic RP'))
+	const container = new ContainerBuilder().setAccentColor(0x5865F2).addTextDisplayComponents(
+		new TextDisplayBuilder().setContent('### Расписание Majestic RP'))
 	if (nearest) {
 		container.addSectionComponents(new SectionBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-				`### Ближайшее — ${escapeMarkdown(nearest.label)}\n**${nearest.time} МСК** · <t:${Math.floor(nearest.timestamp / 1000)}:R>`))
+				`**${EVENT_EMOJI[nearest.label] || '📌'} Ближайшее — ${escapeMarkdown(nearest.label)}**\n**${nearest.time} МСК** · <t:${Math.floor(nearest.timestamp / 1000)}:R>`))
 			.setButtonAccessory(new ButtonBuilder().setCustomId(`schedule_group_${selectionId(nearest)}`)
 				.setLabel('Создать групп').setStyle(ButtonStyle.Primary).setDisabled(stale)))
 	}
-	const rows = upcoming.map(event => `**${event.time}** — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`)
+	const rows = upcoming.slice(1, 4).map(event => `${EVENT_EMOJI[event.label] || '📌'} **${event.time}** — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`)
 	const special = events.filter(event => event.is247 || event.window || !/^([01]\d|2[0-3]):[0-5]\d$/.test(event.time))
-		.map(event => `**${escapeMarkdown(event.label)}** — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n${escapeMarkdown(event.note)}` : ''}`)
+		.map(event => `${EVENT_EMOJI[event.label] || '📌'} **${escapeMarkdown(event.label)}** — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n-# ${escapeMarkdown(event.note)}` : ''}`)
+	if (rows.length) container.addSeparatorComponents(new SeparatorBuilder())
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(rows.join('\n')))
+	if (special.length) container.addSeparatorComponents(new SeparatorBuilder())
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(special.join('\n\n').slice(0, 3000)))
 	container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-		[rows.join('\n'), special.join('\n\n')].filter(Boolean).join('\n\n').slice(0, 3500)))
-	container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-		`-# Время МСК · [Mitsuki Hub](https://mitsuki-hub.ru/) · синхронизация <t:${Math.floor(updatedAt / 1000)}:R>${stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : '\n-# «Создать групп» доступно администраторам и ADMIN_ROLES.'}`))
+		`-# Время МСК · обновлено <t:${Math.floor(updatedAt / 1000)}:R>${stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : ''}`))
 	return { flags: MessageFlags.IsComponentsV2, components: [container], allowedMentions: { parse: [] } }
 }
 
