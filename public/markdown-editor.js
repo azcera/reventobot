@@ -6,6 +6,48 @@ function mountMarkdownEditor(textarea, options = {}) {
 	const toolbar = document.createElement('div'); toolbar.className = 'markdown-toolbar'; toolbar.setAttribute('role', 'toolbar'); toolbar.setAttribute('aria-label', 'Форматирование Markdown')
 	const preview = document.createElement('div'); preview.className = 'markdown-preview discord-text'; preview.hidden = true
 	shell.append(tabs, toolbar, textarea, preview)
+	const snapshot = () => ({ value: textarea.value, start: textarea.selectionStart, end: textarea.selectionEnd, direction: textarea.selectionDirection })
+	let history = [snapshot()], historyIndex = 0, restoring = false
+	function rememberSelection() {
+		// Loading another message starts a fresh history, independent of the previous document.
+		if (history[historyIndex].value !== textarea.value) { history = [snapshot()]; historyIndex = 0 }
+		else history[historyIndex] = snapshot()
+	}
+	function restore(redo) {
+		if (textarea.disabled || textarea.readOnly) return
+		const next = historyIndex + (redo ? 1 : -1)
+		if (!history[next]) return
+		const state = history[next], scrollTop = textarea.scrollTop
+		historyIndex = next
+		textarea.value = state.value
+		textarea.focus()
+		textarea.setSelectionRange(state.start, state.end, state.direction)
+		textarea.scrollTop = scrollTop
+		restoring = true
+		try { textarea.dispatchEvent(new Event('input', { bubbles: true })) }
+		finally { restoring = false }
+	}
+	textarea.addEventListener('beforeinput', event => {
+		if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+			if (event.cancelable) { event.preventDefault(); rememberSelection(); restore(event.inputType === 'historyRedo') }
+		} else rememberSelection()
+	})
+	textarea.addEventListener('input', () => {
+		if (restoring || history[historyIndex].value === textarea.value) return
+		history.splice(historyIndex + 1)
+		history.push(snapshot())
+		if (history.length > 100) history.shift()
+		historyIndex = history.length - 1
+	})
+	shell.addEventListener('keydown', event => {
+		if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing) return
+		const key = event.key.toLowerCase()
+		if (key !== 'z' && key !== 'y') return
+		if (textarea.disabled || textarea.readOnly || textarea.hidden) return
+		event.preventDefault()
+		rememberSelection()
+		restore(key === 'y' || event.shiftKey)
+	})
 	function button(label, title, run, parent = toolbar) {
 		const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.title = title; b.setAttribute('aria-label', title)
 		b.addEventListener('click', run); parent.append(b); return b
@@ -17,6 +59,7 @@ function mountMarkdownEditor(textarea, options = {}) {
 		const content = line && !after && before ? selected.split('\n').map(text => before + text).join('\n') : before + selected + after
 		const value = prefix + content + suffix
 		if (textarea.maxLength > 0 && textarea.value.length - (end - start) + value.length > textarea.maxLength) return
+		rememberSelection()
 		textarea.setRangeText(value, start, end, 'select'); textarea.focus(); textarea.dispatchEvent(new Event('input', { bubbles: true }))
 	}
 	const formats = [
@@ -42,6 +85,7 @@ function mountMarkdownEditor(textarea, options = {}) {
 			catch (error) { preview.textContent = error.message }
 		}
 	}
+	tabs.hidden = options.tabs === false
 	mode(false)
 	return shell
 }

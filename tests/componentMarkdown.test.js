@@ -79,9 +79,10 @@ function editorContext() {
 		replaceChildren(...children) { this.children = []; this.append(...children) }
 		before(node) { node.parent = this.parent; this.parent.children.splice(this.parent.children.indexOf(this), 0, node) }
 		setAttribute(key, value) { this.attributes[key] = value }
-		addEventListener(name, fn) { this.handlers[name] = fn }
+		addEventListener(name, fn) { const previous = this.handlers[name]; this.handlers[name] = previous ? event => { previous(event); fn(event) } : fn }
 		dispatchEvent(event) { this.handlers[event.type]?.(event) }
 		focus() {}
+		setSelectionRange(start, end, direction) { this.selectionStart = start; this.selectionEnd = end; this.selectionDirection = direction }
 		setRangeText(value, start, end) { this.value = this.value.slice(0, start) + value + this.value.slice(end); this.selectionStart = start; this.selectionEnd = start + value.length }
 	}
 	const context = vm.createContext({ document: { createElement: tag => new Element(tag) }, URL, Event: class { constructor(type) { this.type = type } } })
@@ -103,6 +104,62 @@ test('editor formats selections and refreshes preview only when Preview is opene
 	tabs.children[0].handlers.click(); tabs.children[1].handlers.click()
 	assert.match(preview.innerHTML, /новый/)
 	assert.equal(tabs.children[1].attributes['aria-selected'], 'true')
+})
+
+function historyKey(shell, key, modifiers = {}) {
+	const event = { key, ctrlKey: true, ...modifiers, preventDefault() { this.prevented = true } }
+	shell.handlers.keydown(event)
+	return event
+}
+
+test('Ctrl+Z undoes a multiline quote in one step and restores the selected text; redo reapplies it', () => {
+	const { textarea, shell } = editorContext()
+	const original = 'Первая строка\nВторая строка'
+	textarea.value = original; textarea.setSelectionRange(0, original.length)
+	let updates = 0
+	textarea.addEventListener('input', () => updates++)
+	shell.children[1].children.find(button => button.title === 'Цитата').handlers.click()
+	const quoted = textarea.value
+	assert.match(quoted, /^> Первая строка\n> Вторая строка/)
+	assert.equal(historyKey(shell, 'z').prevented, true)
+	assert.equal(textarea.value, original)
+	assert.equal(textarea.selectionStart, 0); assert.equal(textarea.selectionEnd, original.length)
+	historyKey(shell, 'y'); assert.equal(textarea.value, quoted)
+	historyKey(shell, 'z'); historyKey(shell, 'Z', { shiftKey: true })
+	assert.equal(textarea.value, quoted)
+	assert.equal(updates, 5)
+})
+
+test('typing and formatting share history, and typing after undo clears redo', () => {
+	const { textarea, shell } = editorContext()
+	const type = value => {
+		textarea.dispatchEvent({ type: 'beforeinput', inputType: 'insertText' })
+		textarea.value = value; textarea.setSelectionRange(value.length, value.length)
+		textarea.dispatchEvent({ type: 'input' })
+	}
+	type('Текст')
+	textarea.setSelectionRange(0, textarea.value.length)
+	shell.children[1].children.find(button => button.textContent === 'B').handlers.click()
+	assert.equal(textarea.value, '**Текст**')
+	historyKey(shell, 'z'); assert.equal(textarea.value, 'Текст')
+	historyKey(shell, 'z'); assert.equal(textarea.value, '')
+	historyKey(shell, 'y'); assert.equal(textarea.value, 'Текст')
+	type('Другая правка')
+	historyKey(shell, 'y'); assert.equal(textarea.value, 'Другая правка')
+	historyKey(shell, 'z', { ctrlKey: false, metaKey: true }); assert.equal(textarea.value, 'Текст')
+})
+
+test('loading another document resets undo; locked and preview fields ignore history shortcuts', () => {
+	const { textarea, shell } = editorContext()
+	textarea.value = 'Старый'; textarea.setSelectionRange(0, 6)
+	shell.children[1].children.find(button => button.textContent === 'B').handlers.click()
+	textarea.disabled = true
+	assert.equal(historyKey(shell, 'z').prevented, undefined)
+	assert.equal(textarea.value, '**Старый**')
+	textarea.disabled = false; textarea.hidden = true
+	assert.equal(historyKey(shell, 'z').prevented, undefined)
+	textarea.hidden = false; textarea.value = 'Новый документ'
+	historyKey(shell, 'z'); assert.equal(textarea.value, 'Новый документ')
 })
 
 test('preview escapes HTML and renders links and numbered lists', () => {

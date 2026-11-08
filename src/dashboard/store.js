@@ -2,6 +2,7 @@ const catalog = require('./templates.json')
 
 function templateDefinition(key) {
 	if (Object.hasOwn(catalog, key)) return catalog[key]
+	if (key === 'rules.document') return { group: 'Правила', label: 'Правила целиком', type: 'text', maxLength: 4000, variables: [] }
 	const match = /^rules\.(?:heading\.([1-9]\d*)|rule\.([1-9]\d*)\.([1-9]\d*))$/.exec(key)
 	if (!match) return null
 	return { group: 'Правила', label: match[1] ? 'Раздел ' + match[1] : 'Правило ' + match[2] + '-' + match[3], type: 'text', maxLength: 4000, variables: [] }

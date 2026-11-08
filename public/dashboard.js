@@ -150,7 +150,7 @@ function renderPermanentMessages() {
 		const bind = node('button', 'Сохранить привязку', 'quiet'); bind.type = 'submit'; form.append(bind)
 		form.addEventListener('submit', event => {
 			event.preventDefault()
-			if (config.templates.some(field => field.group === group && templateDrafts.get(group)?.[field.key] !== undefined && templateDrafts.get(group)[field.key] !== field.value) && !confirm('Изменение привязки сбросит несохранённые правки этого раздела. Продолжить?')) return
+			if (isTemplateDirty(group) && !confirm('Изменение привязки сбросит несохранённые правки этого раздела. Продолжить?')) return
 			action(async () => { config = await api('permanent-message', { kind, link: input.value.trim(), revision: config.revision }); templateDrafts.delete(group); renderTemplateGroups(); renderPermanentMessages(); if ([...$('templateGroup').options].some(option => option.value === group)) $('templateGroup').value = group; renderTemplates(); notice(input.value.trim() ? 'Привязка сохранена. Шаблон можно редактировать ниже.' : 'Привязка удалена.') })
 		})
 		if (config.bindings?.[kind]) {
@@ -233,41 +233,52 @@ function groupDraft() {
 	if (!templateDrafts.has(group)) templateDrafts.set(group, Object.fromEntries(groupFields().map(field => [field.key, field.value])))
 	return templateDrafts.get(group)
 }
+function templateEditorFields(group = $('templateGroup').value) {
+	const fields = config.templates.filter(field => field.group === group)
+	if (group !== 'Правила') return fields
+	const document = fields.find(field => field.key === 'rules.document')
+	return [document || { key: 'rules.document', type: 'text', label: 'Правила целиком', value: fields.filter(field => /^rules\.(heading|rule)\./.test(field.key)).map(field => field.value).join('\n\n---\n\n'), variables: [] }]
+}
+function isTemplateDirty(group) {
+	const values = templateDrafts.get(group)
+	if (!values) return false
+	const fields = templateEditorFields(group)
+	if (values._source !== undefined && values._source !== templateDocument.stringify(fields, Object.fromEntries(fields.map(field => [field.key, field.value])))) return true
+	return fields.some(field => values[field.key] !== undefined && values[field.key] !== field.value)
+}
+function readTemplateDocument() {
+	const fields = templateEditorFields(), values = groupDraft()
+	const parsed = templateDocument.parse(values._source ?? templateDocument.stringify(fields, values), fields)
+	Object.assign(values, parsed)
+	return values
+}
 function renderTemplates() {
-	const fields = groupFields()
-	const values = groupDraft()
+	const fields = templateEditorFields(), values = groupDraft()
+	const root = $('templateFields')
+	root.replaceChildren()
+	const label = node('label', 'Шаблон целиком (Markdown)')
+	const input = node('textarea')
+	input.id = 'templateSource'
+	input.value = values._source ?? templateDocument.stringify(fields, values)
+	label.htmlFor = input.id
+	label.append(input); root.append(label)
+	const status = node('p', '', 'hint')
+	status.setAttribute('role', 'status')
+	root.append(status)
+	input.addEventListener('input', () => {
+		values._source = input.value
+		try { readTemplateDocument(); status.textContent = '' }
+		catch (error) { status.textContent = error.message }
+	})
+	if (typeof mountMarkdownEditor === 'function') mountMarkdownEditor(input, { tabs: false })
+	const variables = [...new Set(fields.flatMap(field => field.variables || []))]
+	if (variables.length) root.append(node('p', 'Переменные: ' + variables.map(name => '{' + name + '}').join(', '), 'hint'))
 	const update = () => {
+		readTemplateDocument()
 		if (['Заявка', 'Личные сообщения заявок'].includes($('templateGroup').value)) return previewApplication($('templatePreview'), values)
 		preview($('templatePreview'), fields, values, true)
 	}
-	fieldsForm($('templateFields'), fields, values, () => {})
 	if ($('templateForm')) setupPreviewTabs($('templateForm'), update)
-	if ($('templateGroup').value === 'Правила') {
-		const add = (section) => {
-			const keys = groupFields().map(field => field.key)
-			const index = section == null ? Math.max(0, ...keys.map(key => Number(/^rules\.heading\.(\d+)$/.exec(key)?.[1] || 0))) + 1
-				: Math.max(0, ...keys.map(key => Number(new RegExp('^rules\\.rule\\.' + section + '\\.(\\d+)$').exec(key)?.[1] || 0))) + 1
-			const key = section == null ? 'rules.heading.' + index : 'rules.rule.' + section + '.' + index
-			const value = section == null ? '## Новый раздел' : '**Правило — ' + section + '-' + index + '**\nНовое правило'
-			const field = { key, group: 'Правила', label: section == null ? 'Раздел ' + index : 'Правило ' + section + '-' + index, type: 'text', maxLength: 4000, value: '', variables: [] }
-			const position = section == null ? config.templates.findLastIndex(field => field.group === 'Правила') + 1
-				: config.templates.findLastIndex(field => field.key === 'rules.heading.' + section || field.key.startsWith('rules.rule.' + section + '.')) + 1
-			config.templates.splice(position, 0, field)
-			values[key] = value
-			renderTemplates()
-			$('templateFields').querySelector('[data-key="' + key + '"] textarea')?.focus()
-		}
-		for (const field of fields) {
-			const match = /^rules\.heading\.(\d+)$/.exec(field.key)
-			if (!match) continue
-			const button = node('button', '+ Добавить правило в раздел ' + match[1], 'quiet'); button.type = 'button'
-			button.addEventListener('click', () => add(Number(match[1])))
-			$('templateFields').querySelector('[data-key="' + field.key + '"]').append(button)
-		}
-		const button = node('button', '+ Добавить раздел', 'quiet'); button.type = 'button'
-		button.addEventListener('click', () => add())
-		$('templateFields').append(button)
-	}
 }
 function previewApplication(root, values) {
 	root.replaceChildren()
@@ -376,7 +387,8 @@ for (const id of ['reloadConfig', 'reloadSettings']) $(id).addEventListener('cli
 $('templateForm').addEventListener('submit', event => {
 	event.preventDefault()
 	action(async () => {
-		const values = Object.fromEntries(groupFields().filter(field => groupDraft()[field.key] !== field.value).map(field => [field.key, groupDraft()[field.key]]))
+		readTemplateDocument()
+		const values = Object.fromEntries(templateEditorFields().filter(field => groupDraft()[field.key] !== field.value).map(field => [field.key, groupDraft()[field.key]]))
 		if (!Object.keys(values).length) return notice('Нет изменений для сохранения.')
 		config = await api('templates', { revision: config.revision, values }); templateDrafts.delete($('templateGroup').value); renderTemplates(); showSyncResult('Шаблон сохранён. Привязанные сообщения обновлены в Discord.')
 	})
@@ -415,7 +427,7 @@ $('logout').addEventListener('click', () => action(async () => { await api('logo
 window.addEventListener('hashchange', switchTab)
 window.addEventListener('beforeunload', event => {
 	if (!config) return
-	const dirty = config.templates.some(field => templateDrafts.get(field.group)?.[field.key] !== undefined && templateDrafts.get(field.group)[field.key] !== field.value) || config.settings.some(field => settingsDraft[field.key] !== field.value) || currentMessage?.fields.some(field => currentMessage.values[field.path] !== field.value)
+	const dirty = [...templateDrafts.keys()].some(isTemplateDirty) || config.settings.some(field => settingsDraft[field.key] !== field.value) || currentMessage?.fields.some(field => currentMessage.values[field.path] !== field.value)
 	if (dirty) { event.preventDefault(); event.returnValue = '' }
 })
 async function start() {

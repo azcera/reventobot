@@ -46,7 +46,7 @@ function validateTemplates(values) {
 		if (match && !fields.has('rules.heading.' + match[1])) throw problem(400, 'Сначала добавьте раздел для нового правила.')
 	}
 	for (const group of ['Правила', 'Приглашение', 'Навигация', 'Админ-панель']) {
-		const length = [...fields.values()].filter(field => field.group === group && field.type === 'text')
+		const length = [...fields.values()].filter(field => field.group === group && field.type === 'text' && (group !== 'Правила' || !fields.has('rules.document') || field.key === 'rules.document'))
 			.reduce((sum, field) => sum + field.value.length, 0)
 		const limit = group === 'Приглашение' ? 2700 : 3800
 		if (length > limit) throw problem(400, `Слишком много текста в разделе «${group}». Оставьте не более ${limit} символов.`)

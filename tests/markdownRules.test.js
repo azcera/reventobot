@@ -63,35 +63,41 @@ test('new rules reject missing sections, excess components, text overflow and st
 	assert.equal(store.snapshot().templates.some(field => field.key === 'rules.heading.5'), false)
 })
 
-test('rule editor buttons add fields to the correct section and preserve unsaved edits', () => {
+test('templates use one source textarea and retain unsaved source when switching groups', () => {
 	class Element {
 		constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.events = {}; this.classList = { add() {} } }
 		append(...children) { this.children.push(...children) }
 		replaceChildren(...children) { this.children = children }
 		addEventListener(event, listener) { this.events[event] = listener }
-		focus() {}
-		querySelector(selector) {
-			const key = /data-key="([^"]+)"/.exec(selector)?.[1]
-			const label = this.children.find(child => child.dataset.key === key)
-			return selector.endsWith('textarea') ? label?.children.find(child => child.tagName === 'TEXTAREA') : label
-		}
+		setAttribute() {}
 	}
 	const elements = { templateGroup: { value: 'Правила' }, templateFields: new Element('div'), templatePreview: new Element('div') }
 	const templates = Object.entries(require('../src/dashboard/templates.json')).map(([key, field]) => ({ key, ...field, value: field.default }))
-	const ui = vm.createContext({ document: { createElement: tag => new Element(tag) }, $: id => elements[id], config: { templates }, templateDrafts: new Map(), discordMarkdownToHtml: markdown, examples: {} })
+	const templateDocument = require('../public/template-document')
+	const ui = vm.createContext({ document: { createElement: tag => new Element(tag) }, $: id => elements[id], config: { templates }, templateDrafts: new Map(), templateDocument, discordMarkdownToHtml: markdown, examples: {} })
 	const source = readFileSync(require.resolve('../public/dashboard.js'), 'utf8')
 	vm.runInContext(source.slice(source.indexOf('function node('), source.indexOf('function notice(')), ui)
 	vm.runInContext(source.slice(source.indexOf('function preview('), source.indexOf('function previewApplication(')), ui)
+	const descendants = root => root.children.flatMap(child => [child, ...descendants(child)])
+	for (const group of new Set(templates.map(field => field.group))) {
+		elements.templateGroup.value = group
+		ui.renderTemplates()
+		assert.equal(descendants(elements.templateFields).filter(element => element.tagName === 'TEXTAREA').length, 1, group)
+	}
+	elements.templateGroup.value = 'Правила'; ui.renderTemplates()
+	let input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
+	const original = input.value
+	input.value = original.replace('## Общие положения', '## Несохранённая правка'); input.events.input()
+	assert.match(ui.groupDraft()['rules.document'], /## Несохранённая правка/)
+	assert.doesNotMatch(input.value, /<!-- template:/)
+	elements.templateGroup.value = 'Заявка'; ui.renderTemplates()
+	elements.templateGroup.value = 'Правила'; ui.renderTemplates()
+	input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
+	assert.match(input.value, /Несохранённая правка/)
+	elements.templateGroup.value = 'Заявка'; ui.renderTemplates()
+	input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
+	input.value = 'Незавершённый черновик'; input.events.input()
+	assert.throws(() => ui.readTemplateDocument(), /метк/)
 	ui.renderTemplates()
-	const root = elements.templateFields
-	const first = root.querySelector('[data-key="rules.rule.1.1"] textarea')
-	first.value = 'Несохранённая правка'; first.events.input()
-	root.querySelector('[data-key="rules.heading.1"]').children.at(-1).events.click()
-	assert.equal(root.querySelector('[data-key="rules.rule.1.1"] textarea').value, 'Несохранённая правка')
-	assert.match(root.querySelector('[data-key="rules.rule.1.4"] textarea').value, /1-4/)
-	root.children.at(-1).events.click()
-	assert.equal(root.querySelector('[data-key="rules.heading.5"] textarea').value, '## Новый раздел')
-	root.querySelector('[data-key="rules.heading.5"]').children.at(-1).events.click()
-	assert.match(root.querySelector('[data-key="rules.rule.5.1"] textarea').value, /5-1/)
-	assert.equal(templates[templates.findIndex(field => field.key === 'rules.rule.1.4') + 1].key, 'rules.heading.2')
+	assert.equal(descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA').value, 'Незавершённый черновик')
 })

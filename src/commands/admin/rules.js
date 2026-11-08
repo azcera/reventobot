@@ -49,7 +49,9 @@ module.exports = {
 		const container = new ContainerBuilder()
 			.addMediaGalleryComponents(inviteImage)
 			.addSeparatorComponents(new SeparatorBuilder())
-		for (const field of dashboard.snapshot().templates.filter(field => /^rules\.(heading|rule)\./.test(field.key))) {
+		const templates = dashboard.snapshot().templates
+		const document = templates.find(field => field.key === 'rules.document')
+		for (const field of document ? [document] : templates.filter(field => /^rules\.(heading|rule)\./.test(field.key))) {
 			container
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(field.value))
 				.addSeparatorComponents(new SeparatorBuilder())
