@@ -8,6 +8,8 @@ const express = require('express')
 const path = require('node:path')
 const fs = require('node:fs')
 require('dotenv').config()
+const { installTelegramErrorReporter } = require('./src/services/telegramErrorReporter')
+const telegramErrors = installTelegramErrorReporter()
 
 // Импорты сервисов
 const { parseMessageLink, buildEditPayload, registerContainerMessageRoutes } = require('./src/services/containerMessageService')
@@ -157,6 +159,7 @@ const shutdown = async () => {
 	await client.majesticNicknames?.stop()
 	await client.familyMembership?.stop()
 	await client.eventSchedule?.stop()
+	await telegramErrors.flush()
 	client.destroy()
 	server.close(() => {
 		console.log('✅ Сервер остановлен.')
