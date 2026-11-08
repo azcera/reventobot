@@ -1,6 +1,6 @@
 const {
 	ContainerBuilder, SectionBuilder, TextDisplayBuilder, ButtonBuilder,
-	ButtonStyle, MessageFlags, PermissionFlagsBits, SeparatorBuilder, escapeMarkdown,
+	ButtonStyle, MessageFlags, PermissionFlagsBits, SeparatorBuilder, SeparatorSpacingSize, escapeMarkdown,
 	MediaGalleryBuilder, MediaGalleryItemBuilder, AttachmentBuilder
 } = require('discord.js')
 const path = require('path')
@@ -14,6 +14,10 @@ const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
 const EVENT_EMOJI = {
 	'Дроп': '📍', 'Тайники': '🔒', 'Дилеры': '💊', 'Цеха': '🏭',
 	'Поставки': '🚚', 'Контрабанда': '🛡️', 'Остров | ФЗ': '💀', 'Капты': '⚔️'
+}
+const SERVER_EMOJI = {
+	'Дроп': 'airdrop', 'Тайники': 'chest', 'Дилеры': 'dilers', 'Цеха': 'ceha',
+	'Поставки': 'postavka', 'Остров | ФЗ': 'ostrov', 'Капты': 'capts'
 }
 
 function canCreateGroup(member, store) {
@@ -43,7 +47,8 @@ function getSchedule(now = Date.now()) {
 		events: structuredClone(events), upcoming: upcomingEvents(events, now) }
 }
 
-function buildSchedule(events, updatedAt, stale, now = Date.now()) {
+function buildSchedule(events, updatedAt, stale, now = Date.now(), emojis) {
+	const eventEmoji = label => emojis?.find(emoji => emoji.name === SERVER_EMOJI[label] && emoji.available !== false)?.toString() || EVENT_EMOJI[label] || '📌'
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
 	const container = new ContainerBuilder({ accent_color: null })
@@ -53,17 +58,17 @@ function buildSchedule(events, updatedAt, stale, now = Date.now()) {
 	if (nearest) {
 		container.addSectionComponents(new SectionBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-				`### ${EVENT_EMOJI[nearest.label] || '📌'} Ближайшее — ${escapeMarkdown(nearest.label)}\n**${nearest.time} МСК** · <t:${Math.floor(nearest.timestamp / 1000)}:R>`))
+				`### ${eventEmoji(nearest.label)} Ближайшее — ${escapeMarkdown(nearest.label)}\n**${nearest.time} МСК** · <t:${Math.floor(nearest.timestamp / 1000)}:R>`))
 			.setButtonAccessory(new ButtonBuilder().setCustomId(`schedule_group_${selectionId(nearest)}`)
 				.setLabel('Создать групп').setStyle(ButtonStyle.Primary).setDisabled(stale)))
 	}
-	const rows = upcoming.slice(1, 4).map(event => `### ${EVENT_EMOJI[event.label] || '📌'} ${event.time} — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`)
+	const rows = upcoming.slice(1, 4).map(event => `### ${eventEmoji(event.label)} ${event.time} — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`)
 	const special = events.filter(event => event.is247 || event.window || !/^([01]\d|2[0-3]):[0-5]\d$/.test(event.time))
-		.map(event => `### ${EVENT_EMOJI[event.label] || '📌'} ${escapeMarkdown(event.label)} — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n${escapeMarkdown(event.note)}` : ''}`)
-	if (rows.length) container.addSeparatorComponents(new SeparatorBuilder())
+		.map(event => `### ${eventEmoji(event.label)} ${escapeMarkdown(event.label)} — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n${escapeMarkdown(event.note)}` : ''}`)
+	if (rows.length) container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large))
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(rows.join('\n')))
-	if (special.length) container.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(special.join('\n\n').slice(0, 3000)))
+	for (const row of special) container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(row.slice(0, 3000)))
 	container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 		`-# Время МСК · обновлено <t:${Math.floor(updatedAt / 1000)}:R>${stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : ''}`))
 	return {
@@ -81,7 +86,7 @@ function createEventSchedule({ client, pool, store, now = Date.now }) {
 	}
 	async function updateChannel(channel, messageId) {
 		const snapshot = getSchedule(now())
-		const payload = buildSchedule(snapshot.events, snapshot.generatedAt, false, snapshot.generatedAt)
+		const payload = buildSchedule(snapshot.events, snapshot.generatedAt, false, snapshot.generatedAt, channel.guild?.emojis.cache)
 		if (messageId) {
 			try {
 				const message = await channel.messages.fetch(messageId)

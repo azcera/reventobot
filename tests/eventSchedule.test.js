@@ -41,11 +41,31 @@ test('message has a group button beside nearest event and marks stale data', () 
 	assert.match(container.components[4].content, /^### /)
 	assert.doesNotMatch(container.components[4].content, /Тайники/)
 	assert.match(container.components[6].content, /🚚.*Поставки/)
-	assert.match(container.components[6].content, /⚔️.*пн, ср, пт, сб/)
+	assert.match(container.components[8].content, /⚔️.*пн, ср, пт, сб/)
+	const separators = container.components.filter(component => component.type === 14)
+	assert.equal(separators.length, 3)
+	assert.ok(separators.every(component => component.spacing === 2 && component.divider !== false))
 	assert.doesNotMatch(JSON.stringify(container), /https:|Mitsuki Hub|ADMIN_ROLES|доступно администраторам/)
 	const stale = buildSchedule(events, now, true, now).components[0].toJSON()
 	assert.equal(stale.components[2].accessory.disabled, true)
 	assert.match(stale.components.at(-1).content, /Источник недоступен/)
+})
+
+test('schedule resolves server emoji names and keeps fallback for missing or unavailable emoji', () => {
+	const names = ['airdrop', 'chest', 'dilers', 'ceha', 'postavka', 'ostrov', 'capts']
+	const emojis = new Collection(names.map((name, index) => [name, {
+		name, available: true, toString: () => `<${index === 0 ? 'a' : ''}:${name}:${100000000000000000n + BigInt(index)}>`
+	}]))
+	const render = () => JSON.stringify(buildSchedule(getSchedule(now).events, now, false, now, emojis).components[0].toJSON())
+	const content = render()
+	for (const name of ['chest', 'ceha', 'airdrop', 'postavka', 'ostrov', 'capts']) assert.ok(content.includes(emojis.get(name).toString()))
+	assert.match(content, /🛡️.*Контрабанда/)
+	const dealer = buildSchedule([{ id: 'dealer', label: 'Дилеры', time: '22:00' }], now, false, now, emojis).components[0].toJSON()
+	assert.ok(JSON.stringify(dealer).includes(emojis.get('dilers').toString()))
+	emojis.get('chest').available = false
+	emojis.delete('ceha')
+	assert.match(render(), /🔒 Ближайшее/)
+	assert.match(render(), /🏭/)
 })
 
 test('compact list shows three following events without duplicating nearest', () => {
@@ -83,7 +103,9 @@ test('publication works without external requests, survives restart and refuses 
 	let currentTime = now, stored, sends = 0, edits = 0
 	const attachments = new Collection()
 	const channel = {
-		id: 'channel', messages: { fetch: async id => {
+		id: 'channel', guild: { emojis: { cache: new Collection([['chest', {
+			name: 'chest', toString: () => '<:chest:100000000000000001>'
+		}]]) } }, messages: { fetch: async id => {
 			assert.equal(id, 'message')
 			return { attachments, edit: async payload => {
 				payload.components[0].toJSON()
@@ -93,7 +115,7 @@ test('publication works without external requests, survives restart and refuses 
 			} }
 		} },
 		send: async payload => {
-			payload.components[0].toJSON()
+			assert.match(payload.components[0].toJSON().components[2].components[0].content, /<:chest:100000000000000001>/)
 			assert.equal(payload.files[0].name, 'schedule.png')
 			attachments.set('banner', { id: 'banner', name: 'schedule.png' })
 			sends++
