@@ -2,7 +2,7 @@ const { randomUUID } = require('node:crypto')
 const { ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 	StringSelectMenuBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
 
-const CHANNEL_ID = '1557432771172110336'
+const CHANNEL_ID = '1569055629098745896'
 const FRIEND_ROLE_ID = '1499398714765348896'
 const INTERVAL_MS = 10 * 60 * 1000
 const PREFIX = 'family_cleanup_'

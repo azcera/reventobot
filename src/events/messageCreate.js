@@ -47,7 +47,7 @@ module.exports = client => {
 		const commandName = args.shift().toLowerCase()
 
 		const command = client.commands.get(commandName)
-		if (!command) return
+		if (!command || command.data) return
 
 		try {
 			await command.execute(message, args)

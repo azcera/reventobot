@@ -7,6 +7,7 @@ const { createFamilyMembership } = require('../services/familyMembership')
 const { store } = require('../dashboard/store')
 const pool = require('../services/database')
 const { createEventSchedule } = require('../services/eventSchedule')
+const { registerAdminApplicationCommands } = require('../services/adminApplicationCommands')
 
 module.exports = client => {
 	client.once(Events.ClientReady, async readyClient => {
@@ -25,6 +26,11 @@ module.exports = client => {
 		client.familyMembership.start()
 		const guild = client.guilds.cache.get(process.env.GUILD_ID)
 		if (guild) {
+			try {
+				await registerAdminApplicationCommands(client, guild, store)
+			} catch (error) {
+				console.error('❌ Ошибка регистрации команд приложения или обновления панели:', error)
+			}
 			try {
 				await updateLists(guild)
 				console.log('✅ Успешное обновление списков.')

@@ -19,13 +19,14 @@ const { IMAGES_PATH } = require('../../config/path')
 const { replyWithAutoDelete } = require('../../utils/autoDelete')
 const pool = require('../../services/database')
 const panelKey = require('../../dashboard/panelKey')
+const { MOVED_BUTTON_IDS } = require('../../services/adminApplicationCommands')
 
 module.exports = {
 	name: 'panel',
 	description: 'Создает кнопки админ-панели',
 	/**
 	 * Команда !panel (Administrator).
-	 * Создаёт админ-панель с тремя кнопками: групп, капт, move-all + изображение.
+	 * Создаёт админ-панель с оставшимися кнопками и изображением.
 	 * @param {Message} message
 	 * @param {string[]} args
 	 */
@@ -72,6 +73,7 @@ module.exports = {
 				.addSeparatorComponents(new SeparatorBuilder())
 
 			for (const row of result.rows) {
+				if (MOVED_BUTTON_IDS.has(row.buttonId)) continue
 				const button = new ButtonBuilder()
 					.setLabel(dashboard.text(panelKey(row.buttonId, 'label'), {}, row.buttonLabel))
 					.setStyle(row.style)

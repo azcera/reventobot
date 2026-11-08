@@ -3,74 +3,18 @@ const {
 	ModalBuilder,
 	TextInputBuilder,
 	TextInputStyle,
-	MessageFlags,
-	StringSelectMenuBuilder,
-	ActionRowBuilder,
 	LabelBuilder
 } = require('discord.js')
 const { parseDateTime, getMskTimeString } = require('../../utils/dateUtils')
 
-const {
-	getFilteredOptions,
-	optionsMap
-} = require('../../features/capture/groupOptions')
-const {
-	sendEphemeralWithAutoDelete,
-	editReplyWithAutoDelete
-} = require('../../utils/autoDelete')
-
-/**
- * Показывает select-меню с ближайшими 3 событиями + «Другое».
- * Создаёт collector на 60 сек.
- * @param {ButtonInteraction} interaction
- */
-async function showGroupSelect(interaction) {
-	await interaction
-		.deferReply({ flags: [MessageFlags.Ephemeral] })
-		.catch(console.error)
-
-	const selectMenu = new StringSelectMenuBuilder()
-		.setCustomId('group_select_target')
-		.setPlaceholder('Выберите цель проведения...')
-		.addOptions(getFilteredOptions())
-
-	const row = new ActionRowBuilder().addComponents(selectMenu)
-
-	const message = await editReplyWithAutoDelete(interaction, {
-		content:
-			'Пожалуйста, выберите цель создания группы из списка ниже (меню активно 1 минуту):',
-		components: [row]
-	}).catch(console.error)
-
-	if (!message) return
-
-	const collector = message.createMessageComponentCollector({
-		filter: i =>
-			i.customId === 'group_select_target' && i.user.id === interaction.user.id,
-		time: 60000,
-		max: 1
-	})
-
-	collector.on('collect', () => {
-		collector.stop('selected')
-	})
-
-	collector.on('end', async (collected, reason) => {
-		if (reason === 'time') {
-			await interaction.deleteReply().catch(() => {
-				console.log(
-					'[Group Select] Не удалось удалить сообщение (возможно, оно уже было закрыто)'
-				)
-			})
-		}
-	})
-}
+const { optionsMap } = require('../../features/capture/groupOptions')
+const { sendEphemeralWithAutoDelete } = require('../../utils/autoDelete')
 
 /**
  * Показывает модалку (время/цель/код) в зависимости от выбранного значения.
- * @param {StringSelectMenuInteraction} interaction
+ * @param {Interaction} interaction
  */
-async function showGroupModal(interaction, selectedTarget = interaction.values[0]) {
+async function showGroupModal(interaction, selectedTarget = 'other') {
 
 	const modal = new ModalBuilder()
 		.setCustomId(`modal_group_${selectedTarget}`)
@@ -199,4 +143,4 @@ async function showScheduledGroupModal(interaction) {
 	return showGroupModal(interaction, `schedule_${selection}`)
 }
 
-module.exports = { showGroupSelect, showGroupModal, submitGroupModal, showScheduledGroupModal }
+module.exports = { showGroupModal, submitGroupModal, showScheduledGroupModal }

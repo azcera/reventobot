@@ -1,4 +1,6 @@
 const { MessageFlags } = require('discord.js')
+const { store: dashboard } = require('../dashboard/store')
+const { authorize, MOVED_BUTTON_IDS } = require('../services/adminApplicationCommands')
 const captureManager = require('../features/capture/captureManager')
 const groupInteractions = require('../features/capture/groupInteractions')
 const captureInteractions = require('../features/capture/captureInteractions')
@@ -76,12 +78,15 @@ module.exports = client => {
 		if (!guild) return
 
 		const customId = interaction.customId
+		if ((interaction.isButton() && MOVED_BUTTON_IDS.has(customId)) ||
+			(interaction.isStringSelectMenu() && customId === 'move_all_channel') ||
+			(interaction.isModalSubmit() && ['modal_capt', 'modal_group_other'].includes(customId))) {
+			if (!await authorize(interaction, dashboard)) return
+		}
 
 		// selects
 
 		if (interaction.isStringSelectMenu()) {
-			if (customId === 'group_select_target')
-				return await groupInteractions.showGroupModal(interaction)
 			if (customId === 'move_all_channel')
 				return await moveAllInteractions.handleMoveAllSelect(interaction)
 			if (customId.startsWith('invite_select_voice_'))
@@ -112,7 +117,7 @@ module.exports = client => {
 			}
 
 			if (customId === 'group')
-				return await groupInteractions.showGroupSelect(interaction)
+				return await groupInteractions.showGroupModal(interaction)
 			if (customId === 'capt')
 				return await captureInteractions.showCaptModal(interaction)
 
