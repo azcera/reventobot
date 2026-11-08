@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js')
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, PermissionFlagsBits, MessageFlags } = require('discord.js')
 
 const MOVED_BUTTON_IDS = new Set(['capt', 'group', 'move-all'])
 const definitions = [
@@ -45,6 +45,18 @@ async function registerAdminApplicationCommands(client, guild, store) {
 			}
 		})
 		// Create upserts by name without replacing unrelated application commands.
+		await guild.commands.create(data.toJSON())
+	}
+	for (const name of ['Создать архив', 'Открыть архив']) {
+		const data = new ContextMenuCommandBuilder().setName(name).setType(ApplicationCommandType.User)
+		client.commands.set(name, {
+			data,
+			async execute(interaction) {
+				if (await authorize(interaction, store)) {
+					return require('../features/archive/archiveContextCommands').handleArchiveCommand(interaction)
+				}
+			}
+		})
 		await guild.commands.create(data.toJSON())
 	}
 	await removePanelActions(guild, client, store)

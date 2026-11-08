@@ -38,6 +38,7 @@ function fixture() {
 		return { commandName, guild, member: { permissions: { has: flag => flag === PermissionFlagsBits.Administrator }, roles: { cache: new Collection() } },
 			user: { id: 'admin' }, client,
 			isChatInputCommand: () => kind === 'command', isButton: () => kind === 'button',
+			isUserContextMenuCommand: () => kind === 'context',
 			isModalSubmit: () => kind === 'modal', isStringSelectMenu: () => kind === 'select',
 			showModal: async modal => modals.push(modal.toJSON()), deferReply: async () => {},
 			reply: async payload => replies.push(payload), editReply: async payload => replies.push(payload) }
@@ -47,10 +48,11 @@ function fixture() {
 		listen() { require('../src/events/interactionCreate')(client); return event => listener(event) } }
 }
 
-test('registers three guild commands without replacing other commands and removes panel buttons', async () => {
+test('registers slash and user commands without replacing other commands and removes panel buttons', async () => {
 	const f = fixture()
 	await f.register()
-	assert.deepEqual(f.registered.map(command => command.name), ['capt', 'group', 'move-all'])
+	assert.deepEqual(f.registered.map(command => command.name), ['capt', 'group', 'move-all', 'Создать архив', 'Открыть архив'])
+	assert.deepEqual(f.registered.slice(-2).map(command => command.type), [2, 2])
 	assert.ok(f.client.commands.has('unrelated'))
 	assert.equal(f.edited.length, 1)
 	const after = f.edited[0].components[0]
@@ -77,7 +79,7 @@ test('commands open existing capture modal, direct three-field group modal and v
 test('commands deny ordinary members and DMs but permit configured ADMIN_ROLES', async () => {
 	const f = fixture()
 	await f.register()
-	for (const name of ['capt', 'group', 'move-all']) {
+	for (const name of ['capt', 'group', 'move-all', 'Создать архив', 'Открыть архив']) {
 		const event = f.interaction(name)
 		event.member.permissions.has = () => false
 		await f.client.commands.get(name).execute(event)
@@ -148,4 +150,122 @@ test('prefix messages do not invoke application command handlers', async () => {
 	require('../src/events/messageCreate')(f.client)
 	await listener({ author: { bot: false }, channel: { isThread: () => false }, content: '!capt' })
 	assert.equal(f.modals.length, 0)
+})
+
+function archiveFixture() {
+	const f = fixture(), created = [], added = [], sent = [], archivedRequests = []
+	f.guild.channels.cache.clear()
+	const parentId = dashboard.getSetting('PARENT_CHANNEL_ID')
+	const member = { id: 'target-member', displayName: '[Admin] Name | 12345', user: { tag: 'target' } }
+	const thread = { id: 'archive-thread', parentId, name: 'archive name 12345', isThread: () => true,
+		members: { add: async id => added.push(id) }, send: async payload => { sent.push(payload) } }
+	const pages = []
+	const parent = { id: parentId, type: ChannelType.GuildText, isThread: () => false, threads: {
+		fetchActive: async () => ({ threads: new Collection() }),
+		fetchArchived: async options => { archivedRequests.push(options); return pages.shift() || { threads: new Collection(), hasMore: false } },
+		create: async options => { created.push(options); f.guild.channels.cache.set(thread.id, thread); return thread }
+	} }
+	f.guild.channels.cache.set(parentId, parent)
+	f.guild.members.fetch = async id => { assert.equal(id, member.id); return member }
+	const event = f.interaction('Создать архив', 'context')
+	event.targetId = member.id
+	event.deferReply = async payload => { event.deferred = true; assert.equal(payload.flags, MessageFlags.Ephemeral) }
+	return { ...f, member, thread, parent, pages, event, created, added, sent, archivedRequests }
+}
+
+test('user context command creates the selected member archive with existing private thread and navigation logic', async () => {
+	const f = archiveFixture()
+	await f.register()
+	await f.listen()(f.event)
+	assert.equal(f.created.length, 1)
+	assert.equal(f.created[0].name, 'archive name 12345')
+	assert.equal(f.created[0].type, ChannelType.PrivateThread)
+	assert.deepEqual(f.added, ['target-member'])
+	assert.match(f.sent[0].components[0].toJSON().components[0].content, /target-member/)
+	assert.match(f.replies[0].content, /создана успешно/)
+})
+
+test('invalid nickname and duplicate archive show modals without creating a thread', async () => {
+	const { handleArchiveCommand } = require('../src/features/archive/archiveContextCommands')
+	const f = archiveFixture()
+	f.member.displayName = 'invalid'
+	await handleArchiveCommand(f.event)
+	assert.match(f.modals.at(-1).components[0].content, /Ник участника не по форме/)
+	f.member.displayName = 'Name | 12345'
+	f.guild.channels.cache.set(f.thread.id, f.thread)
+	await handleArchiveCommand(f.event)
+	assert.match(f.modals.at(-1).components[0].content, /Архив уже создан/)
+	assert.equal(f.created.length, 0)
+})
+
+test('search finds uncached archived threads across pages and prevents duplicate creation', async () => {
+	const f = archiveFixture()
+	const other = { ...f.thread, name: 'archive other 999', archiveTimestamp: 1000 }
+	f.pages.push({ threads: new Collection([['other', other]]), hasMore: true },
+		{ threads: new Collection([[f.thread.id, f.thread]]), hasMore: false })
+	await require('../src/features/archive/archiveContextCommands').handleArchiveCommand(f.event)
+	assert.equal(f.archivedRequests.length, 2)
+	assert.equal(f.archivedRequests[1].before, 1000)
+	assert.match(f.modals[0].components[0].content, /Архив уже создан/)
+	assert.equal(f.created.length, 0)
+})
+
+test('open archive returns a channel link for the selected member or a not-found modal', async () => {
+	const { handleArchiveCommand } = require('../src/features/archive/archiveContextCommands')
+	const f = archiveFixture()
+	f.event.commandName = 'Открыть архив'
+	await handleArchiveCommand(f.event)
+	assert.match(f.modals[0].components[0].content, /архив не найден/)
+	f.guild.channels.cache.set(f.thread.id, f.thread)
+	f.thread.archived = true
+	f.thread.setArchived = async archived => { f.thread.archived = archived }
+	await handleArchiveCommand(f.event)
+	assert.equal(f.replies[0].components[0].toJSON().components[0].url, 'https://discord.com/channels/guild/archive-thread')
+	assert.equal(f.thread.archived, false)
+	assert.deepEqual(f.added, ['admin'])
+	assert.equal(f.created.length, 0)
+})
+
+test('simultaneous create commands create only one archive and release the lock', async () => {
+	const { handleArchiveCommand } = require('../src/features/archive/archiveContextCommands')
+	const f = archiveFixture()
+	let release
+	f.parent.threads.fetchActive = () => new Promise(resolve => { release = resolve })
+	const first = handleArchiveCommand(f.event)
+	await new Promise(resolve => setImmediate(resolve))
+	await handleArchiveCommand(f.event)
+	assert.match(f.modals[0].components[0].content, /уже обрабатывается/)
+	release({ threads: new Collection() })
+	await first
+	await handleArchiveCommand(f.event)
+	assert.equal(f.created.length, 1)
+	assert.match(f.modals.at(-1).components[0].content, /Архив уже создан/)
+})
+
+test('archive notification and legacy creation buttons deny ordinary members', async () => {
+	const f = fixture(), handle = f.listen()
+	for (const [kind, customId] of [['button', 'archive_show_notice'], ['modal', 'archive_notice'],
+		['button', 'create_archive-name-123-123456789012345678'], ['button', 'cancel_create_archive-name-123-123456789012345678']]) {
+		const event = f.interaction(null, kind)
+		event.customId = customId
+		event.member.permissions.has = () => false
+		await handle(event)
+		assert.match(f.replies.at(-1).content, /только администраторам/)
+	}
+})
+
+test('slow archive lookup acknowledges on time and offers a notification modal button', async () => {
+	const f = archiveFixture()
+	f.parent.threads.fetchActive = async () => {
+		await new Promise(resolve => setTimeout(resolve, 1900))
+		return { threads: new Collection([[f.thread.id, f.thread]]) }
+	}
+	await require('../src/features/archive/archiveContextCommands').handleArchiveCommand(f.event)
+	assert.equal(f.event.deferred, true)
+	assert.match(f.replies[0].content, /Архив уже создан/)
+	const button = f.interaction(null, 'button')
+	button.customId = f.replies[0].components[0].toJSON().components[0].custom_id
+	button.message = { content: f.replies[0].content }
+	await f.listen()(button)
+	assert.match(f.modals[0].components[0].content, /Архив уже создан/)
 })

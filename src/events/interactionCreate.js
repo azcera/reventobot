@@ -20,7 +20,7 @@ const {
 
 module.exports = client => {
 	client.on('interactionCreate', async interaction => {
-		if (interaction.isChatInputCommand()) {
+		if (interaction.isChatInputCommand() || interaction.isUserContextMenuCommand()) {
 			const command = client.commands.get(interaction.commandName)
 			if (!command) return
 			try {
@@ -78,6 +78,17 @@ module.exports = client => {
 		if (!guild) return
 
 		const customId = interaction.customId
+		if (interaction.isButton() && customId === 'archive_show_notice') {
+			if (!await authorize(interaction, dashboard)) return
+			return require('../features/archive/archiveContextCommands').showNotice(interaction, interaction.message.content)
+		}
+		if (interaction.isModalSubmit() && customId === 'archive_notice') {
+			if (!await authorize(interaction, dashboard)) return
+			return interaction.reply({ content: 'Уведомление закрыто.', flags: MessageFlags.Ephemeral })
+		}
+		if (interaction.isButton() && (customId.startsWith('create_') || customId.startsWith('cancel_create_'))) {
+			if (!await authorize(interaction, dashboard)) return
+		}
 		if ((interaction.isButton() && MOVED_BUTTON_IDS.has(customId)) ||
 			(interaction.isStringSelectMenu() && customId === 'move_all_channel') ||
 			(interaction.isModalSubmit() && ['modal_capt', 'modal_group_other'].includes(customId))) {

@@ -1,5 +1,31 @@
 const { Client, ButtonInteraction, MessageFlags } = require('discord.js')
 const { parseDisplayName } = require('../../utils/parseDisplayName')
+const { store: dashboard } = require('../../dashboard/store')
+
+async function findMemberArchive(guild, parsed) {
+	const parentId = dashboard.getSetting('PARENT_CHANNEL_ID')
+	const name = ['archive', parsed.memberName.toLowerCase(), parsed.memberStatic].join(' ')
+	const matches = channel => channel?.isThread() && channel.parentId === parentId && channel.name === name
+	const cached = guild.channels.cache.find(matches)
+	if (cached) return cached
+	const parent = guild.channels.cache.get(parentId) || await guild.channels.fetch(parentId)
+	if (!parent?.threads) throw new Error('Родительский канал архивов не настроен.')
+	const active = await parent.threads.fetchActive()
+	const found = active.threads.find(matches)
+	if (found) return found
+	let before
+	do {
+		const page = await parent.threads.fetchArchived({ type: 'private', fetchAll: true, limit: 100, before })
+		const archived = page.threads.find(matches)
+		if (archived) return archived
+		if (!page.hasMore) return null
+		const next = Math.min(...page.threads.map(thread => thread.archiveTimestamp))
+		if (!Number.isFinite(next) || (before !== undefined && next >= before)) {
+			throw new Error('Не удалось продолжить поиск архивов.')
+		}
+		before = next
+	} while (true)
+}
 
 /**
  * Ищет канал-архив для пользователя, нажавшего кнопку archive_find
@@ -20,28 +46,7 @@ async function findArchive(interaction) {
 			})
 		}
 
-		const { memberName, memberStatic } = parsed
-
-		const searchingChannelName = [
-			'archive',
-			memberName.toLowerCase(),
-			memberStatic
-		].join(' ')
-
-		let searchingChannel = guild.channels.cache.find(
-			ch => ch.name === searchingChannelName
-		)
-
-		if (!searchingChannel) {
-			try {
-				const fetchedChannels = await guild.channels.fetch()
-				searchingChannel = fetchedChannels.find(
-					ch => ch.name === searchingChannelName
-				)
-			} catch (error) {
-				console.error('❌ Не удалось загрузить каналы сервера:', error)
-			}
-		}
+		const searchingChannel = await findMemberArchive(guild, parsed)
 
 		if (searchingChannel) {
 			return await interaction.editReply({
@@ -62,4 +67,4 @@ async function findArchive(interaction) {
 	}
 }
 
-module.exports = { findArchive }
+module.exports = { findArchive, findMemberArchive }
