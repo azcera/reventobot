@@ -1,7 +1,7 @@
 const { store: dashboard } = require('../../dashboard/store')
+const { ContainerBuilder } = require('../../services/markdownContainer')
 const {
 	MessageFlags,
-	ContainerBuilder,
 	TextDisplayBuilder,
 	SeparatorBuilder
 } = require('discord.js')

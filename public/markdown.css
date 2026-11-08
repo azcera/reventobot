@@ -101,3 +101,24 @@
 .discord-text .code-keyword { color:#f92672; }
 .discord-text .code-addition { color:#a6e22e; }
 .discord-text .code-deletion { color:#f92672; }
+
+/* Shared source editor, in the dashboard and standalone builder. */
+[hidden] { display:none !important; }
+.markdown-editor { width:100%; min-width:0; border:1px solid var(--border, #41434a); border-radius:10px; overflow:hidden; margin:8px 0 16px; }
+.markdown-tabs, .markdown-toolbar { display:flex; flex-wrap:wrap; gap:5px; padding:9px; background:var(--surface, #24252c); border-bottom:1px solid var(--border, #41434a); }
+.markdown-tabs button, .markdown-toolbar button { cursor:pointer; color:inherit; background:transparent; border:1px solid var(--border, #555); border-radius:5px; padding:5px 9px; font:inherit; font-size:13px; }
+.markdown-tabs button[aria-selected="true"] { background:#5865f2; color:white; }
+.markdown-toolbar button:hover { background:#5865f244; }
+.markdown-editor textarea { display:block; width:100%; box-sizing:border-box; min-height:180px; margin:0; border:0; border-radius:0; resize:vertical; padding:14px; font-family:monospace; line-height:1.55; }
+.markdown-preview { min-height:180px; padding:16px; background:#2b2d31; color:#dbdee1; overflow-wrap:anywhere; font-size:14px; line-height:1.5; }
+.markdown-preview > div + div { margin-top:12px; }
+.markdown-image { max-width:100%; max-height:480px; border-radius:8px; display:block; margin:12px 0; }
+.markdown-section { display:flex; align-items:center; gap:20px; justify-content:space-between; }
+.markdown-section > div { min-width:0; flex:1; }
+.markdown-section .preview-button { flex-shrink:0; padding:6px 12px; background:#4e5058; border-radius:4px; color:white; }
+.markdown-separator { border:0; border-top:1px solid #55575f; margin:14px 0; }
+.markdown-separator.no-line { border-color:transparent; }
+.markdown-separator.spacing-large { margin:24px 0; }
+.user-guide { margin:0 0 20px; padding:16px 20px; border:1px solid var(--border, #41434a); border-radius:12px; line-height:1.6; }
+.user-guide summary { cursor:pointer; font-weight:600; }
+.user-guide code { overflow-wrap:anywhere; }

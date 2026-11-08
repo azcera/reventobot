@@ -1,5 +1,5 @@
-const { MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder,
-	TextDisplayBuilder, SeparatorBuilder, escapeMarkdown } = require('discord.js')
+const { ContainerBuilder } = require('../../services/markdownContainer')
+const { MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextDisplayBuilder, SeparatorBuilder, escapeMarkdown } = require('discord.js')
 const { PAGE_SIZE, queueRows, moscowDay } = require('./familyWarData')
 
 const text = value => escapeMarkdown(String(value ?? '')).replace(/@/g, '＠')

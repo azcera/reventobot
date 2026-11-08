@@ -22,6 +22,15 @@ function validateTemplates(values) {
 		}
 		if (typeof value !== 'string' || !value.trim() || value.length > field.maxLength) throw problem(400, `Проверьте длину поля «${field.label}».`)
 		if (field.type === 'url' && value !== field.default && !isHttpsUrl(value)) throw problem(400, 'Нужна HTTPS-ссылка.')
+		if (field.type === 'text') {
+			try {
+				const items = require('../../public/component-markdown').parse(value)
+				const components = field.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3')
+				if (!components && items.some(item => item.type !== 'text')) throw new Error('В этом поле доступно только форматирование текста; структуру задаёт сообщение.')
+				if (components && items.some(item => item.type !== 'text')) require('../services/containerMessageService').buildEditPayload({ items })
+			}
+			catch (error) { throw problem(400, `Поле «${field.label}»: ${error.message}`) }
+		}
 		const variables = [...value.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g)].map(match => match[1])
 		if (!key.startsWith('permanent.') && (variables.some(name => !field.variables.includes(name)) || field.variables.some(name => !variables.includes(name)))) throw problem(400, 'Сохраните все переменные шаблона без изменения их названий.')
 	}

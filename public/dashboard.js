@@ -183,9 +183,30 @@ function preview(root, fields, values, variables = false) {
 		if (field.type === 'button' || field.label === 'Подпись кнопки') { root.append(node('span', value, 'preview-button')); continue }
 		const block = node('div', null, 'preview-field')
 		block.classList.add('discord-text')
-		block.innerHTML = discordMarkdownToHtml(value)
+		block.innerHTML = typeof renderComponentMarkdown === 'function' ? renderComponentMarkdown(value, field.components !== false) : discordMarkdownToHtml(value)
 		root.append(block)
 	}
+}
+function setupPreviewTabs(form, render) {
+	const layout = form.parentElement
+	const aside = layout.querySelector('aside')
+	let tabs = layout.previousElementSibling
+	if (!tabs?.classList.contains('editor-mode-tabs')) {
+		tabs = node('div', null, 'markdown-tabs editor-mode-tabs')
+		layout.before(tabs)
+	}
+	tabs.replaceChildren()
+	const mode = show => {
+		form.hidden = show; aside.hidden = !show
+		layout.classList.add('single-editor')
+		for (const [index, button] of [...tabs.children].entries()) button.setAttribute('aria-selected', String(index === (show ? 1 : 0)))
+		if (show) { try { render() } catch (error) { aside.querySelector('.message-preview').textContent = error.message } }
+	}
+	for (const [title, show] of [['Edit', false], ['Preview', true]]) {
+		const button = node('button', title); button.type = 'button'; button.setAttribute('role', 'tab')
+		button.addEventListener('click', () => mode(show)); tabs.append(button)
+	}
+	tabs.setAttribute('role', 'tablist'); mode(false)
 }
 function fieldsForm(root, fields, values, onInput) {
 	root.replaceChildren()
@@ -197,10 +218,13 @@ function fieldsForm(root, fields, values, onInput) {
 		input.maxLength = field.maxLength
 		if (input.tagName === 'INPUT') input.type = field.type === 'url' && !input.value.startsWith('attachment://') ? 'url' : 'text'
 		input.addEventListener('input', () => { values[key] = input.value; onInput() })
+		input.id = 'field-' + key.replace(/[^a-zA-Z0-9_-]/g, '-')
+		label.htmlFor = input.id
 		label.append(input)
 		label.dataset.key = key
 		if (field.variables?.length) label.append(node('span', 'Сохраняй переменные: ' + field.variables.map(name => '{' + name + '}').join(', '), 'hint'))
 		root.append(label)
+		if (input.tagName === 'TEXTAREA' && typeof mountMarkdownEditor === 'function') mountMarkdownEditor(input, { components: field.components !== false, render: source => renderComponentMarkdown(source.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name) => examples[name] || match), field.components !== false) })
 	}
 }
 function groupFields() { return config.templates.filter(field => field.group === $('templateGroup').value) }
@@ -216,7 +240,8 @@ function renderTemplates() {
 		if (['Заявка', 'Личные сообщения заявок'].includes($('templateGroup').value)) return previewApplication($('templatePreview'), values)
 		preview($('templatePreview'), fields, values, true)
 	}
-	fieldsForm($('templateFields'), fields, values, update)
+	fieldsForm($('templateFields'), fields, values, () => {})
+	if ($('templateForm')) setupPreviewTabs($('templateForm'), update)
 	if ($('templateGroup').value === 'Правила') {
 		const add = (section) => {
 			const keys = groupFields().map(field => field.key)
@@ -243,7 +268,6 @@ function renderTemplates() {
 		button.addEventListener('click', () => add())
 		$('templateFields').append(button)
 	}
-	update()
 }
 function previewApplication(root, values) {
 	root.replaceChildren()
@@ -264,7 +288,7 @@ function previewApplication(root, values) {
 		// Resolve sample mentions and timestamps before the safe Markdown renderer.
 		content = content.replace(/<t:\d+:[A-Za-z]>/g, match => match.endsWith(':R>') ? 'только что' : new Date(Number(sample.time) * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))
 			.replace(/<@!?\d+>/g, mention => mention.includes(sample.admin) ? '@Куратор' : '@Tony').replace(/<#\d+>/g, mention => mention.includes(examples.channel) ? '#Обзвон' : mention)
-		block.innerHTML = discordMarkdownToHtml(content)
+		block.innerHTML = typeof renderComponentMarkdown === 'function' ? renderComponentMarkdown(content) : discordMarkdownToHtml(content)
 		container.append(block)
 	}
 	const separator = () => container.append(node('div', null, 'discord-separator'))
@@ -340,8 +364,8 @@ function renderSettings() {
 function renderMessage() {
 	const values = Object.fromEntries(currentMessage.fields.map(field => [field.path, field.value]))
 	currentMessage.values = values
-	fieldsForm($('messageFields'), currentMessage.fields, values, () => preview($('messagePreview'), currentMessage.fields, values))
-	preview($('messagePreview'), currentMessage.fields, values)
+	fieldsForm($('messageFields'), currentMessage.fields, values, () => {})
+	setupPreviewTabs($('messageForm'), () => preview($('messagePreview'), currentMessage.fields, values))
 	$('messageEditor').hidden = false
 }
 

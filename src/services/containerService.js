@@ -1,5 +1,5 @@
+const { ContainerBuilder } = require('./markdownContainer')
 const {
-	ContainerBuilder,
 	TextDisplayBuilder,
 	SeparatorBuilder,
 	SeparatorSpacingSize,

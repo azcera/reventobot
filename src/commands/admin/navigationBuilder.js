@@ -1,8 +1,8 @@
 const { store: dashboard } = require('../../dashboard/store')
+const { ContainerBuilder } = require('../../services/markdownContainer')
 const {
 	ButtonBuilder,
 	ButtonStyle,
-	ContainerBuilder,
 	TextDisplayBuilder,
 	SeparatorBuilder,
 	SeparatorSpacingSize,

@@ -86,6 +86,9 @@ function discordMarkdownToHtml(text) {
 	s = s.replace(/~~(.+?)~~/g, '<s>$1</s>')
 	s = s.replace(/\|\|([\s\S]+?)\|\|/g, '<span class="discord-spoiler" tabindex="0" role="button" aria-label="Показать спойлер" aria-expanded="false" onclick="this.classList.toggle(\'revealed\');this.setAttribute(\'aria-expanded\',this.classList.contains(\'revealed\'))" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}">$1</span>')
 
+	// Protect explicit Markdown links before autolinking their URL.
+	s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => protect('<a href="' + url.replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '" target="_blank" rel="noopener">' + label + '</a>'))
+
 	// Simple URLs
 	s = s.replace(
 		/(https?:\/\/[^\s<]+)/g,
@@ -105,8 +108,13 @@ function discordMarkdownToHtml(text) {
 			while (i < lines.length && /^- +/.test(lines[i])) items.push('<li>' + lines[i++].replace(/^- +/, '') + '</li>')
 			i--
 			blocks.push('<ul>' + items.join('') + '</ul>')
+		} else if (/^\d+\. +/.test(lines[i])) {
+			const items = []
+			while (i < lines.length && /^\d+\. +/.test(lines[i])) items.push('<li>' + lines[i++].replace(/^\d+\. +/, '') + '</li>')
+			i--
+			blocks.push('<ol>' + items.join('') + '</ol>')
 		} else blocks.push(heading(lines[i]))
 	}
-	return blocks.join('<br>').replace(/(<\/(?:h[1-3]|small|ul|blockquote)>)<br>/g, '$1')
+	return blocks.join('<br>').replace(/(<\/(?:h[1-3]|small|ul|ol|blockquote)>)<br>/g, '$1')
 		.replace(/\u0000(\d+)\u0000/g, (_, index) => codeBlocks[Number(index)])
 }

@@ -69,7 +69,7 @@ function createStore() {
 				const x = order(a), y = order(b)
 				return x[0] - y[0] || x[1] - y[1]
 			}).map(([key, value]) => ({
-				key, ...value, value: state.templates[key] ?? value.default
+				key, ...value, ...(value.type === 'text' ? { components: value.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3') } : {}), value: state.templates[key] ?? value.default
 			})), settings: Object.entries(settingDefinitions).map(([key, value]) => ({ key, ...value, value: getSetting(key) })) }
 		},
 		async init(database) {

@@ -1,9 +1,9 @@
 const { store: dashboard } = require('../../dashboard/store')
+const { ContainerBuilder } = require('../../services/markdownContainer')
 const {
 	GuildMember,
 	Guild,
 	GuildChannel,
-	ContainerBuilder,
 	TextDisplayBuilder,
 	SeparatorBuilder
 } = require('discord.js')

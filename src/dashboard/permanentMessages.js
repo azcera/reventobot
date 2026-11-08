@@ -1,7 +1,8 @@
 const { MessageFlags } = require('discord.js')
 const { store, templateDefinition } = require('./store')
 const { problem } = require('./auth')
-const { parseMessageLink } = require('../services/containerMessageService')
+const { parseMessageLink, parseContainerMessage, buildEditPayload } = require('../services/containerMessageService')
+const markdown = require('../../public/component-markdown')
 const { snapshot, applyFields } = require('./messageEditor')
 const locks = require('../services/messageLocks')
 const { linesOf, logMessageChange } = require('./changeLog')
@@ -27,8 +28,14 @@ async function fetchMessage(client, guild, link) {
 function bindingFor(kind, message) {
 	const definition = definitions[kind]
 	if (!definition) throw problem(400, 'Неизвестный вид сообщения.')
+	if (!definition.command) {
+		try {
+			const parsed = parseContainerMessage(message)
+			return { link: message.url, markdown: true, fields: [{ key: `permanent.${kind}.${message.id}.0`, path: 'markdown', group: definition.group, label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, default: markdown.stringify(parsed.items), variables: [] }] }
+		} catch (error) { if (error.status !== 422) throw error }
+	}
 	const fields = definition.command ? [] : snapshot(message).fields.map((field, index) => ({
-		...field, key: `permanent.${kind}.${message.id}.${index}`, group: definition.group,
+		...field, components: false, key: `permanent.${kind}.${message.id}.${index}`, group: definition.group,
 		default: field.value, variables: [], type: field.label === 'Подпись кнопки' ? 'button' : field.type
 	}))
 	return { link: message.url, fields }
@@ -61,12 +68,16 @@ async function updateMessage(kind, binding, client, guild, actor) {
 				}
 			}
 			resolveMedia(payload.components)
+		} else if (binding.markdown) {
+			parseContainerMessage(message)
+			payload = buildEditPayload({ items: markdown.parse(store.text(binding.fields[0].key)) })
+			payload.components = payload.components.map(component => component.toJSON())
 		} else {
 			const current = snapshot(message).fields
 			if (current.length !== binding.fields.length || binding.fields.some((field, index) => field.path !== current[index].path || field.type !== (current[index].label === 'Подпись кнопки' ? 'button' : current[index].type))) {
 				throw problem(409, 'Структура сообщения изменилась. Привяжите его заново.')
 			}
-			payload = applyFields(message, Object.fromEntries(binding.fields.map(field => [field.path, store.text(field.key)])))
+			payload = applyFields(message, Object.fromEntries(binding.fields.map(field => [field.path, store.text(field.key)])), { expandMarkdown: false })
 		}
 		for (const component of payload.components) if (component.type === 17) component.accent_color = null
 		const before = linesOf(message)

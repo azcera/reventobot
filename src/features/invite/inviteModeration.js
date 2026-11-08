@@ -1,4 +1,5 @@
 const { store: dashboard } = require('../../dashboard/store')
+const { ContainerBuilder } = require('../../services/markdownContainer')
 const {
 	ModalBuilder,
 	TextInputBuilder,
@@ -8,7 +9,6 @@ const {
 	StringSelectMenuBuilder,
 	StringSelectMenuOptionBuilder,
 	MessageFlags,
-	ContainerBuilder,
 	TextDisplayBuilder,
 	LabelBuilder,
 	SeparatorBuilder

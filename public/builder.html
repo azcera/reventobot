@@ -15,7 +15,7 @@
 		<div class="builder-layout">
 		<!-- ЛЕВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ И СБОРКА -->
 		<div class="panel">
-			<header class="editor-heading"><p class="eyebrow">КОМПОЗИЦИЯ / COMPONENTS V2</p><h2>Редактор сообщения</h2><p>Собери содержимое из блоков и выбери канал публикации.</p></header>
+			<header class="editor-heading"><p class="eyebrow">КОМПОЗИЦИЯ / COMPONENTS V2</p><h2>Редактор сообщения</h2><p>Напиши сообщение с Markdown и выбери канал публикации.</p></header>
 			<details class="message-import">
 				<summary>Редактировать контейнер по ссылке</summary>
 				<div class="import-content">
@@ -46,45 +46,9 @@
 
 			<datalist id="channelOptions"></datalist>
 
-			<div class="component-toolbar">
-				<div class="insert-controls">
-					<label for="insertAfter" id="componentCount">Компоненты: 0</label>
-					<select id="insertAfter" aria-label="Место вставки нового компонента">
-						<option value="">В конец контейнера</option>
-					</select>
-				</div>
-				<div class="actions-bar">
-					<button
-						class="btn-add blue"
-						id="addTextBtn"
-					>
-						+ Текст
-					</button>
-					<button
-						class="btn-add"
-						id="addImageBtn"
-					>
-						+ Изображение
-					</button>
-					<button
-						class="btn-add"
-						id="addSeparatorBtn"
-					>
-						+ Разделитель
-					</button>
-					<button
-						class="btn-add grey"
-						id="addSectionBtn"
-					>
-						+ Текст с кнопкой
-					</button>
-				</div>
-			</div>
-
-			<div
-				id="itemsContainer"
-				class="items-list"
-			></div>
+			<details class="user-guide"><summary>Руководство: конструктор v2</summary><p>Выбери канал и введи сообщение в Markdown. Кнопки над полем вставляют разметку в выделенный текст. Вкладка Preview показывает текущий черновик; вернись в Edit для правок. Только публикация или сохранение отправляют изменения в Discord.</p><p>Разделитель: <code>***</code>, <code>___</code> или <code>---</code> на отдельной строке. Изображение: <code>&lt;img src="https://example.com/image.png" /&gt;</code>. Секция с кнопкой справа: <code>&lt;section buttonLabel="Открыть" buttonLink="https://example.com"&gt;Текст секции&lt;/section&gt;</code>. Теги размещай на отдельных строках; внутри секции допустим текст с Markdown.</p><p>Для изменения существующего контейнера раскрой загрузку по ссылке. «Сохранить изменения» обновляет оригинал, «Отправить копию» создаёт новое сообщение. В Discord допускается до 4000 символов текста и 40 компонентов, включая контейнер и вложенные элементы.</p></details>
+            <label for="markdownSource">Текст сообщения (Markdown)</label>
+            <textarea id="markdownSource" placeholder="# Заголовок&#10;Текст сообщения&#10;---&#10;&lt;img src=&quot;https://example.com/image.png&quot; /&gt;"></textarea>
 
 			<div class="publish-actions">
 				<button type="button" class="btn-send" id="saveMessageBtn" hidden>Сохранить изменения</button>
@@ -97,22 +61,12 @@
 			</div>
 		</div>
 
-		<!-- ПРАВАЯ ПАНЕЛЬ: ЖИВОЕ ПРЕВЬЮ -->
-		<div class="preview-panel">
-			<header class="editor-heading preview-heading"><div><p class="eyebrow">DISCORD / ПРЕДПРОСМОТР</p><h2>Твоё сообщение</h2></div><span class="live-badge">● LIVE</span></header>
-			<div class="preview-stage">
-				<div class="preview-author"><img src="/revento-logo.png" alt="" /><div><strong>Revento <span>ПРИЛОЖЕНИЕ</span></strong><small>Предпросмотр публикации</small></div></div>
-			<div
-				class="discord-container"
-				id="discordPreview"
-			></div>
-			</div>
-			<p class="preview-note">Изменения сразу отображаются в превью. Сообщение появится в канале после публикации.</p>
-		</div>
 		</div>
 
 		<!-- Подключение логики -->
 		<script src="/markdown.js"></script>
+		<script src="/component-markdown.js"></script>
+		<script src="/markdown-editor.js"></script>
 		<script src="/mentions.js"></script>
 		<script src="app.js"></script>
 	</body>

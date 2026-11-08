@@ -206,3 +206,5 @@ input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--brand); 
  .import-row button { flex: auto; }
  .item-header-actions { flex-wrap: wrap; }
 }
+
+.builder-layout { grid-template-columns:minmax(0, 1fr); }
