@@ -1,9 +1,13 @@
 const {
 	ContainerBuilder, SectionBuilder, TextDisplayBuilder, ButtonBuilder,
-	ButtonStyle, MessageFlags, PermissionFlagsBits, SeparatorBuilder, escapeMarkdown
+	ButtonStyle, MessageFlags, PermissionFlagsBits, SeparatorBuilder, escapeMarkdown,
+	MediaGalleryBuilder, MediaGalleryItemBuilder, AttachmentBuilder
 } = require('discord.js')
+const path = require('path')
+const { IMAGES_PATH } = require('../config/path')
 
 const SOURCE = 'https://mitsuki-hub.ru/api/schedule?project=MAJESTIC'
+const UPDATE_INTERVAL = 15 * 60000
 const DAY = 86400000
 const MSK = 3 * 3600000
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
@@ -37,25 +41,30 @@ function selectionId(event) {
 function buildSchedule(events, updatedAt, stale, now = Date.now()) {
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
-	const container = new ContainerBuilder().setAccentColor(0x5865F2).addTextDisplayComponents(
-		new TextDisplayBuilder().setContent('### Расписание Majestic RP'))
+	const container = new ContainerBuilder().setAccentColor(0x5865F2)
+		.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+			new MediaGalleryItemBuilder().setURL('attachment://schedule.png').setDescription('Расписание')))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Расписание Majestic RP'))
 	if (nearest) {
 		container.addSectionComponents(new SectionBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-				`**${EVENT_EMOJI[nearest.label] || '📌'} Ближайшее — ${escapeMarkdown(nearest.label)}**\n**${nearest.time} МСК** · <t:${Math.floor(nearest.timestamp / 1000)}:R>`))
+				`### ${EVENT_EMOJI[nearest.label] || '📌'} Ближайшее — ${escapeMarkdown(nearest.label)}\n**${nearest.time} МСК** · <t:${Math.floor(nearest.timestamp / 1000)}:R>`))
 			.setButtonAccessory(new ButtonBuilder().setCustomId(`schedule_group_${selectionId(nearest)}`)
 				.setLabel('Создать групп').setStyle(ButtonStyle.Primary).setDisabled(stale)))
 	}
-	const rows = upcoming.slice(1, 4).map(event => `${EVENT_EMOJI[event.label] || '📌'} **${event.time}** — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`)
+	const rows = upcoming.slice(1, 4).map(event => `### ${EVENT_EMOJI[event.label] || '📌'} ${event.time} — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`)
 	const special = events.filter(event => event.is247 || event.window || !/^([01]\d|2[0-3]):[0-5]\d$/.test(event.time))
-		.map(event => `${EVENT_EMOJI[event.label] || '📌'} **${escapeMarkdown(event.label)}** — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n-# ${escapeMarkdown(event.note)}` : ''}`)
+		.map(event => `### ${EVENT_EMOJI[event.label] || '📌'} ${escapeMarkdown(event.label)} — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n${escapeMarkdown(event.note)}` : ''}`)
 	if (rows.length) container.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(rows.join('\n')))
 	if (special.length) container.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(special.join('\n\n').slice(0, 3000)))
 	container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 		`-# Время МСК · обновлено <t:${Math.floor(updatedAt / 1000)}:R>${stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : ''}`))
-	return { flags: MessageFlags.IsComponentsV2, components: [container], allowedMentions: { parse: [] } }
+	return {
+		flags: MessageFlags.IsComponentsV2, components: [container], allowedMentions: { parse: [] },
+		files: [new AttachmentBuilder(path.join(IMAGES_PATH, 'schedule.png'), { name: 'schedule.png' })]
+	}
 }
 
 function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Date.now }) {
@@ -66,7 +75,7 @@ function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Dat
 		return result
 	}
 	async function refresh() {
-		if (lastAttempt && now() - lastAttempt < 5 * 60000) return
+		if (lastAttempt && now() - lastAttempt < UPDATE_INTERVAL) return
 		lastAttempt = now()
 		try {
 			const response = await fetchImpl(SOURCE, { signal: AbortSignal.timeout(10000), cache: 'no-store' })
@@ -92,6 +101,9 @@ function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Dat
 		if (messageId) {
 			try {
 				const message = await channel.messages.fetch(messageId)
+				const banner = message.attachments?.find(attachment => attachment.name === 'schedule.png')
+				payload.attachments = banner ? [{ id: banner.id }] : []
+				if (banner) delete payload.files
 				await message.edit(payload)
 				return
 			} catch (error) {
@@ -121,13 +133,13 @@ function createEventSchedule({ client, pool, store, fetchImpl = fetch, now = Dat
 		async start() {
 			await pool.query('CREATE TABLE IF NOT EXISTS event_schedule_messages (channel_id TEXT PRIMARY KEY, message_id TEXT NOT NULL)')
 			await serialized(tick)
-			timer = setInterval(() => serialized(tick).catch(error => console.error('[Schedule]', error.message)), 60000)
+			timer = setInterval(() => serialized(tick).catch(error => console.error('[Schedule]', error.message)), UPDATE_INTERVAL)
 			timer.unref()
 		},
 		async stop() { clearInterval(timer); await queue },
 		canCreateGroup(member) { return canCreateGroup(member, store) },
 		resolveSelection(id) {
-			if (stale || now() - updatedAt > 6 * 60000) return null
+			if (stale || now() - updatedAt > UPDATE_INTERVAL + 60000) return null
 			return upcomingEvents(events, now()).find(event => selectionId(event) === id) || null
 		},
 		publish(channel) {
