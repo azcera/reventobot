@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { Collection } = require('discord.js')
 const { createStore } = require('../src/dashboard/store')
-const { rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, queueRows } = require('../src/features/capture/familyWarData')
+const { rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, registrationClosed, battleSummary, queueRows } = require('../src/features/capture/familyWarData')
 const { registrationMessage } = require('../src/features/capture/familyWarMessages')
 const { createFamilyWars } = require('../src/services/familyWars')
 
@@ -29,6 +29,8 @@ function fixture() {
 	const guild = { id: guildId, members: { cache: members, fetch: async () => members } }
 	const client = { user: { id: 'bot' }, channels: { fetch: async () => channel }, guilds: { fetch: async () => guild } }
 	const pool = { async query(sql, params = []) {
+		if (sql.startsWith('SELECT * FROM family_wars WHERE guild_id')) return { rows: [...saved.values()].filter(row =>
+			row.guild_id === params[0] && row.registration_id && !row.registration.closedAt).map(row => structuredClone(row)) }
 		if (sql.startsWith('SELECT * FROM family_wars')) return { rows: saved.has(params[1] + ':' + params[0]) ? [structuredClone(saved.get(params[1] + ':' + params[0]))] : [] }
 		if (sql.startsWith('INSERT INTO family_wars')) {
 			const [guild_id, war_key, data, registration, announcement_id, announcement_channel_id, announcement_state, registration_id, registration_channel_id, registration_state] = params
@@ -355,4 +357,90 @@ test('API key is sent as x-api-key only to the fixed source and invalid credenti
 	await assert.rejects(withoutKey.poll(), /Заполните FAMILY_WARS_API_KEY/)
 	const forbidden = createFamilyWars({ ...f.options, fetchImpl: async () => ({ ok: false, status: 403 }) })
 	await assert.rejects(forbidden.poll(), /доступ отклонён/)
+})
+
+test('score prefers explicit remaining counts, otherwise subtracts opposing kills from players with damage', () => {
+	const war = normalizeWar(rawWar({ status: 'finished', players: {
+		1698: [{ damage: 10, kills: 1 }, { damage: 1, kills: 0 }, { damage: 0, kills: 0 }],
+		1331: [{ damage: 2, kills: 2 }]
+	} }), rulesFromEnv({}), null, start)
+	assert.deepEqual(battleSummary(war), { ours: 0, theirs: 0, estimated: true, result: 'Ничья' })
+	war.raw.players[1331][0].kills = 1
+	assert.deepEqual(battleSummary(war), { ours: 1, theirs: 0, estimated: true, result: 'Победа' })
+	war.raw.score = { 1698: 0, 1331: 10 }
+	war.raw.winnerFamilyId = 1331
+	assert.deepEqual(battleSummary(war), { ours: 0, theirs: 10, estimated: false, result: 'Поражение' })
+	delete war.raw.score
+	delete war.raw.players[1331][0].kills
+	assert.equal(battleSummary(war).ours, null)
+})
+
+test('registration deadline follows changed start time and freezes registration while announcement keeps updating', async () => {
+	const f = fixture()
+	await f.service.poll(); await f.click('capt_api', f.row().announcement_id)
+	f.setCaptures([rawWar({ startAt: '2026-11-08T13:00:00Z' })]); await f.service.poll()
+	f.setClock('2026-11-08T12:27:00Z'); await f.service.poll()
+	assert.equal(f.row().registration.closedAt, undefined)
+	assert.equal(registrationClosed(f.row().data, Date.parse('2026-11-08T12:56:59.999Z')), false)
+	f.setClock('2026-11-08T12:57:00Z'); await f.service.poll()
+	assert.ok(f.row().registration.closedAt)
+	const frozen = f.changes.findLast(payload => plain(payload).includes('war_join_'))
+	assert.match(plain(frozen), /Регистрация закрыта/)
+	const buttons = JSON.parse(plain(frozen))[0].components.flatMap(component => component.components || [])
+	assert.ok(buttons.every(button => button.disabled))
+	assert.match((await f.click('war_join'))[0], /Регистрация закрыта/)
+	assert.match((await f.click('war_sort'))[0], /Регистрация закрыта/)
+	f.setCaptures([rawWar({ startAt: '2026-11-08T13:05:00Z', selectedMapName: 'Другая карта', score: { 1698: 0, 1331: 10 } })])
+	const edits = f.changes.length
+	await f.service.poll()
+	assert.equal(f.changes.length, edits + 1)
+	assert.match(plain(f.changes.at(-1)), /Другая карта/)
+	assert.match(plain(f.changes.at(-1)), /0:10/)
+	assert.equal(f.changes.findLast(payload => plain(payload).includes('war_join_')), frozen)
+	f.setCaptures([rawWar({ status: 'finished', score: { 1698: 0, 1331: 1 }, winnerFamilyId: 1331 })])
+	await f.service.poll()
+	assert.match(plain(f.changes.at(-1)), /0:1/)
+	assert.match(plain(f.changes.at(-1)), /Поражение/)
+	const finalRow = structuredClone(f.row()), finalEdits = f.changes.length
+	f.setCaptures([rawWar({ selectedMapName: 'Should not update' })])
+	await createFamilyWars(f.options).poll()
+	assert.deepEqual(f.row(), finalRow)
+	assert.equal(f.changes.length, finalEdits)
+})
+
+test('restart restores exact closure timer and API failure does not prevent registration closure', async () => {
+	const f = fixture()
+	await f.service.poll(); await f.click('capt_api', f.row().announcement_id)
+	const timers = [], cleared = []
+	const service = createFamilyWars({ ...f.options,
+		setTimer: (callback, delay) => { const timer = { callback, delay }; timers.push(timer); return timer },
+		clearTimer: timer => cleared.push(timer) })
+	service.start()
+	await new Promise(resolve => setImmediate(resolve))
+	const deadline = timers.find(timer => timer.delay === 27 * 60000 - 5000)
+	assert.ok(deadline)
+	f.setClock('2026-11-08T12:27:00Z')
+	f.setFailure(true)
+	await deadline.callback()
+	assert.ok(f.row().registration.closedAt)
+	assert.match(plain(f.changes.findLast(payload => plain(payload).includes('war_join_'))), /Регистрация закрыта/)
+	await assert.rejects(service.poll(), /network/)
+	await service.stop()
+	assert.ok(cleared.length > 0)
+})
+
+test('testcapt info previews latest finished announcement with historical time, map, result and score', async () => {
+	const f = fixture(), replies = []
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z', score: { 1698: 0, 1331: 10 }, winnerId: 1331 }),
+		rawWar({ id: 2, status: 'finished', startAt: '2026-11-06T12:30:00Z' }), rawWar()])
+	await require('../src/commands/admin/testcapt').execute({ guild: f.guild, member: f.member,
+		client: { familyWars: f.service }, reply: async payload => replies.push(payload) }, ['info'])
+	const payload = plain(replies[0])
+	assert.match(payload, /Просмотр последнего завершённого капта №45767/)
+	assert.match(payload, /0:10/)
+	assert.match(payload, /Поражение/)
+	assert.match(payload, /Палето-Бей/)
+	assert.ok(payload.includes(String(Date.parse('2026-11-07T12:30:00Z') / 1000)))
+	assert.equal(f.saved.size, 0)
+	assert.equal(f.sent.length, 0)
 })

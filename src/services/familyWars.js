@@ -1,6 +1,6 @@
 const { createHash } = require('node:crypto')
 const { PermissionFlagsBits, MessageFlags, TextDisplayBuilder } = require('discord.js')
-const { SERVER, rulesFromEnv, nextPollAt, moscowDay, normalizeWar, canAnnounce, bindingIndex } = require('../features/capture/familyWarData')
+const { SERVER, rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, registrationClosed, battleSummary, bindingIndex } = require('../features/capture/familyWarData')
 const { announcement, registrationMessage } = require('../features/capture/familyWarMessages')
 
 const FAMILY_WAR_SCHEMA = `CREATE TABLE IF NOT EXISTS family_wars (
@@ -20,7 +20,7 @@ function hasButton(message, marker) {
 function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = fetch,
 	now = Date.now, logger = console, setTimer = setTimeout, clearTimer = clearTimeout }) {
 	const locks = new Map()
-	let schema, timer, polling, stopped = true
+	let schema, timer, closeTimer, polling, stopped = true
 	const rules = rulesFromEnv(env)
 	function ensureSchema() {
 		if (!schema) schema = pool.query(FAMILY_WAR_SCHEMA).catch(error => { schema = null; throw error })
@@ -96,13 +96,51 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		await message.edit(payload)
 	}
 	async function refresh(row, guild, bindings) {
-		if (row.registration_id) await edit(row, 'registration', registrationMessage(row.data, row.registration, guild, bindings, store, now()))
-		const version = JSON.stringify([row.data.startAt, row.data.status, row.data.neutral, row.data.closed, row.data.enemy, row.data.map, row.data.zone, url(row)])
-		if (row.announcement_id && row.registration.announcementVersion !== version) {
+		if (row.registration_id && !row.registration.closedAt) {
+			await edit(row, 'registration', registrationMessage(row.data, row.registration, guild, bindings, store, now()))
+			if (registrationClosed(row.data, now())) {
+				row.registration.closedAt = now()
+				await save(row)
+			}
+		}
+		const version = JSON.stringify([row.data.startAt, row.data.status, row.data.neutral, row.data.closed, row.data.enemy, row.data.map, row.data.zone, battleSummary(row.data), registrationClosed(row.data, now()), url(row)])
+		if (row.announcement_id && !row.registration.announcementFinished && row.registration.announcementVersion !== version) {
 			await edit(row, 'announcement', announcement(row.data, url(row), now()))
 			row.registration.announcementVersion = version
+			if (row.data.closed) row.registration.announcementFinished = true
 			await save(row)
 		}
+	}
+	function scheduleClosures() {
+		return locked('registration-closures', async () => {
+			if (closeTimer) { clearTimer(closeTimer); closeTimer = null }
+			await ensureSchema()
+			const rows = (await pool.query("SELECT * FROM family_wars WHERE guild_id = $1 AND registration_id IS NOT NULL AND NOT (registration ? 'closedAt')", [env.GUILD_ID])).rows
+			let next = Infinity
+			for (const snapshot of rows) {
+				if (snapshot.data.testSource || snapshot.registration.closedAt || !snapshot.registration_id) continue
+				const deadline = snapshot.data.startAt - 3 * 60000
+				if (deadline > now() && !snapshot.data.closed && !snapshot.data.neutral) { next = Math.min(next, deadline); continue }
+				await locked(`${snapshot.guild_id}:${snapshot.war_key}`, async () => {
+					const row = await load(snapshot.war_key, snapshot.guild_id)
+					if (!row || row.registration.closedAt || !registrationClosed(row.data, now())) return
+					const guild = await client.guilds.fetch(row.guild_id)
+					await refresh(row, guild, await decisions(guild.id))
+				})
+			}
+			if (!stopped && Number.isFinite(next)) {
+				closeTimer = setTimer(() => {
+					return scheduleClosures().catch(error => logger.error('[FamilyWars] Закрытие регистрации:', error.message))
+				}, Math.max(0, next - now()))
+				closeTimer.unref?.()
+			}
+		}).catch(error => {
+			if (!stopped && !closeTimer) closeTimer = setTimer(() => {
+				closeTimer = null
+				scheduleClosures().catch(error => logger.error('[FamilyWars] Закрытие регистрации:', error.message))
+			}, 60000)
+			throw error
+		})
 	}
 	function noteRoster(row) {
 		row.registration.seen ||= {}
@@ -134,6 +172,8 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 				await locked(`${guild.id}:${SERVER}:${raw.id}`, async () => {
 					const key = `${SERVER}:${raw.id}`
 					const previous = await load(key, guild.id)
+					if (previous?.data.closed && (!previous.announcement_id || previous.registration.announcementFinished) &&
+						(!previous.registration_id || previous.registration.closedAt)) return
 					const war = normalizeWar(raw, rules, previous?.data, now())
 					if (!war) return
 					const row = previous || { guild_id: guild.id, war_key: key, registration: { joins: {}, declined: {}, seen: {}, sortMode: 'priority', page: 0 } }
@@ -149,7 +189,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 						}
 						await deliver(row, 'announcement', payload)
 					}
-					if (row.registration_id || row.registration_state === 'sending') {
+					if ((row.registration_id && !row.registration.closedAt) || row.registration_state === 'sending') {
 						if (!rosterLoaded) { await guild.members.fetch({ time: 30000 }); bindings = await decisions(guild.id); rosterLoaded = true }
 						if (!row.registration_id) await deliver(row, 'registration', registrationMessage(war, row.registration, guild, bindings, store, now()))
 					}
@@ -160,7 +200,9 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		}
 	}
 	function poll() {
-		if (!polling) polling = pollOnce().finally(() => { polling = null })
+		if (!polling) polling = pollOnce().finally(async () => {
+			try { await scheduleClosures() } finally { polling = null }
+		})
 		return polling
 	}
 	function schedule() {
@@ -171,7 +213,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		}, nextPollAt(now()) - now())
 		timer.unref?.()
 	}
-	async function createTestRegistration(message) {
+	async function createTestRegistration(message, { preview = false } = {}) {
 		if (!message.guild || message.guild.id !== env.GUILD_ID) return
 		const admin = message.member.permissions.has(PermissionFlagsBits.Administrator) ||
 			store.roleIds('ADMIN_ROLES').some(id => message.member.roles.cache.has(id))
@@ -179,12 +221,17 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		await ensureSchema()
 		const captures = await fetchWars()
 		const wars = captures.map(raw => normalizeWar(raw, rules, null, now())).filter(war =>
-			war && war.closed && !war.neutral && war.startAt <= now())
+			war && war.status === 'finished' && !war.neutral && war.startAt <= now())
 		wars.sort((a, b) => b.startAt - a.startAt || b.apiId - a.apiId)
 		let source = wars[0]
 		if (!source) return message.reply('API не вернул ни одного завершённого капта нашей семьи.')
 		const previous = await load(source.key, message.guild.id)
 		source = normalizeWar(source.raw, rules, previous?.data, now())
+		if (preview) {
+			const payload = announcement(source, null, now())
+			payload.components[0].addTextDisplayComponents(new TextDisplayBuilder().setContent(`🧪 Просмотр последнего завершённого капта №${source.apiId}.`))
+			return message.reply(payload)
+		}
 		if (!source.rosterUpdatedAt) return message.reply('Состав последнего завершённого капта неизвестен: API и база не содержат снимка для проверки.')
 		const key = `${SERVER}:${message.id}`
 		return locked(`${message.guild.id}:${key}`, async () => {
@@ -222,8 +269,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 					store.roleIds('ADMIN_ROLES').some(id => interaction.member.roles.cache.has(id))
 				if ((create || match[1] === 'war_sort') && !admin) return respond('Недостаточно прав.')
 				if (create && row.registration_id) return respond(`Регистрация уже создана: ${url(row)}`)
-				if ((create || ['war_join', 'war_leave'].includes(match[1])) &&
-					(row.data.closed || row.data.neutral || moscowDay(row.data.startAt) < moscowDay(now()))) return respond('Капт завершён, устарел или относится к нейтральной территории.')
+				if (row.registration.closedAt || registrationClosed(row.data, now())) return respond('Регистрация закрыта: до начала осталось не больше 3 минут, либо капт завершён, устарел или относится к нейтральной территории.')
 				const guild = interaction.guild
 				// Joining/leaving/sorting uses the cache maintained by GuildMembers events.
 				if (create) await guild.members.fetch({ time: 30000 })
@@ -252,12 +298,19 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		} catch (error) {
 			logger.error('[FamilyWars] Ошибка кнопки:', error.message)
 			await respond('Не удалось обновить капт. Проверьте журнал бота; повторное нажатие не создаёт вторую регистрацию.').catch(() => {})
+		} finally {
+			await scheduleClosures().catch(error => logger.error('[FamilyWars] Закрытие регистрации:', error.message))
 		}
 	}
 	return {
 		poll, handle, createTestRegistration,
-		start() { if (stopped) { stopped = false; schedule() } },
-		async stop() { stopped = true; clearTimer(timer); await polling?.catch(() => {}) }
+		start() {
+			if (stopped) {
+				stopped = false; schedule()
+				scheduleClosures().catch(error => logger.error('[FamilyWars] Закрытие регистрации:', error.message))
+			}
+		},
+		async stop() { stopped = true; clearTimer(timer); if (closeTimer) clearTimer(closeTimer); await polling?.catch(() => {}) }
 	}
 }
 

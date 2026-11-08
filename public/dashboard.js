@@ -326,7 +326,7 @@ function renderSettings() {
 		const label = node('label', field.label)
 		container.append(label)
 		if (field.type === 'rolePrefixes') {
-			container.append(node('small', 'Формат: [Dep]. При нескольких ролях используется первый префикс. Пробел после него добавляется автоматически. Применяется при следующей смене роли.'))
+			container.append(node('small', 'Формат: [Dep]. При нескольких ролях используется первый префикс. Пробел после него добавляется автоматически. Кнопка ниже сохранит префиксы и обновит ники всех участников с указанными ролями. Ники длиннее 32 символов и участники, которых бот не может переименовать, будут пропущены.'))
 			const rows = node('div')
 			const draw = () => {
 				rows.replaceChildren()
@@ -359,7 +359,16 @@ function renderSettings() {
 			}
 			const add = node('button', 'Добавить префикс'); add.type = 'button'
 			add.addEventListener('click', () => { settingsDraft[field.key] = [...settingsDraft[field.key], { roleId: '', prefix: '' }]; draw() })
-			container.append(rows, add); draw()
+			const sync = node('button', 'Сохранить префиксы и обновить всех в Discord'); sync.type = 'button'
+			sync.addEventListener('click', () => action(async () => {
+				config = await api('settings', { revision: config.revision, values: { [field.key]: settingsDraft[field.key] } })
+				notice('Префиксы сохранены. Обновление участников в Discord…')
+				try {
+					const result = await api('role-prefixes/sync', {})
+					notice(`Обновлено: ${result.updated}. Уже актуальны: ${result.unchanged}. Пропущено (права или длина ника): ${result.skipped}. Ошибок: ${result.failed}.`, result.failed > 0 || result.skipped > 0)
+				} catch (error) { throw new Error('Префиксы сохранены, но обновление участников не завершено: ' + error.message) }
+			}))
+			container.append(rows, add, sync); draw()
 		} else if (field.type === 'boolean') {
 			const input = node('input')
 			input.type = 'checkbox'; input.checked = settingsDraft[field.key]

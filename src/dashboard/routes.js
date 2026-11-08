@@ -7,6 +7,7 @@ const locks = require('../services/messageLocks')
 const permanent = require('./permanentMessages')
 const { linesOf, logMessageChange, diffLines } = require('./changeLog')
 const { createMajesticSync } = require('../services/majesticSync')
+const { syncRolePrefixes } = require('../services/rolePrefixSync')
 
 const panelKey = require('./panelKey')
 
@@ -154,6 +155,20 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }), m
 				.catch(error => console.error('[Dashboard audit]', error.message))
 			res.json({ ...store.snapshot(), syncResults })
 		} catch (error) { respondError(res, error) }
+	})
+	const prefixSyncs = new Set()
+	app.post('/api/role-prefixes/sync', async (req, res) => {
+		if (prefixSyncs.has(req.guild.id)) return respondError(res, problem(409, 'Префиксы уже обновляются.'))
+		prefixSyncs.add(req.guild.id)
+		try {
+			const rolePrefixes = structuredClone(store.getSetting('ROLE_PREFIXES'))
+			await store.audit(req.dashboardUser, 'role-prefixes.sync.request', req.guild.id)
+			const result = await syncRolePrefixes(req.guild, rolePrefixes)
+			await store.audit(req.dashboardUser, 'role-prefixes.sync', req.guild.id, result)
+				.catch(error => console.error('[Dashboard audit]', error.message))
+			res.json(result)
+		} catch (error) { respondError(res, error) }
+		finally { prefixSyncs.delete(req.guild.id) }
 	})
 	app.post('/api/permanent-message', async (req, res) => {
 		try {

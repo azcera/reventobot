@@ -62,6 +62,38 @@ function canAnnounce(war, now) {
 	return !war.neutral && !war.closed && war.startAt >= now && moscowDay(war.startAt) === moscowDay(now)
 }
 
+function registrationClosed(war, now) {
+	return war.closed || war.neutral || moscowDay(war.startAt) < moscowDay(now) ||
+		(!war.testSource && now >= war.startAt - 3 * 60000)
+}
+
+function battleSummary(war) {
+	const raw = war.raw
+	const enemyId = war.attack ? raw.defendersId : raw.attackersId
+	const count = value => Number.isInteger(value) && value >= 0
+	let ours = raw.score?.[FAMILY_ID], theirs = raw.score?.[enemyId], estimated = false
+	if (!count(ours) || !count(theirs)) {
+		const stats = id => {
+			const players = raw.players?.[id]
+			if (!Array.isArray(players) || !players.length || !players.every(player =>
+				Number.isFinite(player.damage) && player.damage >= 0 && count(player.kills))) return null
+			return { initial: players.filter(player => player.damage >= 1).length,
+				kills: players.reduce((total, player) => total + player.kills, 0) }
+		}
+		const own = stats(FAMILY_ID), enemy = stats(enemyId)
+		if (own && enemy) {
+			ours = Math.max(0, own.initial - enemy.kills)
+			theirs = Math.max(0, enemy.initial - own.kills)
+			estimated = true
+		} else ours = theirs = null
+	}
+	const winner = raw.winnerFamilyId ?? raw.winnerId
+	const result = winner === FAMILY_ID ? 'Победа' : winner === enemyId ? 'Поражение' :
+		war.status === 'finished' && ours !== null && (ours === 0 || theirs === 0) ?
+			(ours === theirs ? 'Ничья' : ours > theirs ? 'Победа' : 'Поражение') : 'Неизвестен'
+	return { ours, theirs, estimated, result }
+}
+
 function bindingIndex(members, decisions = {}) {
 	const index = new Map()
 	for (const member of members) {
@@ -104,4 +136,4 @@ function queueRows(war, registration, members, decisions, priorityRoles, now) {
 		a.joinedAt - b.joinedAt || String(a.static || a.userId).localeCompare(String(b.static || b.userId)))
 }
 
-module.exports = { FAMILY_ID, SERVER, PAGE_SIZE, rulesFromEnv, moscowDay, nextPollAt, normalizeWar, canAnnounce, bindingIndex, queueRows }
+module.exports = { FAMILY_ID, SERVER, PAGE_SIZE, rulesFromEnv, moscowDay, nextPollAt, normalizeWar, canAnnounce, registrationClosed, battleSummary, bindingIndex, queueRows }
