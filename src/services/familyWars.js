@@ -215,7 +215,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		}, nextPollAt(now()) - now())
 		timer.unref?.()
 	}
-	async function createTestRegistration(message, { preview = false } = {}) {
+	async function createTestRegistration(message, { preview = false, attackOnly = false } = {}) {
 		if (!message.guild || message.guild.id !== env.GUILD_ID) return
 		const admin = message.member.permissions.has(PermissionFlagsBits.Administrator) ||
 			store.roleIds('ADMIN_ROLES').some(id => message.member.roles.cache.has(id))
@@ -223,10 +223,10 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		await ensureSchema()
 		const captures = await fetchWars()
 		const wars = captures.map(raw => normalizeWar(raw, rules, null, now())).filter(war =>
-			war && war.status === 'finished' && !war.neutral && war.startAt <= now())
+			war && war.status === 'finished' && !war.neutral && war.startAt <= now() && (!attackOnly || war.attack))
 		wars.sort((a, b) => b.startAt - a.startAt || b.apiId - a.apiId)
 		let source = wars[0]
-		if (!source) return message.reply('API не вернул ни одного завершённого капта нашей семьи.')
+		if (!source) return message.reply(attackOnly ? 'API не вернул ни одного завершённого капта, где наша семья была атакующей.' : 'API не вернул ни одного завершённого капта нашей семьи.')
 		const previous = await load(source.key, message.guild.id)
 		source = normalizeWar(source.raw, rules, previous?.data, now())
 		if (preview) {

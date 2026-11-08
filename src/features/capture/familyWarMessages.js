@@ -43,7 +43,8 @@ function announcement(war, registrationUrl, now = Date.now(), members = [], deci
 		const label = (player, field) => {
 			if (!player) return 'Неопределено'
 			const ids = bindings.get(String(player.id)) || []
-			return `${code(player.name || 'Неизвестный игрок')} / ${ids.length === 1 ? `<@${ids[0]}>` : code(player.id)} — **${player[field]}**`
+			const identity = ids.length === 1 ? `<@${ids[0]}>` : `${code(player.name || 'Неизвестный игрок')} / ${code(player.id)}`
+			return `${identity} — **${player[field]}**`
 		}
 		container.addSeparatorComponents(new SeparatorBuilder())
 			.addTextDisplayComponents(textBlock(`### 💥 MVP по урону: ${label(battle.damageMvp, 'damage')}\n### 🎯 MVP по киллам: ${label(battle.killsMvp, 'kills')}`))

@@ -382,6 +382,10 @@ test('API key is sent as x-api-key only to the fixed source and invalid credenti
 
 test('result uses winner ID only, accepting numeric strings and preferring winnerId', () => {
 	const summary = extra => battleSummary(normalizeWar(rawWar(extra), rulesFromEnv({}), null, start))
+	for (const winner of [1698, '1698']) assert.equal(summary({ status: 'finished', winner }).result, 'Победа')
+	for (const winner of [1331, '1331']) assert.equal(summary({ status: 'finished', winner }).result, 'Поражение')
+	assert.equal(summary({ winner: 1698, winnerId: 1331 }).result, 'Победа')
+	assert.equal(summary({ winner: null, winnerId: 1698 }).result, 'Победа')
 	for (const winnerId of [1698, '1698']) assert.equal(summary({ winnerId }).result, 'Победа')
 	for (const winnerId of [1331, '1331']) assert.equal(summary({ winnerId }).result, 'Поражение')
 	assert.equal(summary({ winnerId: '1698', winnerFamilyId: 1331 }).result, 'Победа')
@@ -407,7 +411,8 @@ test('announcement restores Telegram layout and shows own-family MVPs with unamb
 	assert.match(rendered, /Карта: `Неопределена`/)
 	assert.match(rendered, /🏆 Результат: `Победа`/)
 	assert.match(rendered, /Статус: `finished`/)
-	assert.match(rendered, /💥 MVP по урону: `Maya Well` \/ <@222222222222222222> — \*\*1500\*\*/)
+	assert.match(rendered, /💥 MVP по урону: <@222222222222222222> — \*\*1500\*\*/)
+	assert.doesNotMatch(rendered, /Maya Well/)
 	assert.match(rendered, /🎯 MVP по киллам: `Other Player` \/ `42` — \*\*5\*\*/)
 	assert.doesNotMatch(rendered, /Осталось|Статус API|Enemy MVP/)
 	assert.equal(payload.files[0].name, 'capt.png')
@@ -487,14 +492,37 @@ test('finished announcement loads MVP bindings even without a registration', asy
 	await f.service.poll()
 	assert.equal(fetches, 1)
 	assert.equal(f.row().registration_id, null)
-	assert.match(plain(f.changes.at(-1)), /MVP по урону: `Maya Well` \/ <@222222222222222222>/)
+	assert.match(plain(f.changes.at(-1)), /MVP по урону: <@222222222222222222>/)
 	assert.match(plain(f.changes.at(-1)), /🏆 Результат: `Победа`/)
 	assert.deepEqual(f.changes.at(-1).attachments, [])
 })
 
+test('testcapt info attack selects the latest finished attack from API rather than a newer defence', async () => {
+	const f = fixture(), replies = []
+	const attack = { attackersId: 1698, defendersId: 1331, attackersName: 'REVENTO', defendersName: 'Enemy' }
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z' }),
+		rawWar({ ...attack, id: 2, status: 'finished', startAt: '2026-11-06T12:30:00Z', winner: 1698 }),
+		rawWar({ ...attack, id: 3, status: 'finished', startAt: '2026-11-05T12:30:00Z' }),
+		rawWar({ ...attack, id: 4 }),
+		rawWar({ ...attack, id: 5, status: 'finished', startAt: '2026-11-09T12:30:00Z' })])
+	const message = { guild: f.guild, member: f.member, client: { familyWars: f.service },
+		reply: async payload => replies.push(payload) }
+	await require('../src/commands/admin/testcapt').execute(message, ['info', 'attack'])
+	const payload = plain(replies.pop())
+	assert.match(payload, /Просмотр последнего завершённого капта №2/)
+	assert.match(payload, /# ⚔️ КАПТ АТАКА ⚔️/)
+	assert.match(payload, /Против: `Enemy`/)
+	assert.match(payload, /🏆 Результат: `Победа`/)
+	assert.equal(f.saved.size, 0)
+	assert.equal(f.sent.length, 0)
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z' })])
+	await require('../src/commands/admin/testcapt').execute(message, ['info', 'attack'])
+	assert.match(replies.pop(), /не вернул.*атакующей/)
+})
+
 test('testcapt info previews latest finished announcement with historical time, map, result and MVPs', async () => {
 	const f = fixture(), replies = []
-	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z', score: { 1698: 0, 1331: 10 }, winnerId: 1331,
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z', score: { 1698: 0, 1331: 10 }, winner: 1331,
 		players: { 1698: [{ id: 231542, name: 'Maya Well', damage: 1500, kills: 5 }] } }),
 		rawWar({ id: 2, status: 'finished', startAt: '2026-11-06T12:30:00Z' }), rawWar()])
 	await require('../src/commands/admin/testcapt').execute({ guild: f.guild, member: f.member,

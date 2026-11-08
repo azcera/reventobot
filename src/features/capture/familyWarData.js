@@ -70,7 +70,7 @@ function registrationClosed(war, now) {
 function battleSummary(war) {
 	const raw = war.raw
 	const enemyId = war.attack ? raw.defendersId : raw.attackersId
-	const winner = Number(raw.winnerId ?? raw.winnerFamilyId)
+	const winner = Number(raw.winner ?? raw.winnerId ?? raw.winnerFamilyId)
 	const result = winner === FAMILY_ID ? 'Победа' : winner > 0 && winner === enemyId ? 'Поражение' : 'Неопределено'
 	const players = raw.players?.[FAMILY_ID]
 	const best = field => Array.isArray(players) ? players.filter(player =>
