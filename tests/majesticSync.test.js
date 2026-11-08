@@ -5,7 +5,7 @@ const { createMajesticSync } = require('../src/services/majesticSync')
 const { rankRoles, buildPreview } = require('../src/features/majestic/syncPreview')
 const { adminPrefix } = require('../src/utils/adminPrefix')
 
-function fixture() {
+function fixture(overrides = {}) {
 	let saved
 	let clock = 100000
 	let family = [{ id: 231542, login: 'Maya Well', rankName: 'Main', rankId: 1 }]
@@ -30,7 +30,8 @@ function fixture() {
 		return { rows: [] }
 	} }
 	const store = { roleIds: () => [], getSetting: () => true, audit: async (...args) => { audits.push(args) } }
-	const options = { pool, store, env: {}, now: () => clock, readFamily: async () => ({ total: family.length, items: family }) }
+	const options = { pool, store, env: {}, now: () => clock, readFamily: async () => ({ total: family.length, items: family }),
+		logger: { error() {} }, ...overrides }
 	const sync = createMajesticSync(options)
 	async function preview() { await sync.preview(guild, actor); await sync.wait(guild); return (await sync.state(guild)).preview }
 	return { sync, options, actor, guild, member, members, edits, audits, preview,
@@ -140,6 +141,44 @@ test('Discord failure stops the run and does not expose response details', async
 	assert.equal(state.run.status, 'failed')
 	assert.equal(state.run.results[0].status, 'failed')
 	assert.ok(!JSON.stringify(state).includes('private token'))
+})
+
+test('apply diagnostics identify failing stages and redact secrets without exposing them in state', async () => {
+	for (const stage of ['discord.roles.fetch', 'discord.members.fetch', 'database.save', 'audit: majestic.member.request', 'discord.member.edit:222222222222222222']) {
+		const logs = []
+		const f = fixture({ logger: { error: (...args) => logs.push(args) }, env: { MAJESTIC_SESSION_ID: 'test-session-secret', TOKEN: 'test-bot-secret' } })
+		const preview = await f.preview()
+		const error = Object.assign(new Error('Failure test-session-secret test-bot-secret https://example.com/private sessionId=unknown-secret'), { code: 'TEST_FAILURE', status: 503,
+			requestBody: { token: 'request-body-secret' }, response: { secret: 'response-secret' } })
+		const fail = async () => { throw error }
+		if (stage === 'discord.roles.fetch') f.guild.roles.fetch = fail
+		if (stage === 'discord.members.fetch') f.guild.members.fetch = fail
+		if (stage === 'database.save') {
+			const query = f.options.pool.query
+			let writes = 0
+			f.options.pool.query = async (...args) => {
+				if (args[0].startsWith('INSERT INTO majestic_sync_state') && ++writes === 2) throw error
+				return query(...args)
+			}
+		}
+		if (stage.startsWith('audit:')) {
+			const audit = f.options.store.audit
+			f.options.store.audit = async (...args) => {
+				if (args[1] === 'majestic.member.request') throw error
+				return audit(...args)
+			}
+		}
+		if (stage.startsWith('discord.member.edit:')) f.member.edit = fail
+		await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] })
+		await f.sync.wait(f.guild)
+		assert.ok(logs.some(([, detail]) => detail.stage === stage && detail.code === 'TEST_FAILURE' && detail.status === '503'), stage)
+		const output = JSON.stringify(logs)
+		for (const secret of ['test-session-secret', 'test-bot-secret', 'unknown-secret', 'request-body-secret', 'response-secret', 'example.com/private']) assert.ok(!output.includes(secret), secret)
+		const state = await f.sync.state(f.guild)
+		assert.equal(state.run.status, 'failed')
+		assert.ok(!JSON.stringify(state).includes('test-session-secret'))
+		assert.equal(f.edits.length, 0)
+	}
 })
 
 test('restart marks unfinished jobs interrupted and prevents replay', async () => {

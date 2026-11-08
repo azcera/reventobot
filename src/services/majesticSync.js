@@ -8,9 +8,30 @@ const problem = (status, message) => Object.assign(new Error(message), { status 
 const describe = row => JSON.stringify([row.status, row.static, row.gameRank, row.currentNickname,
 	row.currentRoleIds, row.nickname, row.addRoles, row.removeRoles])
 
-function createMajesticSync({ pool, store, env = process.env, readFamily, now = Date.now }) {
+function createMajesticSync({ pool, store, env = process.env, readFamily, now = Date.now, logger = console }) {
 	require('dotenv').config({ path: path.join(__dirname, '../../.env.majestic.local'), quiet: true })
 	const entries = new Map()
+	function safeText(value) {
+		let text = String(value ?? '')
+		for (const [key, secret] of Object.entries({ ...process.env, ...env })) {
+			if (/TOKEN|SECRET|PASSWORD|SESSION|DATABASE_URL|API_KEY/i.test(key) && secret) text = text.split(String(secret)).join('[REDACTED]')
+		}
+		return text.replace(/https?:\/\/\S+|postgres(?:ql)?:\/\/\S+/gi, '[URL]')
+			.replace(/((?:authorization|cookie|x-session|sessionId|token|password)\s*[:=]\s*)[^\r\n]+/gi, '$1[REDACTED]').slice(0, 2000)
+	}
+	function logFailure(stage, targetId, error) {
+		logger.error('[Majestic] Ошибка синхронизации', {
+			stage, targetId, name: safeText(error?.name), code: safeText(error?.code),
+			status: safeText(error?.status), message: safeText(error?.message ?? error),
+			stack: safeText(String(error?.stack || '').split('\n').filter(line => /^\s+at /.test(line)).slice(0, 6).join('\n'))
+		})
+	}
+	async function diagnose(stage, guildId, work) {
+		try { return await work() }
+		catch (error) { logFailure(stage, guildId, error); throw error }
+	}
+	const audit = (actor, action, target, details) => diagnose('audit: ' + action, target,
+		() => store.audit(actor, action, target, details))
 	let ready
 	async function entry(guildId) {
 		if (!ready) ready = pool.query(`CREATE TABLE IF NOT EXISTS majestic_sync_state (
@@ -32,14 +53,14 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		return entries.get(guildId)
 	}
 	function save(guildId, item) {
-		item.writes = item.writes.catch(() => {}).then(() => pool.query(
+		item.writes = item.writes.catch(() => {}).then(() => diagnose('database.save', guildId, () => pool.query(
 			'INSERT INTO majestic_sync_state (guild_id, value) VALUES ($1, $2::jsonb) ON CONFLICT (guild_id) DO UPDATE SET value = EXCLUDED.value',
-			[guildId, JSON.stringify(item.state)]))
+			[guildId, JSON.stringify(item.state)])))
 		return item.writes
 	}
-	async function family() {
-		if (readFamily) return readFamily()
-		try { return await fetchMembers(readConfig(env)) }
+	async function family(guildId) {
+		if (readFamily) return diagnose('majestic.members', guildId, readFamily)
+		try { return await diagnose('majestic.members', guildId, () => fetchMembers(readConfig(env))) }
 		catch { throw problem(502, 'Не удалось получить полный состав Majestic. Проверьте сессию в окружении сервера и доступность сайта.') }
 	}
 	function view(item) {
@@ -47,10 +68,10 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 			configured: Boolean(readFamily || (env.MAJESTIC_SESSION_ID && env.MAJESTIC_SERVER && env.MAJESTIC_CHARACTER_ID)) })
 	}
 	async function snapshot(guild, decisions, { nicknamesOnly = false } = {}) {
-		const data = await family()
+		const data = await family(guild.id)
 		if (!data.total || data.items.length !== data.total) throw problem(502, 'Получен пустой или неполный состав Majestic. Изменения остановлены.')
-		await guild.roles.fetch()
-		const members = await guild.members.fetch({ time: 30000 })
+		await diagnose('discord.roles.fetch', guild.id, () => guild.roles.fetch())
+		const members = await diagnose('discord.members.fetch', guild.id, () => guild.members.fetch({ time: 30000 }))
 		const rows = buildPreview(data.items, [...members.values()].map(member => ({
 			id: member.id, nickname: member.nickname, bot: member.user.bot, roleIds: [...member.roles.cache.keys()]
 		})), { decisions, adminRoleIds: store.roleIds('ADMIN_ROLES'), nicknamesOnly })
@@ -74,7 +95,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		if (item.busy) throw problem(409, 'Синхронизация уже выполняется.')
 		item.busy = true
 		try {
-			await store.audit(actor, 'majestic.' + kind + '.request', guild.id)
+			await audit(actor, 'majestic.' + kind + '.request', guild.id)
 			item.state.run = { id: randomUUID(), kind, status: 'running', startedAt: now(), total: 0, completed: 0, results: [], stopRequested: false }
 			await save(guild.id, item)
 		} catch (error) { item.busy = false; throw error }
@@ -83,14 +104,15 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 				await work(item)
 				item.state.run.status = item.state.run.stopRequested ? 'stopped' : 'completed'
 			} catch (error) {
+				logFailure(kind, guild.id, error)
 				item.state.run.status = 'failed'
-				item.state.run.error = error.status ? error.message : 'Операция остановлена: ошибка Discord или базы. Уже выполненные действия видны в результатах. Создайте новый предпросмотр.'
+				item.state.run.error = error.status ? safeText(error.message) : 'Операция остановлена: ошибка Discord или базы. Уже выполненные действия видны в результатах. Создайте новый предпросмотр.'
 			} finally {
 				item.state.run.finishedAt = now()
 				try {
 					await save(guild.id, item)
-					await store.audit(actor, 'majestic.' + kind + '.result', guild.id, { runId: item.state.run.id, status: item.state.run.status, completed: item.state.run.completed })
-				} catch { item.state.run.status = 'failed'; item.state.run.error = 'Не удалось сохранить результат в базе. Проверьте Discord перед повторным запуском.' }
+					await audit(actor, 'majestic.' + kind + '.result', guild.id, { runId: item.state.run.id, status: item.state.run.status, completed: item.state.run.completed })
+				} catch (error) { logFailure('finalize.' + kind, guild.id, error); item.state.run.status = 'failed'; item.state.run.error = 'Не удалось сохранить результат в базе. Проверьте Discord перед повторным запуском.' }
 				item.busy = false
 			}
 		})()
@@ -111,20 +133,20 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 				for (const row of selected) {
 					if (!store.getSetting('MAJESTIC_AUTO_NICKNAMES')) current.state.run.stopRequested = true
 					if (current.state.run.stopRequested) break
-					const member = await guild.members.fetch({ user: row.discordId, force: true })
+					const member = await diagnose('discord.member.fetch:' + row.discordId, guild.id, () => guild.members.fetch({ user: row.discordId, force: true }))
 					const result = { discordId: row.discordId, before: row.currentNickname, nickname: row.nickname, status: 'skipped' }
 					current.state.run.results.push(result)
 					if (member.nickname !== row.currentNickname || JSON.stringify([...member.roles.cache.keys()].sort()) !== JSON.stringify(row.currentRoleIds)) {
 						result.error = 'Ник или роли изменились после проверки.'
 					} else {
-						await store.audit(actor, 'majestic.nickname.request', row.discordId, { runId: current.state.run.id, ...result })
+						await audit(actor, 'majestic.nickname.request', row.discordId, { runId: current.state.run.id, ...result })
 						if (!store.getSetting('MAJESTIC_AUTO_NICKNAMES')) current.state.run.stopRequested = true
 						if (current.state.run.stopRequested) break
 						if (current.state.preview) current.state.preview.invalidated = true
 						result.status = 'applying'
 						await save(guild.id, current)
 						try {
-							await member.edit({ nick: row.nickname, reason: `Majestic nickname sync; run ${current.state.run.id}` })
+							await diagnose('discord.nickname.edit:' + row.discordId, guild.id, () => member.edit({ nick: row.nickname, reason: `Majestic nickname sync; run ${current.state.run.id}` }))
 							result.status = 'applied'
 						} catch {
 							result.status = 'failed'
@@ -133,7 +155,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 					}
 					current.state.run.completed++
 					await save(guild.id, current)
-					await store.audit(actor, 'majestic.nickname.result', row.discordId, { runId: current.state.run.id, ...result })
+					await audit(actor, 'majestic.nickname.result', row.discordId, { runId: current.state.run.id, ...result })
 				}
 			})
 		},
@@ -158,12 +180,12 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 				const member = await guild.members.fetch({ user: discordId, force: true })
 				if (member.user.bot) throw problem(400, 'Привязка бота запрещена.')
 				if (tierRoleId && !member.roles.cache.has(tierRoleId)) throw problem(400, 'Можно сохранить только уже выданную Tier-роль.')
-				if (staticId && !(await family()).items.some(character => String(character.id) === staticId)) throw problem(400, 'Static не найден в составе семьи.')
+				if (staticId && !(await family(guild.id)).items.some(character => String(character.id) === staticId)) throw problem(400, 'Static не найден в составе семьи.')
 				const decision = { ...(item.state.decisions[discordId] || {}),
 					...(staticId === undefined ? {} : { static: staticId }),
 					...(tierRoleId === undefined ? {} : { tierRoleId }),
 					...(excluded === undefined ? {} : { excluded }) }
-				await store.audit(actor, 'majestic.resolve', discordId, { decision: reset ? null : decision })
+				await audit(actor, 'majestic.resolve', discordId, { decision: reset ? null : decision })
 				if (reset) delete item.state.decisions[discordId]
 				else item.state.decisions[discordId] = decision
 				if (item.state.preview) item.state.preview.invalidated = true
@@ -192,11 +214,11 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 					const result = { discordId: row.discordId, status: 'applying', before: row.currentNickname, nickname: row.nickname, addRoles: row.addRoles, removeRoles: row.removeRoles }
 					current.state.run.results.push(result)
 					await save(guild.id, current)
-					const member = await guild.members.fetch({ user: row.discordId, force: true })
+					const member = await diagnose('discord.member.fetch:' + row.discordId, guild.id, () => guild.members.fetch({ user: row.discordId, force: true }))
 					if (member.nickname !== row.currentNickname || JSON.stringify([...member.roles.cache.keys()].sort()) !== JSON.stringify(row.currentRoleIds)) {
 						result.status = 'skipped'; result.error = 'Ник или роли изменены после предпросмотра.'
 					} else {
-						await store.audit(actor, 'majestic.member.request', row.discordId, { runId: current.state.run.id, ...result })
+						await audit(actor, 'majestic.member.request', row.discordId, { runId: current.state.run.id, ...result })
 						if (current.state.run.stopRequested) {
 							result.status = 'skipped'; result.error = 'Остановлено до изменения Discord.'
 							break
@@ -206,7 +228,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 						if (row.addRoles.length || row.removeRoles.length) payload.roles = [...member.roles.cache.keys()]
 							.filter(id => id !== guild.id && !row.removeRoles.includes(id)).concat(row.addRoles)
 						try {
-							await member.edit(payload)
+							await diagnose('discord.member.edit:' + row.discordId, guild.id, () => member.edit(payload))
 							result.status = 'applied'
 						} catch {
 							result.status = 'failed'; result.error = 'Discord не подтвердил изменение. Проверьте текущее состояние перед повтором.'
@@ -215,14 +237,14 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 					}
 					current.state.run.completed++
 					await save(guild.id, current)
-					await store.audit(actor, 'majestic.member.result', row.discordId, { runId: current.state.run.id, ...result })
+					await audit(actor, 'majestic.member.result', row.discordId, { runId: current.state.run.id, ...result })
 				}
 			})
 		},
 		async stop(guild, actor) {
 			const item = await entry(guild.id)
 			if (item.busy && item.state.run?.status === 'running') {
-				await store.audit(actor, 'majestic.stop', guild.id)
+				await audit(actor, 'majestic.stop', guild.id)
 				item.state.run.stopRequested = true
 				await save(guild.id, item)
 			}
