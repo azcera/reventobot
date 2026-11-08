@@ -277,6 +277,48 @@ test('history shows changed fields in a modal and login failures use the same er
 	expect(errors).toEqual([])
 })
 
+test('history uses readable operation and server names in both views', async ({ page, isMobile }) => {
+	const entries = [
+		['majestic.sync.request', 'Запуск автосинхронизации Majestic'],
+		['majestic.sync.result', 'Результат автосинхронизации Majestic'],
+		['majestic.preview.request', 'Запуск проверки состава Majestic'],
+		['majestic.preview.result', 'Результат проверки состава Majestic'],
+		['majestic.apply.request', 'Запрос применения изменений Majestic'],
+		['majestic.apply.result', 'Результат применения изменений Majestic'],
+		['majestic.member.request', 'Запрос обновления участника Majestic'],
+		['majestic.member.result', 'Результат обновления участника Majestic'],
+		['majestic.bind.auto', 'Автоматическая привязка участника Majestic'],
+		['majestic.resolve', 'Решение по участнику Majestic'],
+		['majestic.stop', 'Остановка синхронизации Majestic'],
+		['family.kick.request', 'Запрос исключения участника с сервера'],
+		['family.kick.result', 'Участник исключён с сервера'],
+		['family.roles.request', 'Запрос снятия ролей участника'],
+		['family.roles.result', 'Роли участника сняты'],
+		['role-prefixes.sync.request', 'Запрос обновления префиксов']
+	]
+	const history = entries.map(([action], id) => ({ id, action, target: '111111111111111111', actor: 'admin', created_at: new Date().toISOString(), details: { actorName: 'Администратор' } }))
+	const { errors } = await setup(page, { respond: async ({ route, path }) => {
+		if (path === 'history') { await route.fulfill({ json: history }); return true }
+		if (path === 'overview') { await route.fulfill({ json: { ready: true, database: true, ping: 42, uptime: 3600, history: history.slice(0, 2) } }); return true }
+	} })
+	await page.goto('/')
+	const recent = page.locator('.history-row:visible')
+	await expect(recent).toHaveCount(2)
+	await expect(recent.first()).toContainText('Запуск автосинхронизации Majestic')
+	await expect(recent.first()).toContainText('REVENTO')
+	await expect(recent.first()).not.toContainText('111111111111111111')
+	await navigate(page, 'История изменений', isMobile)
+	const rows = page.locator('.history-row:visible')
+	await expect(rows).toHaveCount(entries.length)
+	for (const [index, [action, title]] of entries.entries()) {
+		await expect(rows.nth(index).getByRole('heading')).toHaveText(title)
+		await expect(rows.nth(index)).not.toContainText(action)
+	}
+	await rows.first().getByRole('button', { name: 'Подробности изменения' }).click()
+	await expect(page.getByRole('dialog')).toContainText(entries[0][1])
+	expect(errors).toEqual([])
+})
+
 test('Discord components retain their layout and fit a narrow screen', async ({ page, isMobile }) => {
 	const { errors } = await setup(page)
 	await page.goto('/#builder')

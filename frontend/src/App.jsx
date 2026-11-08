@@ -26,7 +26,7 @@ function Login({ loading, configured, status, retry }) {
 		<p role="status" aria-live="polite" className="mt-4 text-xs leading-relaxed text-muted">{status || 'Доступ только администраторам сервера.'}</p><div className="mt-8 flex items-center gap-2 border-t border-line pt-5 text-[11px] text-muted"><ShieldCheck className="size-4 text-brand" />Авторизация через Discord · проверка прав на сервере</div></div></main>
 }
 
-function Overview({ active, api, config, notify, refresh }) {
+function Overview({ active, api, config, guild, notify, refresh }) {
 	const [data, setData] = useState(null)
 	const [loading, setLoading] = useState(false)
 	useEffect(() => {
@@ -39,11 +39,11 @@ function Overview({ active, api, config, notify, refresh }) {
 	return <div className="grid gap-7"><div className="overview-hero"><div><p className="eyebrow mb-3">ТВОЙ СЕРВЕР. ТВОИ ПРАВИЛА.</p><h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Центр управления Revento</h2><p className="mt-3 max-w-lg text-sm leading-relaxed text-muted">Подготовь публикацию, обнови шаблоны и настрой бота — без редактирования кода.</p><a href="#templates" className="button button-primary mt-6">Открыть шаблоны<ArrowRight aria-hidden="true" /></a></div><img src="/revento-logo.png" alt="" aria-hidden="true" className="hidden size-28 rounded-3xl opacity-90 lg:block" /></div>
 		{loading && !data ? <Loading /> : data && <div className="metric-grid">{[[Wifi, 'Discord', data.ready ? 'Подключён' : 'Отключён'], [ChevronRight, 'Задержка API', data.ping >= 0 ? data.ping + ' мс' : 'Измеряется'], [Database, 'База данных', data.database ? 'Доступна' : 'Недоступна'], [History, 'Время работы', Math.floor(data.uptime / 3600) + ' ч ' + Math.floor(data.uptime % 3600 / 60) + ' мин']].map(([Icon, label, value]) => <div className="metric" key={label}><div className="flex items-center justify-between gap-2 text-xs text-muted"><span>{label}</span><Icon className="size-4" aria-hidden="true" /></div><strong className="mt-3 block text-lg font-medium tracking-tight">{value}</strong></div>)}</div>}
 		<div className="grid gap-4 sm:grid-cols-2">{[['builder', 'Создать сообщение', 'Markdown, компоненты и предпросмотр перед публикацией.', PanelsTopLeft], ['templates', 'Обновить шаблоны', 'Тексты и кнопки сообщений бота в одном редакторе.', Files]].map(([key, title, description, Icon]) => <a key={key} href={'#' + key} className="quick-link"><div className="mb-5 flex items-center justify-between"><Icon className="size-5 text-brand" aria-hidden="true" /><ArrowUpRight className="size-4 text-muted" aria-hidden="true" /></div><h2 className="text-base font-medium">{title}</h2><p className="mt-2 text-xs leading-relaxed text-muted">{description}</p></a>)}</div>
-		<Panel title="Последние изменения" action={<a href="#history" className="inline-flex items-center gap-1 text-xs text-muted hover:text-brand">Вся история<ArrowUpRight className="size-3.5" aria-hidden="true" /></a>}><HistoryRows entries={data?.history || []} config={config} compact /></Panel>
+		<Panel title="Последние изменения" action={<a href="#history" className="inline-flex items-center gap-1 text-xs text-muted hover:text-brand">Вся история<ArrowUpRight className="size-3.5" aria-hidden="true" /></a>}><HistoryRows entries={data?.history || []} config={config} guild={guild} compact /></Panel>
 	</div>
 }
 
-function HistoryPage({ active, api, config, notify, refresh }) {
+function HistoryPage({ active, api, config, guild, notify, refresh }) {
 	const [entries, setEntries] = useState(null)
 	useEffect(() => {
 		if (!active) return
@@ -51,7 +51,7 @@ function HistoryPage({ active, api, config, notify, refresh }) {
 		api('history').then(data => { if (!cancelled) setEntries(data) }).catch(error => { if (!cancelled) notify(error.message, true) })
 		return () => { cancelled = true }
 	}, [active, api, notify, refresh])
-	return entries ? <Panel title="Журнал действий"><HistoryRows entries={entries} config={config} /></Panel> : <Loading />
+	return entries ? <Panel title="Журнал действий"><HistoryRows entries={entries} config={config} guild={guild} /></Panel> : <Loading />
 }
 
 export function App() {
@@ -153,12 +153,12 @@ export function App() {
 			<div className="page-content"><div className="page-heading"><div><p className="eyebrow mb-2 lg:hidden">REVENTO / CONTROL ROOM</p><h1>{current.title}</h1><p>{current.description}</p></div><div className="flex shrink-0 gap-2">{page !== 'majestic' && <IconButton icon={RefreshCw} label="Обновить данные" disabled={busy || booting} onClick={reload} />}<IconButton icon={BookOpen} label="Руководство по разделу" onClick={() => showGuide(modal, page)} /></div></div>
 				{!config || !resources ? booting || busy ? <Loading /> : <Empty title="Не удалось загрузить данные"><Button icon={RefreshCw} onClick={() => run(loadConfig)}>Повторить загрузку</Button></Empty>
 					: <fieldset className="min-w-0" disabled={busy} aria-busy={busy}>
-						<div hidden={page !== 'overview'}><Overview active={page === 'overview'} api={api} config={config} notify={notify} refresh={refresh} /></div>
+						<div hidden={page !== 'overview'}><Overview active={page === 'overview'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
 						<div hidden={page !== 'builder'}><Builder resources={resources} api={api} run={run} notify={notify} onDirty={setBuilderDirty} /></div>
 						<div hidden={page !== 'templates'}><Templates config={config} setConfig={setConfig} resources={resources} drafts={drafts} setDrafts={setDrafts} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'settings'}><Settings config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'majestic'}><Majestic active={page === 'majestic'} resources={resources} api={api} run={run} notify={notify} /></div>
-						<div hidden={page !== 'history'}><HistoryPage active={page === 'history'} api={api} config={config} notify={notify} refresh={refresh} /></div>
+						<div hidden={page !== 'history'}><HistoryPage active={page === 'history'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
 					</fieldset>}
 			</div>
 		</main>

@@ -3,12 +3,26 @@ import { ArrowUpRight, FileClock, ScanText } from 'lucide-react'
 import { Empty, IconButton, useModal } from './ui.jsx'
 import { permanentGroups } from '../lib/templates.mjs'
 
-const actions = { templates: 'Обновление шаблона', settings: 'Обновление настроек', bindings: 'Привязка сообщения', 'message.edit': 'Сообщение изменено', 'message.edit.request': 'Запрос изменения', 'container.send': 'Публикация контейнера', 'container.send.request': 'Запрос публикации', 'container.edit': 'Контейнер изменён', 'container.edit.request': 'Запрос изменения контейнера', 'message.change': 'Изменение сообщения', 'message.sync': 'Обновление в Discord', 'message.sync.request': 'Запрос обновления в Discord', 'role-prefixes.sync': 'Обновление префиксов' }
+const actions = {
+	templates: 'Обновление шаблона', settings: 'Обновление настроек', bindings: 'Привязка сообщения',
+	'message.edit': 'Сообщение изменено', 'message.edit.request': 'Запрос изменения',
+	'container.send': 'Публикация контейнера', 'container.send.request': 'Запрос публикации',
+	'container.edit': 'Контейнер изменён', 'container.edit.request': 'Запрос изменения контейнера',
+	'message.change': 'Изменение сообщения', 'message.sync': 'Обновление в Discord', 'message.sync.request': 'Запрос обновления в Discord',
+	'role-prefixes.sync': 'Обновление префиксов', 'role-prefixes.sync.request': 'Запрос обновления префиксов',
+	'majestic.sync.request': 'Запуск автосинхронизации Majestic', 'majestic.sync.result': 'Результат автосинхронизации Majestic',
+	'majestic.preview.request': 'Запуск проверки состава Majestic', 'majestic.preview.result': 'Результат проверки состава Majestic',
+	'majestic.apply.request': 'Запрос применения изменений Majestic', 'majestic.apply.result': 'Результат применения изменений Majestic',
+	'majestic.member.request': 'Запрос обновления участника Majestic', 'majestic.member.result': 'Результат обновления участника Majestic',
+	'majestic.bind.auto': 'Автоматическая привязка участника Majestic', 'majestic.resolve': 'Решение по участнику Majestic', 'majestic.stop': 'Остановка синхронизации Majestic',
+	'family.kick.request': 'Запрос исключения участника с сервера', 'family.kick.result': 'Участник исключён с сервера',
+	'family.roles.request': 'Запрос снятия ролей участника', 'family.roles.result': 'Роли участника сняты'
+}
 const format = value => typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? 'Не задано')
 
-export function HistoryRows({ entries, config, compact = false }) {
+export function HistoryRows({ entries, config, guild, compact = false }) {
 	const modal = useModal()
-	const label = key => permanentGroups[key] || config.templates.find(field => field.key === key)?.label || config.settings.find(field => field.key === key)?.label || key
+	const label = key => (guild?.id === key ? guild.name : null) || (key === 'navigation' ? 'Навигация' : null) || permanentGroups[key] || config.templates.find(field => field.key === key)?.label || config.settings.find(field => field.key === key)?.label || key
 	if (!entries.length) return <Empty icon={FileClock} title="Изменений пока нет">Здесь появятся действия администраторов.</Empty>
 	return <div className="divide-y divide-line">
 		{entries.map(entry => {
