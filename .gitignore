@@ -1,4 +1,9 @@
 node_modules/
+public/dashboard/
+playwright-report/
+test-results/
+output/dashboard-review/
+output/dashboard-unit-tests.log
 .env
 .env.majestic.local
 .majestic-preview.json

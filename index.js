@@ -70,6 +70,10 @@ app.use((req, res, next) => {
 })
 app.use(express.json({ limit: '256kb' }))
 registerDashboard(app, client, pool)
+app.get('/', (req, res) => {
+	res.sendFile(path.join(__dirname, 'public', 'dashboard', 'index.html'))
+})
+app.get('/builder.html', (req, res) => res.redirect('/#builder'))
 app.use(express.static(path.join(__dirname, 'public')))
 registerContainerMessageRoutes(app, client, {
 	beforeMutation: async (req, action, target) => {
@@ -83,10 +87,6 @@ registerContainerMessageRoutes(app, client, {
 	},
 	afterMutation: (req, action, target, details) => dashboard.audit(req.dashboardUser, action, target, details)
 		.catch(error => console.error('[Dashboard] Не удалось записать результат изменения:', error.code || error.message))
-})
-
-app.get('/', (req, res) => {
-	res.sendFile(path.join(__dirname, 'public', 'index.html'))
 })
 
 // API: информация о канале по ID (для подсказки названия в UI)

@@ -80,33 +80,13 @@ test('all existing builder APIs reject cross-server messages and channels before
 	assert.equal(f.message.lastPayload, undefined)
 })
 
-test('editing text preserves working buttons, attachments, unknown components and catches stale edits', async t => {
+test('removed standalone message editor endpoints no longer read or mutate Discord messages', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()
-	const loaded = await (await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).json()
-	assert.ok(loaded.fields.find(field => field.path.endsWith('.accessory.0.label')))
-	const updated = await f.request('/api/message', { body: { link: f.message.url, revision: loaded.revision, values: {
-		'components.0.components.0.content': '## Новая публикация <@&444444444444444444>',
-		'components.0.components.1.accessory.0.label': 'Вступить'
-	} } })
-	assert.equal(updated.status, 200)
-	const payload = f.message.lastPayload
-	assert.equal(payload.components[0].components[1].accessory.custom_id, 'open_invite_modal')
-	assert.equal(payload.components[0].components[1].accessory.label, 'Вступить')
-	assert.equal(payload.components[0].components[2].items[0].media.url, 'attachment://banner.png')
-	assert.equal(Object.hasOwn(payload, 'attachments'), false)
-	assert.deepEqual(payload.allowedMentions, { parse: ['roles'], repliedUser: false })
-	assert.equal(payload.components[0].components[0].content, '## Новая публикация <@&444444444444444444>')
-	assert.equal((await f.request('/api/message', { body: { link: f.message.url, revision: loaded.revision, values: {} } })).status, 409)
-	const history = await (await f.request('/api/history')).json()
-	assert.equal(history[0].action, 'message.edit.failed')
-	assert.equal(history[0].actor, f.userId)
-	const failure = JSON.parse(history[0].details)
-	assert.match(failure.error, /Сообщение изменилось/)
-	assert.equal(failure.actorName, 'Администратор')
-	assert.ok(history.some(entry => entry.action === 'message.edit'))
-	f.message.author.id = 'other-bot'
-	assert.equal((await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).status, 403)
+	assert.equal((await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).status, 404)
+	assert.equal((await f.request('/api/message', { body: { link: f.message.url, values: {} } })).status, 404)
+	assert.equal(f.message.lastPayload, undefined)
 })
+
 
 test('field editor rejects ID/structure changes, invalid links and excessive text', async t => {
 	const f = await createFixture(); t.after(() => f.close())
@@ -121,11 +101,13 @@ test('field editor rejects ID/structure changes, invalid links and excessive tex
 	assert.deepEqual(f.message.components, original)
 })
 
-test('dynamic capture and archive publications are routed to template editing', async t => {
+test('removed message editor cannot edit dynamic capture publications', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()
 	f.pool.dynamic.add(f.message.id)
-	assert.equal((await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).status, 409)
+	assert.equal((await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).status, 404)
+	assert.equal(f.message.lastPayload, undefined)
 })
+
 
 test('template and settings changes persist, affect rendering immediately and reject old revisions', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()

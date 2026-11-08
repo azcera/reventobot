@@ -1,12 +1,10 @@
 const { PermissionsBitField } = require('discord.js')
 const { createAuth, problem } = require('./auth')
 const { store, catalog, settingDefinitions, templateDefinition } = require('./store')
-const { parseMessageLink, messageRevision } = require('../services/containerMessageService')
-const { snapshot, applyFields, isHttpsUrl } = require('./messageEditor')
-const locks = require('../services/messageLocks')
+const { parseMessageLink } = require('../services/containerMessageService')
+const { isHttpsUrl } = require('./messageEditor')
 const permanent = require('./permanentMessages')
 const navigation = require('./navigationMessages')
-const { linesOf, logMessageChange, diffLines } = require('./changeLog')
 const { createMajesticSync } = require('../services/majesticSync')
 const { syncRolePrefixes } = require('../services/rolePrefixSync')
 
@@ -86,7 +84,7 @@ async function validateSettings(values, guild) {
 	}
 }
 
-function registerDashboard(app, client, pool, { auth = createAuth({ client }), majestic } = {}) {
+function registerDashboard(app, client, pool, { auth = createAuth({ client, pool }), majestic } = {}) {
 	app.get('/template-images/:name', (req, res) => {
 		if (!['invites.png', 'revento.png', 'rules.png', 'capt.png'].includes(req.params.name)) return res.sendStatus(404)
 		res.sendFile(require('path').join(__dirname, '../images', req.params.name))
@@ -219,35 +217,6 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }), m
 		if (dynamic.rows.length || war.rows.length) throw problem(409, 'Этот список обновляет бот. Измените регистрацию во вкладке «Шаблоны».')
 		return message
 	}
-	app.get('/api/message', async (req, res) => {
-		try { res.json(snapshot(await fetchOwnedMessage(req.query.link, req.guild))) } catch (error) { respondError(res, error) }
-	})
-	app.post('/api/message', async (req, res) => {
-		let lock
-		try {
-			const { link, revision, values } = req.body
-			const id = parseMessageLink(link).messageId
-			if (locks.has(id)) throw problem(409, 'Сообщение уже сохраняется.')
-			locks.add(id)
-			lock = id
-			const message = await fetchOwnedMessage(link, req.guild)
-			if (messageRevision(message) !== revision) throw problem(409, 'Сообщение изменилось. Загрузите его заново.')
-			const payload = applyFields(message, values)
-			await store.audit(req.dashboardUser, 'message.edit.request', link, { fields: Object.keys(values) })
-			const before = linesOf(message)
-			const updated = await message.edit(payload)
-			const after = linesOf(updated)
-			const logResult = await logMessageChange({ guild: req.guild, actor: req.dashboardUser, link: updated.url, before, after })
-			await store.audit(req.dashboardUser, 'message.edit', link, { diff: diffLines(before, after), ...logResult })
-				.catch(error => console.error('[Dashboard] Не удалось записать результат изменения:', error.code || error.message))
-			res.json({ ...snapshot(updated), ...logResult })
-		} catch (error) {
-			if (lock) await store.audit(req.dashboardUser, 'message.edit.failed', req.body.link, { error: error.status ? error.message : 'Не удалось обновить сообщение в Discord или записать аудит.' })
-				.catch(auditError => console.error('[Dashboard audit]', auditError.message))
-			respondError(res, error)
-		}
-		finally { if (lock) locks.delete(lock) }
-	})
 }
 
 function respondError(res, error) {

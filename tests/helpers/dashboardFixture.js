@@ -14,8 +14,16 @@ function memoryPool() {
 	const dynamic = new Set()
 	const queries = []
 	const navigation = new Map()
+	const sessions = new Map()
 	const query = async (sql, params = []) => {
 		queries.push(sql)
+		if (sql.startsWith('INSERT INTO dashboard_sessions ')) sessions.set(params[0], { client_id: params[1], guild_id: params[2], user_data: JSON.parse(params[3]), csrf: params[4], expires_at: params[5] })
+		if (sql.startsWith('SELECT user_data, csrf, expires_at FROM dashboard_sessions')) {
+			const session = sessions.get(params[0])
+			return { rows: session && session.client_id === params[1] && session.guild_id === params[2] && new Date(session.expires_at).getTime() > Date.now() ? [structuredClone(session)] : [] }
+		}
+		if (sql.startsWith('DELETE FROM dashboard_sessions WHERE expires_at')) { for (const [id, value] of sessions) if (new Date(value.expires_at).getTime() <= Date.now()) sessions.delete(id) }
+		if (sql.startsWith('DELETE FROM dashboard_sessions WHERE token_hash')) { const session = sessions.get(params[0]); if (session?.client_id === params[1] && session?.guild_id === params[2]) sessions.delete(params[0]) }
 		if (sql.startsWith('INSERT INTO dashboard_navigation_messages')) navigation.set(params[0], { message_id: params[0], guild_id: params[1], channel_id: params[2], container_index: params[3], prefix_length: params[4] })
 		if (sql.startsWith('SELECT * FROM dashboard_navigation_messages')) return { rows: [...navigation.values()].filter(row => row.guild_id === params[0]) }
 		if (sql.startsWith('DELETE FROM dashboard_navigation_messages')) navigation.delete(params[0])
@@ -29,7 +37,7 @@ function memoryPool() {
 		if (sql.includes('SELECT 1 FROM active_captures')) return { rows: dynamic.has(params[0]) ? [{}] : [] }
 		return { rows: [] }
 	}
-	return { query, connect: async () => ({ query, release() {} }), dynamic, queries }
+	return { query, connect: async () => ({ query, release() {} }), dynamic, queries, sessions }
 }
 
 async function createFixture({ secretKey = 'DISCORD_CLIENT_SECRET' } = {}) {
@@ -69,11 +77,12 @@ async function createFixture({ secretKey = 'DISCORD_CLIENT_SECRET' } = {}) {
 	await store.init(pool)
 	let tokenCalls = 0
 	const oauthTokens = []
-	const auth = createAuth({ client, env, request: async (url, options) => {
+	const authOptions = { client, env, pool, request: async (url, options) => {
 		if (url.endsWith('/token')) { tokenCalls++; oauthTokens.push(Object.fromEntries(options.body)); return { ok: true, json: async () => ({ access_token: 'oauth-token' }) } }
 		return { ok: true, json: async () => ({ id: userId, username: 'Test Admin', global_name: 'Администратор' }) }
-	} })
-	registerDashboard(app, client, pool, { auth })
+	} }
+	let auth = createAuth(authOptions)
+	registerDashboard(app, client, pool, { auth: { register: app => auth.register(app), middleware: (...args) => auth.middleware(...args), logout: (...args) => auth.logout(...args) } })
 	registerContainerMessageRoutes(app, client)
 	app.post('/api/echo', (req, res) => res.json({ success: true }))
 	app.get('/api/channel-info', (req, res) => res.json({ success: true }))
@@ -99,6 +108,7 @@ async function createFixture({ secretKey = 'DISCORD_CLIENT_SECRET' } = {}) {
 		return response
 	}
 	return { app, server, origin, request, login, env, pool, client, guild, channel, message, userId, channelId, oauthTokens,
+		restartAuth() { auth = createAuth(authOptions) },
 		get csrf() { return csrf }, get tokenCalls() { return tokenCalls }, get cookie() { return jar }, setAdmin(value) { isAdmin = value },
 		async close() { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) } }
 }

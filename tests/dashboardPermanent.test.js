@@ -128,23 +128,18 @@ test('new singleton command publications are remembered only in the configured g
 	f.message.guildId = f.guild.id; await rememberSent('invite', f.message); assert.equal(store.bindings.invite.link, f.message.url)
 })
 
-test('rules preview includes the automatic banner only when Markdown has no image', () => {
-	const context = vm.createContext({
-		$: () => ({ value: 'Правила' }),
-		componentMarkdown: require('../public/component-markdown'),
-		config: { templates: [{ key: 'rules.1', value: 'attachment://rules.png' }] },
-		preview: (root, fields, values) => { root.fields = fields; root.values = values }
-	})
-	const source = readFileSync(require.resolve('../public/dashboard.js'), 'utf8')
-	vm.runInContext(source.slice(source.indexOf('function previewTemplate('), source.indexOf('function previewApplication(')), context)
+test('rules preview includes the automatic banner only when Markdown has no image', async () => {
+	const { previewFields } = await import('../frontend/src/lib/templates.mjs')
+	const parser = require('../public/component-markdown')
+	const config = { templates: [{ key: 'rules.1', value: 'attachment://rules.png' }] }
 	for (const value of ['## Правила', '<img src="attachment://rules.png" />\n\n## Правила']) {
-		const root = {}
-		context.previewTemplate(root, [{ key: 'rules.document', type: 'text', value }], {})
-		const images = root.fields.flatMap(field => context.componentMarkdown.parse(field.value)).filter(item => item.type === 'image')
+		const fields = previewFields(config, 'Правила', [{ key: 'rules.document', type: 'text', value }], {}, parser)
+		const images = fields.flatMap(field => parser.parse(field.value)).filter(item => item.type === 'image')
 		assert.equal(images.length, 1)
 		assert.equal(images[0].value, 'attachment://rules.png')
 	}
 })
+
 
 test('shared preview renders Markdown safely, and dashboard controls cannot add container color', () => {
 	const context = vm.createContext({})

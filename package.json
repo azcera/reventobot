@@ -4,21 +4,37 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev:dashboard": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test": "node --test tests/*.test.js",
+    "pretest:dashboard": "npm run build",
+    "test:dashboard": "playwright test"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/noto-sans": "^5.3.0",
     "discord.js": "^14.25.1",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "lucide-react": "^1.70.0",
     "pg": "^8.23.0",
     "qrcode-terminal": "^0.12.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "teleproto": "^1.229.0"
   },
   "overrides": {
     "undici": "^6.24.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "tailwindcss": "^4.3.5",
+    "vite": "^6.4.5"
   }
 }

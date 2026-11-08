@@ -84,7 +84,7 @@ function discordMarkdownToHtml(text) {
 	s = s.replace(/__(.+?)__/g, '<u>$1</u>')
 	s = s.replace(/\*(.+?)\*/g, '<em>$1</em>')
 	s = s.replace(/~~(.+?)~~/g, '<s>$1</s>')
-	s = s.replace(/\|\|([\s\S]+?)\|\|/g, '<span class="discord-spoiler" tabindex="0" role="button" aria-label="Показать спойлер" aria-expanded="false" onclick="this.classList.toggle(\'revealed\');this.setAttribute(\'aria-expanded\',this.classList.contains(\'revealed\'))" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}">$1</span>')
+	s = s.replace(/\|\|([\s\S]+?)\|\|/g, '<span class="discord-spoiler" tabindex="0" role="button" aria-label="Показать спойлер" aria-expanded="false">$1</span>')
 
 	// Protect explicit Markdown links before autolinking their URL.
 	s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => protect('<a href="' + url.replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '" target="_blank" rel="noopener">' + label + '</a>'))

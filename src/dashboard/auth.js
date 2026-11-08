@@ -1,13 +1,14 @@
 const { randomBytes, createHash } = require('node:crypto')
 const { PermissionFlagsBits } = require('discord.js')
+const { createSessions } = require('./sessions')
 
 const hash = value => createHash('sha256').update(value).digest('hex')
 const cookie = (req, name) => (req.headers.cookie || '').split(';').map(part => part.trim())
 	.find(part => part.startsWith(name + '='))?.slice(name.length + 1)
 const problem = (status, message) => Object.assign(new Error(message), { status })
 
-function createAuth({ client, env = process.env, request = fetch }) {
-	const sessions = new Map()
+function createAuth({ client, pool, env = process.env, request = fetch }) {
+	const sessions = createSessions(pool, { clientId: env.CLIENT_ID, guildId: env.GUILD_ID })
 	const states = new Map()
 	const attempts = new Map()
 	const clientSecret = env.DISCORD_CLIENT_SECRET || env.CLIENT_SECRET
@@ -24,7 +25,7 @@ function createAuth({ client, env = process.env, request = fetch }) {
 	const configured = Boolean(env.CLIENT_ID && clientSecret && env.GUILD_ID && validOrigin)
 	const options = { httpOnly: true, secure, sameSite: 'lax', path: '/' }
 	function cleanup() {
-		for (const map of [sessions, states, attempts]) {
+		for (const map of [states, attempts]) {
 			for (const [key, value] of map) if (value.expires <= Date.now()) map.delete(key)
 		}
 	}
@@ -83,9 +84,9 @@ function createAuth({ client, env = process.env, request = fetch }) {
 				await authorize(user.id)
 				const id = randomBytes(32).toString('hex')
 				const previous = cookie(req, sessionCookie)
-				if (previous) sessions.delete(hash(previous))
-				sessions.set(hash(id), { user: { id: user.id, name: user.global_name || user.username },
+				await sessions.set(hash(id), { user: { id: user.id, name: user.global_name || user.username },
 					csrf: randomBytes(32).toString('hex'), expires: Date.now() + 28800000 })
+				if (previous) await sessions.delete(hash(previous))
 				res.cookie(sessionCookie, id, { ...options, maxAge: 28800000 })
 				res.redirect('/')
 			} catch (err) { res.redirect('/?error=' + encodeURIComponent(err.status ? err.message : 'Discord временно недоступен. Повторите вход.')) }
@@ -94,7 +95,9 @@ function createAuth({ client, env = process.env, request = fetch }) {
 	async function middleware(req, res, next) {
 		cleanup()
 		const token = cookie(req, sessionCookie)
-		const session = token && sessions.get(hash(token))
+		let session
+		try { session = token && await sessions.get(hash(token)) }
+		catch { return error(res, problem(503, 'Не удалось проверить сессию. Проверьте подключение к базе и повторите запрос.')) }
 		if (!session) return error(res, problem(401, 'Войдите через Discord.'))
 		if (!['GET', 'HEAD'].includes(req.method) &&
 			(req.headers.origin !== new URL(origin).origin || req.headers['x-csrf-token'] !== session.csrf)) return error(res, problem(403, 'Проверка безопасности запроса не пройдена. Обновите страницу.'))
@@ -105,13 +108,17 @@ function createAuth({ client, env = process.env, request = fetch }) {
 			res.set('Cache-Control', 'no-store')
 			next()
 		} catch (err) {
-			if (err.status === 403) { sessions.delete(hash(token)); res.clearCookie(sessionCookie, options) }
+			if (err.status === 403) {
+				try { await sessions.delete(hash(token)) } catch { return error(res, problem(503, 'Не удалось отозвать сессию. Повторите запрос.')) }
+				res.clearCookie(sessionCookie, options)
+			}
 			error(res, err)
 		}
 	}
-	function logout(req, res) {
+	async function logout(req, res) {
 		const token = cookie(req, sessionCookie)
-		if (token) sessions.delete(hash(token))
+		try { if (token) await sessions.delete(hash(token)) }
+		catch { return error(res, problem(503, 'Не удалось завершить сессию. Повторите выход.')) }
 		res.clearCookie(sessionCookie, options)
 		res.json({ success: true })
 	}

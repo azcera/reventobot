@@ -54,7 +54,7 @@ test('change journal channel is selected and changed through dashboard settings 
 	assert.equal(sent.length, 2)
 })
 
-test('template sync and direct edits log changed fragments once, preserve actors and report delivery failure', async t => {
+test('template sync logs changed fragments once, preserve actors and report delivery failure', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()
 	const sent = []
 	f.channel.send = async payload => { sent.push(payload) }
@@ -73,12 +73,13 @@ test('template sync and direct edits log changed fragments once, preserve actors
 	assert.match(body, /\+## Новая памятка/)
 	await f.request('/api/permanent-message/sync', { body: { kind: 'recruit' } })
 	assert.equal(sent.length, 1)
-	let snapshot = await (await f.request('/api/message?link=' + encodeURIComponent(f.message.url))).json()
 	f.channel.send = async () => { throw new Error('Нет прав') }
-	const response = await f.request('/api/message', { body: { link: f.message.url, revision: snapshot.revision, values: { [snapshot.fields[0].path]: '## Правка напрямую' } } })
+	const response = await f.request('/api/templates', { body: { revision: config.revision, values: { [field.key]: '## Следующая правка' } } })
 	assert.equal(response.status, 200)
-	assert.match((await response.json()).logError, /Нет прав/)
-	assert.equal(f.message.components[0].components[0].content, '## Правка напрямую')
+	const result = await response.json()
+	assert.match(result.syncResults[0].logError, /Нет прав/)
+	assert.equal(f.message.components[0].components[0].content, '## Следующая правка')
+
 	const history = await (await f.request('/api/history')).json()
 	const changes = history.filter(entry => entry.action === 'message.change').map(entry => typeof entry.details === 'string' ? JSON.parse(entry.details) : entry.details)
 	assert.equal(changes.length, 2)
@@ -86,8 +87,8 @@ test('template sync and direct edits log changed fragments once, preserve actors
 	assert.match(changes[0].logError, /Нет прав/)
 	const saved = history.find(entry => entry.action === 'templates')
 	const details = typeof saved.details === 'string' ? JSON.parse(saved.details) : saved.details
-	assert.equal(details.fields[field.key].before, field.value)
-	assert.equal(details.fields[field.key].after, '## Новая памятка\n- Требование')
+	assert.equal(details.fields[field.key].before, '## Новая памятка\n- Требование')
+	assert.equal(details.fields[field.key].after, '## Следующая правка')
 })
 
 test('long changes split into valid V2 containers and embedded fences cannot escape diff', async t => {
@@ -119,44 +120,4 @@ test('builder edits of a bound message use the same change journal', async t => 
 	assert.equal(sent.length, 1)
 	assert.match(JSON.stringify(sent[0]), /-Старая памятка/)
 	assert.match(JSON.stringify(sent[0]), /\+Новая памятка/)
-})
-
-test('application preview assembles each full state and updates sample text without mixing statuses', () => {
-	class Element {
-		constructor(tag, text) { this.tag = tag; this.textContent = text || ''; this.children = []; this.value = '' }
-		append(...children) { this.children.push(...children) }
-		replaceChildren(...children) { this.children = children }
-		setAttribute() {}
-		addEventListener() {}
-		add(option) { this.children.push(option) }
-	}
-	const root = new Element('div'), group = { value: 'Заявка' }
-	const templates = Object.entries(require('../src/dashboard/templates.json')).map(([key, field]) => ({ key, ...field, value: field.default }))
-	const context = vm.createContext({ document: { createElement: tag => new Element(tag) }, Option: function(label, value) { this.textContent = label; this.value = value }, $: id => id === 'templateGroup' ? group : root, config: { templates }, examples: { user: '123456789012345678', name: 'Tony | 132961', age: '18', about: 'Хочу в семью', history: 'Revento', reason: 'Ошибка анкеты', channel: '123456789012345678', server: 'REVENTO' }, applicationPreviewState: 'pending' })
-	const source = readFileSync(require.resolve('../public/dashboard.js'), 'utf8')
-	vm.runInContext(readFileSync(require.resolve('../public/markdown.js'), 'utf8'), context)
-	vm.runInContext(readFileSync(require.resolve('../public/component-markdown.js'), 'utf8'), context)
-	vm.runInContext(readFileSync(require.resolve('../public/markdown-editor.js'), 'utf8'), context)
-	vm.runInContext(source.slice(source.indexOf('function node('), source.indexOf('function notice(')), context)
-	vm.runInContext(source.slice(source.indexOf('function previewApplication('), source.indexOf('function renderSettings(')), context)
-	const html = element => (element.innerHTML || element.textContent || '') + element.children.map(html).join('\n')
-	for (const state of ['pending', 'accepted', 'rejected', 'interview']) {
-		context.applicationPreviewState = state
-		context.previewApplication(root, { ['application.document.' + state]: templates.find(field => field.key === 'application.document.' + state).value.replace('### Пользователь:', '### Анкета\n### Пользователь:') })
-		const output = html(root.children.at(-1))
-		assert.match(output, /Анкета/)
-		assert.match(output, /Tony \| 132961/)
-		assert.doesNotMatch(output, /\{name\}|<t:|application\./)
-		if (state === 'pending') assert.match(output, /✅ Принять/)
-		else assert.doesNotMatch(output, /✅ Принять|На рассмотрении/)
-	}
-	group.value = 'Личные сообщения заявок'
-	for (const state of ['accepted', 'rejected', 'interview']) {
-		context.applicationPreviewState = state
-		context.previewApplication(root, {})
-		const output = html(root.children.at(-1))
-		assert.match(output, /REVENTO/)
-		assert.doesNotMatch(output, /\{server\}|\{time\}|<t:/)
-		assert.equal(root.children.at(-1).children.length, 1)
-	}
 })

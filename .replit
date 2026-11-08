@@ -34,7 +34,7 @@ task = "packager.installForAll"
 outputType = "console"
 
 [deployment]
-build = ["sh", "-c", "npm install"]
+build = ["sh", "-c", "npm ci && npm run build"]
 run = ["node", "index.js"]
 deploymentTarget = "cloudrun"
 
