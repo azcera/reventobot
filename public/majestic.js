@@ -5,7 +5,7 @@ let majesticSignature
 const majesticSelected = new Set()
 const majesticLabels = { change: 'Изменение', unchanged: 'Без изменений', conflict: 'Конфликт',
 	blocked: 'Нет доступа', skipped: 'Пропущен', excluded: 'Исключён', running: 'Выполняется',
-	completed: 'Завершено', stopped: 'Остановлено', failed: 'Ошибка', interrupted: 'Прервано перезапуском',
+	completed: 'Завершено', completed_with_errors: 'Завершено с ошибками', stopped: 'Остановлено', failed: 'Ошибка', interrupted: 'Прервано перезапуском',
 	applied: 'Применено', applying: 'Отправляется в Discord' }
 
 async function loadMajestic() {

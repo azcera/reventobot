@@ -38,6 +38,96 @@ function fixture(overrides = {}) {
 		setFamily(value) { family = value }, advance() { clock += 16 * 60 * 1000 }, saved: () => saved }
 }
 
+function bulkFixture(count = 150) {
+	const f = fixture()
+	f.members.clear()
+	const family = []
+	for (let index = 0; index < count; index++) {
+		const id = String(222222222222220000n + BigInt(index))
+		const staticId = 10000 + index
+		family.push({ id: staticId, login: 'Maya Well', rankName: 'Main', rankId: 1 })
+		f.members.set(id, { ...f.member, id, nickname: `Old | ${staticId}`,
+			roles: { cache: new Collection(f.member.roles.cache) } })
+	}
+	f.setFamily(family)
+	return f
+}
+
+test('manual and automatic sync process 150 members sequentially and persist all results', async () => {
+	for (const automatic of [false, true]) {
+		const f = bulkFixture()
+		let active = 0, maxActive = 0
+		for (const member of f.members.values()) {
+			const edit = member.edit
+			member.edit = async function(payload) {
+				active++; maxActive = Math.max(maxActive, active)
+				await Promise.resolve()
+				await edit.call(this, payload)
+				active--
+			}
+		}
+		if (automatic) await f.sync.autoNicknames(f.guild)
+		else {
+			const preview = await f.preview()
+			await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [...f.members.keys()] })
+		}
+		await f.sync.wait(f.guild)
+		const state = await f.sync.state(f.guild)
+		assert.equal(maxActive, 1)
+		assert.equal(state.run.status, 'completed')
+		assert.equal(state.run.completed, 150)
+		assert.equal(state.run.total, 150)
+		assert.equal(f.edits.length, 150)
+		assert.equal(f.saved().run.results.filter(row => row.status === 'applied').length, 150)
+		for (const member of f.members.values()) {
+			assert.match(member.nickname, /^Maya \| \d+$/)
+			assert.ok(member.roles.cache.has('unrelated-role'))
+			assert.equal(member.roles.cache.has(rankRoles.Main), !automatic)
+			assert.equal(member.roles.cache.has(rankRoles.Test), automatic)
+		}
+	}
+})
+
+test('member fetch and edit errors do not interrupt remaining members in a 150-member batch', async () => {
+	for (const automatic of [false, true]) {
+		const f = bulkFixture()
+		const ids = [...f.members.keys()]
+		const preview = automatic ? null : await f.preview()
+		const fetch = f.guild.members.fetch
+		f.guild.members.fetch = async options => {
+			if (options?.user === ids[4]) throw Object.assign(new Error('Unknown member'), { status: 404, code: 10007 })
+			return fetch(options)
+		}
+		f.members.get(ids[9]).edit = async () => { throw Object.assign(new Error('Missing permissions'), { status: 403, code: 50013 }) }
+		if (automatic) await f.sync.autoNicknames(f.guild)
+		else await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: ids })
+		await f.sync.wait(f.guild)
+		const state = await f.sync.state(f.guild)
+		assert.equal(state.run.status, 'completed_with_errors')
+		assert.equal(state.run.completed, 150)
+		assert.equal(state.run.results.length, 150)
+		assert.equal(state.run.results.filter(row => row.status === 'failed').length, 2)
+		assert.equal(state.run.results.at(-1).status, 'applied')
+		assert.equal(f.edits.length, 148)
+		assert.deepEqual(f.saved().run.results, state.run.results)
+		assert.ok(f.audits.some(entry => entry[1] === (automatic ? 'majestic.nickname.result' : 'majestic.member.result') && entry[2] === ids[4]))
+	}
+})
+
+test('database failure stops a bulk operation before any further Discord edits', async () => {
+	const f = bulkFixture()
+	const preview = await f.preview()
+	const query = f.options.pool.query
+	f.options.pool.query = async (...args) => {
+		if (f.edits.length >= 5 && args[0].startsWith('INSERT INTO majestic_sync_state')) throw new Error('database unavailable')
+		return query(...args)
+	}
+	await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [...f.members.keys()] })
+	await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 5)
+	assert.equal((await f.sync.state(f.guild)).run.status, 'failed')
+})
+
 test('apply edits only selected members, preserves unrelated roles and persists result without secrets', async () => {
 	const f = fixture()
 	const preview = await f.preview()
@@ -71,6 +161,66 @@ test('expired previews and non-change rows cannot be applied', async () => {
 	const current = await f.preview()
 	await assert.rejects(f.sync.apply(f.guild, f.actor, { previewId: current.id, discordIds: ['unknown'] }), /без конфликтов/)
 	await assert.rejects(f.sync.apply(f.guild, f.actor, { previewId: current.id, discordIds: [] }), /Выберите/)
+})
+
+test('apply waits for the opcode 8 rate limit then fetches fresh members before editing', async () => {
+	const waits = []
+	const f = fixture({ sleep: async ms => { waits.push(ms); assert.equal(f.edits.length, 0) } })
+	const preview = await f.preview()
+	const fetch = f.guild.members.fetch
+	let requests = 0
+	f.guild.members.fetch = async options => {
+		if (!options?.user && ++requests === 1) throw Object.assign(new Error('rate limited'), {
+			name: 'GatewayRateLimitError', data: { opcode: 8, retry_after: 16.075 }
+		})
+		return fetch(options)
+	}
+	await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] })
+	await f.sync.wait(f.guild)
+	assert.deepEqual(waits, [16325])
+	assert.equal(requests, 2)
+	assert.equal(f.edits.length, 1)
+	assert.equal((await f.sync.state(f.guild)).run.status, 'completed')
+})
+
+test('member fetch retries are bounded and do not retry unrelated or invalid rate limits', async () => {
+	for (const [name, data, expectedRequests] of [
+		['GatewayRateLimitError', { opcode: 8, retry_after: 5.149 }, 3],
+		['Error', { opcode: 8, retry_after: 1 }, 1],
+		['GatewayRateLimitError', { opcode: 8, retry_after: -1 }, 1],
+		['GatewayRateLimitError', { opcode: 8, retry_after: 61 }, 1],
+		['GatewayRateLimitError', { opcode: 8, retry_after: NaN }, 1],
+		['GatewayRateLimitError', { opcode: 1, retry_after: 1 }, 1]
+	]) {
+		const waits = []
+		const f = fixture({ sleep: async ms => waits.push(ms) })
+		const preview = await f.preview()
+		let requests = 0
+		f.guild.members.fetch = async () => { requests++; throw Object.assign(new Error('fetch failed'), { name, data }) }
+		await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] })
+		await f.sync.wait(f.guild)
+		assert.equal(requests, expectedRequests)
+		assert.equal(waits.length, expectedRequests - 1)
+		assert.equal(f.edits.length, 0)
+		assert.equal((await f.sync.state(f.guild)).run.status, 'failed')
+	}
+})
+
+test('stopping while waiting for member fetch prevents edits', async () => {
+	const f = fixture({ sleep: async () => { await f.sync.stop(f.guild, f.actor) } })
+	const preview = await f.preview()
+	const fetch = f.guild.members.fetch
+	let requests = 0
+	f.guild.members.fetch = async options => {
+		if (!options?.user && ++requests === 1) throw Object.assign(new Error('rate limited'), {
+			name: 'GatewayRateLimitError', data: { opcode: 8, retry_after: 1 }
+		})
+		return fetch(options)
+	}
+	await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] })
+	await f.sync.wait(f.guild)
+	assert.equal(f.edits.length, 0)
+	assert.equal((await f.sync.state(f.guild)).run.status, 'stopped')
 })
 
 test('resolutions persist, invalidate preview and can be reset', async () => {
@@ -133,12 +283,12 @@ test('concurrent runs are rejected and stop prevents the next Discord mutation',
 	assert.equal((await f.sync.state(f.guild)).run.status, 'stopped')
 })
 
-test('Discord failure stops the run and does not expose response details', async () => {
+test('Discord failure is recorded without exposing response details', async () => {
 	const f = fixture(); const preview = await f.preview()
 	f.member.edit = async () => { throw new Error('private token and response') }
 	await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] }); await f.sync.wait(f.guild)
 	const state = await f.sync.state(f.guild)
-	assert.equal(state.run.status, 'failed')
+	assert.equal(state.run.status, 'completed_with_errors')
 	assert.equal(state.run.results[0].status, 'failed')
 	assert.ok(!JSON.stringify(state).includes('private token'))
 })
@@ -175,7 +325,7 @@ test('apply diagnostics identify failing stages and redact secrets without expos
 		const output = JSON.stringify(logs)
 		for (const secret of ['test-session-secret', 'test-bot-secret', 'unknown-secret', 'request-body-secret', 'response-secret', 'example.com/private']) assert.ok(!output.includes(secret), secret)
 		const state = await f.sync.state(f.guild)
-		assert.equal(state.run.status, 'failed')
+		assert.equal(state.run.status, stage.startsWith('discord.member.edit:') ? 'completed_with_errors' : 'failed')
 		assert.ok(!JSON.stringify(state).includes('test-session-secret'))
 		assert.equal(f.edits.length, 0)
 	}
