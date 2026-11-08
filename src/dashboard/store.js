@@ -1,7 +1,12 @@
 const catalog = require('./templates.json')
+const layout = require('../../public/template-layout')
+const legacyFields = () => Object.entries(catalog).filter(([key]) => !key.includes('.document')).map(([key, field]) => ({ key, ...field, value: field.default }))
+for (const field of layout.documents(legacyFields())) catalog[field.key] = field
+const hiddenTemplate = key => /^(panel|archives|unanswered)\./.test(key) || (/^(invite|navigation|application|dm)\./.test(key) && !key.includes('.document') && !['invite.3', 'invite.4', 'application.1', 'application.2', 'application.3'].includes(key)) || /^capture\.(1|4|5|6|queue|main|reserve|left)$/.test(key)
 const { defaultRolePrefixes } = require('../utils/adminPrefix')
 
 function templateDefinition(key) {
+	if (/^(panel|archives|unanswered)\./.test(key)) return null
 	if (Object.hasOwn(catalog, key)) return catalog[key]
 	if (key === 'rules.document') return { group: 'Правила', label: 'Правила целиком', type: 'text', maxLength: 4000, variables: [] }
 	if (['promotion.document', 'recruit.document'].includes(key)) return { group: key.startsWith('promotion.') ? 'Система повышения' : 'Памятка рекрута', label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, variables: [], default: key.startsWith('promotion.') ? '# Система повышения' : '# Памятка рекрута' }
@@ -11,7 +16,6 @@ function templateDefinition(key) {
 }
 
 const settingDefinitions = {
-	ADMIN_PANEL_CHANNEL_ID: { label: 'Канал админ-панели', type: 'channel', channelTypes: [0] },
 	INVITE_CATEGORY_ID: { label: 'Категория заявок', type: 'channel', channelTypes: [4] },
 	LOG_CHANNEL_ID: { label: 'Канал журнала заявок', type: 'channel', channelTypes: [0] },
 	CHANGELOG_CHANNEL_ID: { label: 'Канал журнала изменений', type: 'channel', channelTypes: [0] },
@@ -58,7 +62,13 @@ function createStore() {
 			return container.clearAccentColor()
 		},
 		text(key, variables = {}, fallback) {
-			const source = state.templates[key] ?? catalog[key]?.default ?? fallback
+			const generated = key.includes('.document') ? layout.documents(legacyFields().map(field => ({ ...field, value: state.templates[field.key] ?? field.value }))).find(field => field.key === key)?.value : undefined
+			let source = (/^(archives|unanswered)\./.test(key) ? undefined : state.templates[key]) ?? generated ?? catalog[key]?.default ?? fallback
+			if ((key.includes('.document') || key.startsWith('permanent.')) && typeof source === 'string' && source.includes('<separator')) {
+				const markdown = require('../../public/component-markdown')
+				const visibleSeparators = /^(promotion|recruit)\.document$|^permanent\.(promotion|recruit)\./.test(key)
+				source = markdown.stringify(markdown.parse(source).map(item => visibleSeparators && item.type === 'separator' ? { ...item, divider: true } : item))
+			}
 			if (typeof source !== 'string') throw new Error(`Unknown template: ${key}`)
 			return source.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name) =>
 				Object.hasOwn(variables, name) ? String(variables[name]) : match)
@@ -74,8 +84,8 @@ function createStore() {
 				if (!/^rules\.(heading|rule)\./.test(a) || !/^rules\.(heading|rule)\./.test(b)) return 0
 				const x = order(a), y = order(b)
 				return x[0] - y[0] || x[1] - y[1]
-			}).map(([key, value]) => ({
-				key, ...value, ...(value.type === 'text' ? { components: value.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3') } : {}), value: state.templates[key] ?? value.default
+			}).filter(([key]) => !hiddenTemplate(key)).map(([key, value]) => ({
+				key, ...value, ...(value.type === 'text' ? { components: value.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3') } : {}), value: this.text(key, {}, value.default)
 			})), settings: Object.entries(settingDefinitions).map(([key, value]) => ({ key, ...value, value: getSetting(key) })) }
 		},
 		async init(database) {
@@ -131,7 +141,12 @@ function createStore() {
 					}
 				}
 				for (const [key, value] of Object.entries(values)) {
-					if (value === null) delete next[section][key]
+					if (value === null) {
+						delete next[section][key]
+						if (section === 'templates' && key.includes('.document') && catalog[key]) {
+							for (const legacyKey of Object.keys(next.templates)) if (hiddenTemplate(legacyKey) && catalog[legacyKey]?.group === catalog[key].group) delete next.templates[legacyKey]
+						}
+					}
 					else next[section][key] = value
 				}
 				const changes = {}

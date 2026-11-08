@@ -135,12 +135,14 @@ test('application preview assembles each full state and updates sample text with
 	const context = vm.createContext({ document: { createElement: tag => new Element(tag) }, Option: function(label, value) { this.textContent = label; this.value = value }, $: id => id === 'templateGroup' ? group : root, config: { templates }, examples: { user: '123456789012345678', name: 'Tony | 132961', age: '18', about: 'Хочу в семью', history: 'Revento', reason: 'Ошибка анкеты', channel: '123456789012345678', server: 'REVENTO' }, applicationPreviewState: 'pending' })
 	const source = readFileSync(require.resolve('../public/dashboard.js'), 'utf8')
 	vm.runInContext(readFileSync(require.resolve('../public/markdown.js'), 'utf8'), context)
+	vm.runInContext(readFileSync(require.resolve('../public/component-markdown.js'), 'utf8'), context)
+	vm.runInContext(readFileSync(require.resolve('../public/markdown-editor.js'), 'utf8'), context)
 	vm.runInContext(source.slice(source.indexOf('function node('), source.indexOf('function notice(')), context)
 	vm.runInContext(source.slice(source.indexOf('function previewApplication('), source.indexOf('function renderSettings(')), context)
 	const html = element => (element.innerHTML || element.textContent || '') + element.children.map(html).join('\n')
 	for (const state of ['pending', 'accepted', 'rejected', 'interview']) {
 		context.applicationPreviewState = state
-		context.previewApplication(root, { 'application.details': '### Анкета\n{name}' })
+		context.previewApplication(root, { ['application.document.' + state]: templates.find(field => field.key === 'application.document.' + state).value.replace('### Пользователь:', '### Анкета\n### Пользователь:') })
 		const output = html(root.children.at(-1))
 		assert.match(output, /Анкета/)
 		assert.match(output, /Tony \| 132961/)
@@ -155,6 +157,6 @@ test('application preview assembles each full state and updates sample text with
 		const output = html(root.children.at(-1))
 		assert.match(output, /REVENTO/)
 		assert.doesNotMatch(output, /\{server\}|\{time\}|<t:/)
-		assert.equal(root.children.at(-1).children.length, 3)
+		assert.equal(root.children.at(-1).children.length, 1)
 	}
 })

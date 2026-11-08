@@ -6,7 +6,6 @@ const {
 	TextDisplayBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	SeparatorBuilder,
 	StringSelectMenuBuilder,
 	PermissionFlagsBits,
 	ChannelType
@@ -150,81 +149,42 @@ function buildCaptureMessage(
 			)
 		)
 	)
-	const title = new TextDisplayBuilder().setContent(
-		dashboard.text('capture.title', { target: target ?? 'капт' })
-	)
-	const time = new TextDisplayBuilder().setContent(
-		dashboard.text('capture.time', { time: discordTimestamp })
-	)
-
-	const helpText = new TextDisplayBuilder().setContent(dashboard.text('capture.1'))
-
 	const players = joinedPlayers(mainList, reserveList, mainListMeta, reserveListMeta)
-	const byTime = players.map(player => player.userId)
-	const byPriority = guild ? sortByRolePriority(players, guild) : byTime
 	const timeMode = sortMode === 'time'
-	const currentOrder = timeMode ? byTime : byPriority
-	const otherRanks = new Map(
-		(timeMode ? byPriority : byTime).map((id, index) => [id, index + 1])
-	)
-	const start = approvalPage * APPROVAL_PAGE_SIZE
-	const playersText = currentOrder.slice(start, start + APPROVAL_PAGE_SIZE)
-		.map((id, index) =>
-			`${start + index + 1}. <@${id}> — ${timeMode ? 'приоритет' : 'запись'} №${otherRanks.get(id)}${approved.has(id) ? ' ✅' : ''}`
-		).join('\n') || 'Пусто'
-	const leftPlayersText =
-		leftList.length > 0
-			? leftList.map((id, index) => `• <@${id}>`).join('\n')
-			: 'Пусто'
-
-	const queueTitle = new TextDisplayBuilder().setContent(
-		dashboard.text('capture.queue', {
-			count: players.length,
-			approved: approved.size,
-			limit: maxMain,
-			mode: timeMode ? 'по времени записи' : 'по роли и времени записи',
-			page: approvalPage + 1,
-			pages: Math.max(1, Math.ceil(players.length / APPROVAL_PAGE_SIZE)),
-			players: playersText
-		})
-	)
-	const leftTitle = new TextDisplayBuilder().setContent(
-		dashboard.text('capture.left', { count: leftList.length, players: leftPlayersText })
-	)
-
+	const currentOrder = !timeMode && guild ? sortByRolePriority(players, guild) : players.map(player => player.userId)
+	const visible = new Set(currentOrder.slice(approvalPage * APPROVAL_PAGE_SIZE, (approvalPage + 1) * APPROVAL_PAGE_SIZE))
+	const confirmed = currentOrder.filter(id => approved.has(id))
+	const waiting = currentOrder.filter(id => !approved.has(id))
+	const list = ids => ids.map((id, index) => ({ id, index })).filter(({ id }) => visible.has(id))
+		.map(({ id, index }) => `${index + 1}. <@${id}>`).join('\n') || 'Пусто'
 	const containerComponent = new ContainerBuilder()
-
-	containerComponent.addTextDisplayComponents(title, time, helpText)
-
-	containerComponent
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(queueTitle)
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('registration.document', {
+			target: target ?? 'мероприятие', time: discordTimestamp, limit: maxMain,
+			mode: timeMode ? 'по времени записи' : 'по роли и времени записи',
+			page: approvalPage + 1, pages: Math.max(1, Math.ceil(players.length / APPROVAL_PAGE_SIZE)),
+			confirmedCount: confirmed.length, confirmedPlayers: list(confirmed),
+			waitingCount: waiting.length, waitingPlayers: list(waiting),
+			leftCount: leftList.length, leftPlayers: leftList.map(id => `• <@${id}>`).join('\n') || 'Пусто'
+		})))
 		.addActionRowComponents(new ActionRowBuilder().addComponents(
-			new ButtonBuilder()
-				.setCustomId('capt_sort_toggle')
-				.setLabel(timeMode ? 'Сортировать по приоритету' : 'Сортировать по времени')
+			new ButtonBuilder().setCustomId('capt_sort_toggle')
+				.setLabel(dashboard.text(timeMode ? 'registration.sortPriority' : 'registration.sortTime'))
 				.setStyle(ButtonStyle.Secondary)
 		))
-
-	if (leftList.length > 0) {
-		containerComponent
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addTextDisplayComponents(leftTitle)
-	}
 
 	// Кнопки управления для участников и админов
 	const buttonsRow = new ActionRowBuilder().addComponents(
 		new ButtonBuilder()
 			.setCustomId('capt_join')
-			.setLabel(dashboard.text('capture.2'))
+			.setLabel(dashboard.text('registration.join'))
 			.setStyle(ButtonStyle.Success),
 		new ButtonBuilder()
 			.setCustomId('capt_leave')
-			.setLabel(dashboard.text('capture.3'))
+			.setLabel(dashboard.text('registration.leave'))
 			.setStyle(ButtonStyle.Danger),
 		new ButtonBuilder()
 			.setCustomId('capt_edit_time_trigger') // Название кнопки для перехвата админ права
-			.setLabel(dashboard.text('capture.4'))
+			.setLabel(dashboard.text('registration.editTime'))
 			.setStyle(ButtonStyle.Secondary)
 	)
 	const pageCount = Math.ceil(
@@ -234,12 +194,12 @@ function buildCaptureMessage(
 		buttonsRow.addComponents(
 			new ButtonBuilder()
 				.setCustomId(`capt_approval_page_${approvalPage - 1}`)
-				.setLabel(dashboard.text('capture.5'))
+				.setLabel(dashboard.text('registration.previous'))
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(approvalPage === 0),
 			new ButtonBuilder()
 				.setCustomId(`capt_approval_page_${approvalPage + 1}`)
-				.setLabel(dashboard.text('capture.6'))
+				.setLabel(dashboard.text('registration.next'))
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(approvalPage >= pageCount - 1)
 		)
@@ -275,7 +235,7 @@ function buildCaptureMessage(
 
 	return {
 		flags: MessageFlags.IsComponentsV2,
-		components: [dashboard.decorate('capture', containerComponent), buttonsRow, ...menus]
+		components: [dashboard.decorate('registration', containerComponent), buttonsRow, ...menus]
 	}
 }
 
@@ -512,7 +472,7 @@ async function handleButton(interaction) {
 				await client.query('ROLLBACK')
 				return interaction
 					.followUp({
-						content: 'Вы уже записаны на капт!',
+						content: 'Вы уже записаны на мероприятие!',
 						flags: [MessageFlags.Ephemeral]
 					})
 					.catch(() => {})

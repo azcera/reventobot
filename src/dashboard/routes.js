@@ -10,8 +10,6 @@ const { linesOf, logMessageChange, diffLines } = require('./changeLog')
 const { createMajesticSync } = require('../services/majesticSync')
 const { syncRolePrefixes } = require('../services/rolePrefixSync')
 
-const panelKey = require('./panelKey')
-
 function validateTemplates(values) {
 	if (!values || typeof values !== 'object' || Array.isArray(values) || !Object.keys(values).length) throw problem(400, 'Выберите шаблон.')
 	for (const [key, value] of Object.entries(values)) {
@@ -47,8 +45,8 @@ function validateTemplates(values) {
 		const match = /^rules\.rule\.(\d+)\./.exec(field.key)
 		if (match && !fields.has('rules.heading.' + match[1])) throw problem(400, 'Сначала добавьте раздел для нового правила.')
 	}
-	for (const group of ['Правила', 'Приглашение', 'Навигация', 'Админ-панель']) {
-		const length = [...fields.values()].filter(field => field.group === group && field.type === 'text' && (group !== 'Правила' || !fields.has('rules.document') || field.key === 'rules.document'))
+	for (const group of ['Правила', 'Приглашение', 'Навигация']) {
+		const length = [...fields.values()].filter(field => field.group === group && field.type === 'text' && (!['Приглашение', 'Навигация'].includes(group) || field.key === (group === 'Приглашение' ? 'invite.document' : 'navigation.document') || ['invite.3', 'invite.4'].includes(field.key)) && (group !== 'Правила' || !fields.has('rules.document') || field.key === 'rules.document'))
 			.reduce((sum, field) => sum + field.value.length, 0)
 		const limit = group === 'Приглашение' ? 2700 : 3800
 		if (length > limit) throw problem(400, `Слишком много текста в разделе «${group}». Оставьте не более ${limit} символов.`)
@@ -89,6 +87,10 @@ async function validateSettings(values, guild) {
 }
 
 function registerDashboard(app, client, pool, { auth = createAuth({ client }), majestic } = {}) {
+	app.get('/template-images/:name', (req, res) => {
+		if (!['invites.png', 'revento.png', 'rules.png', 'capt.png'].includes(req.params.name)) return res.sendStatus(404)
+		res.sendFile(require('path').join(__dirname, '../images', req.params.name))
+	})
 	auth.register(app)
 	app.use('/api', auth.middleware)
 	app.use('/api', async (req, res, next) => {
@@ -132,15 +134,7 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }), m
 	})
 	app.get('/api/config', async (req, res) => {
 		try {
-			// The existing panel table owns its actions; expose only text and link fields.
-			const exists = await pool.query("SELECT to_regclass('public.admin_panel') AS name")
-			if (exists.rows[0].name) {
-				const { rows } = await pool.query('SELECT * FROM admin_panel')
-				for (const row of rows) for (const [field, value] of [['label', row.buttonLabel], ['text', row.text], ...(String(row.buttonId).startsWith('https://') ? [['link', row.buttonId]] : [])]) {
-					if (typeof value === 'string') catalog[panelKey(row.buttonId, field)] = { group: 'Админ-панель', label: value.slice(0, 70), default: value,
-						type: field === 'label' ? 'button' : field === 'link' ? 'url' : 'text', maxLength: field === 'label' ? 80 : field === 'link' ? 512 : 4000, variables: [] }
-				}
-			}
+			await permanent.upgradeLegacyBindings(client, req.guild)
 			res.json(store.snapshot())
 		} catch (error) { respondError(res, error) }
 	})
@@ -221,7 +215,8 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }), m
 		if (message.author.id !== client.user.id || message.webhookId) throw problem(403, 'Редактировать можно только сообщения этого бота.')
 		const dynamic = await pool.query('SELECT 1 FROM active_captures WHERE message_id = $1 LIMIT 1', [message.id])
 		const war = await pool.query('SELECT 1 FROM family_wars WHERE announcement_id = $1 OR registration_id = $1 LIMIT 1', [message.id])
-		if (dynamic.rows.length || war.rows.length || channel.id === store.getSetting('ARCHIVE_SETTINGS_CHANNEL')) throw problem(409, 'Этот список обновляет бот. Измените его оформление во вкладке «Шаблоны».')
+		if (channel.id === store.getSetting('ARCHIVE_SETTINGS_CHANNEL')) throw problem(409, 'Списки архивов обновляет бот. Их оформление недоступно для изменения.')
+		if (dynamic.rows.length || war.rows.length) throw problem(409, 'Этот список обновляет бот. Измените регистрацию во вкладке «Шаблоны».')
 		return message
 	}
 	app.get('/api/message', async (req, res) => {
@@ -259,4 +254,4 @@ function respondError(res, error) {
 	res.status(error.status || 502).json({ error: error.status ? error.message : 'Не удалось выполнить запрос. Проверьте доступ бота к каналу и базе данных.' })
 }
 
-module.exports = { registerDashboard, panelKey, validateTemplates, validateSettings }
+module.exports = { registerDashboard, validateTemplates, validateSettings }

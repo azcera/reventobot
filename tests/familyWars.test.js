@@ -12,6 +12,31 @@ const rawWar = (extra = {}) => ({ id: 45767, captureId: 36468, defendersId: 1698
 	startAt: '2026-11-08T12:30:00Z', status: 'unknown-upcoming-status', players: {}, ...extra })
 const plain = payload => JSON.stringify(payload.components.map(component => component.toJSON()))
 
+test('new registration uses dashboard text and button templates with live game and waiting lists', async () => {
+	const f = fixture(), store = createStore()
+	await store.init(require('./helpers/dashboardFixture').memoryPool())
+	await store.save('templates', {
+		'capture.info': '## {map} · {zone} · {status}\n{registrationStatus}{freshness}',
+		'capture.confirmed': '### Участники: {count}\n{players}',
+		'capture.waiting': '### Очередь: {count}\n{players}',
+		'capture.sortTime': 'По времени', 'capture.sortPriority': 'По ролям',
+		'registration.document': store.text('registration.document').replace('## 📢', '## Только ручная рега')
+	}, store.revision, 'admin')
+	const war = normalizeWar(rawWar({ players: { 1698: [{ id: 231542, name: 'Maya' }] } }), rulesFromEnv({}), null, start)
+	const registration = { joins: { waiting: { joinedAt: start } }, sortMode: 'priority' }
+	let output = plain(registrationMessage(war, registration, f.guild, {}, store, start))
+	assert.match(output, /Палето-Бей/)
+	assert.doesNotMatch(output, /Только ручная рега/)
+	assert.match(output, /Участники: 1/)
+	assert.match(output, /Очередь: 1/)
+	assert.match(output, /<@waiting>/)
+	assert.match(output, /По времени/)
+	registration.sortMode = 'time'
+	output = plain(registrationMessage(war, registration, f.guild, {}, store, start))
+	assert.match(output, /По ролям/)
+	assert.match(output, /war_join_RU8_45767/)
+})
+
 function fixture() {
 	let clock = start, captures = [rawWar()], failFetch = false
 	const saved = new Map(), messages = new Collection(), sent = [], logs = [], changes = []

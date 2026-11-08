@@ -45,17 +45,7 @@ async function submitRejectModal(interaction) {
 	if (targetUser) {
 		const container = new ContainerBuilder()
 			.setAccentColor(0xe74c3c)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					dashboard.text('dm.rejectTitle', { server: interaction.guild.name })
-				)
-			)
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					dashboard.text('dm.rejectReason', { reason, time: Math.floor(Date.now() / 1000) })
-				)
-			)
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('dm.document.rejected', { server: interaction.guild.name, reason, time: Math.floor(Date.now() / 1000) })))
 		await targetUser
 			.send({
 				components: [container.toJSON()],

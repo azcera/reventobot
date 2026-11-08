@@ -72,7 +72,7 @@ test('rules and invite sync reuse command builders, images and working buttons',
 		assert.equal(f.message.lastPayload.files, undefined)
 		if (kind === 'invite') {
 			assert.equal(f.message.components[0].components.at(-1).accessory.custom_id, 'open_invite_modal')
-			assert.equal(config.templates.filter(field => field.group === 'Приглашение').at(-1).key, 'invite.4')
+			assert.ok(config.templates.some(field => field.key === 'invite.document'))
 		}
 	}
 })

@@ -69,17 +69,17 @@ function registrationMessage(war, registration, guild, decisions, store, now = D
 	const container = new ContainerBuilder()
 		.addTextDisplayComponents(textBlock(store.text('capture.title', { target: `капт против ${text(war.enemy)}` })),
 			textBlock(store.text('capture.time', { time: timestamp(war.startAt) })),
-			textBlock(`Карта: ${text(war.map)} (${text(war.zone)}) · Статус: ${text(war.status || 'не указан')}\n🎮 — в игре без подтверждения в Discord · ✅ — в игре и нажал «Принять» · ⏳ — нажал «Принять», ожидает записи в игре. ${closed ? 'Регистрация закрыта. Обновление остановлено.' : 'Время и состав обновляются автоматически.'}${freshness}`))
+			textBlock(store.text('capture.info', { map: text(war.map), zone: text(war.zone), status: text(war.status || 'не указан'), registrationStatus: closed ? 'Регистрация закрыта. Обновление остановлено.' : 'Время и состав обновляются автоматически.', freshness })))
 		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(textBlock(`Сортировка ${registration.sortMode === 'time' ? 'по времени записи' : 'по роли и времени записи'}`),
-			textBlock(`### В игре: ${confirmed.length}\n${list(confirmed)}`))
+		.addTextDisplayComponents(textBlock(store.text('capture.sort', { mode: registration.sortMode === 'time' ? 'по времени записи' : 'по роли и времени записи' })),
+			textBlock(store.text('capture.confirmed', { count: confirmed.length, players: list(confirmed) })))
 		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(textBlock(`### Ожидание: ${waiting.length}\n${list(waiting)}`))
+		.addTextDisplayComponents(textBlock(store.text('capture.waiting', { count: waiting.length, players: list(waiting) })))
 	if (war.testSource) container.addTextDisplayComponents(textBlock(`🧪 Тестовая регистрация. Снимок капта №${war.testSource.apiId} от ${timestamp(war.testSource.startAt)}. Состав зафиксирован; кнопки активны до конца текущего дня по Москве.`))
 	const controls = new ActionRowBuilder().addComponents(
 		new ButtonBuilder().setCustomId(`war_join_${suffix(war)}`).setLabel(store.text('capture.2')).setStyle(ButtonStyle.Success).setDisabled(closed),
 		new ButtonBuilder().setCustomId(`war_leave_${suffix(war)}`).setLabel(store.text('capture.3')).setStyle(ButtonStyle.Danger).setDisabled(closed),
-		new ButtonBuilder().setCustomId(`war_sort_${suffix(war)}`).setLabel(registration.sortMode === 'time' ? 'Сортировать по приоритету' : 'Сортировать по времени').setStyle(ButtonStyle.Secondary).setDisabled(closed)
+		new ButtonBuilder().setCustomId(`war_sort_${suffix(war)}`).setLabel(store.text(registration.sortMode === 'time' ? 'capture.sortPriority' : 'capture.sortTime')).setStyle(ButtonStyle.Secondary).setDisabled(closed)
 	)
 	container.addActionRowComponents(controls)
 	return { flags: MessageFlags.IsComponentsV2, components: [store.decorate('capture', container)], allowedMentions: { parse: [] } }

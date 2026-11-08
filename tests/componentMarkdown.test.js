@@ -26,6 +26,19 @@ test('legacy separator options and quoted URLs survive Markdown round-trip', () 
 	assert.deepEqual(markdown.parse(markdown.stringify(items)), items)
 })
 
+test('named separator buttons produce different Discord spacing and matching previews', () => {
+	const { textarea, shell, context } = editorContext()
+	for (const [label, source, spacing] of [['Разделитель', '---', 1], ['Большой разделитель', '***', 2]]) {
+		textarea.value = ''; textarea.setSelectionRange(0, 0)
+		shell.children[1].children.find(button => button.textContent === label).handlers.click()
+		assert.equal(textarea.value.trim(), source)
+		assert.equal(buildEditPayload({ items: markdown.parse(textarea.value) }).components[0].toJSON().components[0].spacing, spacing)
+		assert.equal(context.renderComponentMarkdown(textarea.value).includes('spacing-large'), spacing === 2)
+	}
+	assert.match(context.renderComponentMarkdown('<img src="attachment://invites.png" />'), /src="\/template-images\/invites.png"/)
+	assert.throws(() => markdown.parse('<img src="attachment://../secret" />'))
+})
+
 test('code is isolated; malformed tags, unsafe URLs and component overflow reject', () => {
 	const code = '```html\n---\n<img src="javascript:alert(1)" />\n```'
 	assert.deepEqual(markdown.parse(code), [{ type: 'text', value: code }])

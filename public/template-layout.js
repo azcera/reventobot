@@ -1,0 +1,21 @@
+// Markdown documents assembled from the existing fields, including saved overrides.
+;(function (root) {
+	function documents(fields) {
+		const result = []
+		const get = key => fields.find(field => field.key === key)?.value ?? ''
+		const add = (key, group, label, value) => result.push({ key, group, label, type: 'text', components: true, maxLength: 4000, value, default: value, variables: [...new Set([...value.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g)].map(match => match[1]))] })
+		const join = parts => parts.filter(Boolean).join('\n\n---\n\n')
+		const image = key => '<img src="' + get(key) + '" />'
+		add('invite.document', 'Приглашение', 'Текст приглашения', [image('invite.1'), ...[5, 6, 7, 8, 9, 10].map(n => get('invite.' + n)), image('invite.2'), get('invite.11'), ...fields.filter(field => field.key.startsWith('invite.form.')).map(field => field.value), ...[12, 13, 14].map(n => get('invite.' + n))].filter(Boolean).join('\n\n***\n\n'))
+		const attr = value => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+		add('navigation.document', 'Навигация', 'Текст навигации', join([get('navigation.1'), ...Array.from({ length: 9 }, (_, i) => get('navigation.item.' + i + '.link') ? '<section buttonLabel="' + attr(get('navigation.item.' + i + '.label')) + '" buttonLink="' + attr(get('navigation.item.' + i + '.link')) + '">' + get('navigation.item.' + i + '.text') + '</section>' : '## ' + get('navigation.item.' + i + '.label'))]))
+		for (const [state, label] of Object.entries({ pending: 'На рассмотрении', accepted: 'Принята', rejected: 'Отклонена', interview: 'Обзвон' })) {
+			add('application.document.' + state, 'Заявка', label, join([state === 'pending' ? get('application.title') + get('application.help') : get('application.' + state), get('application.details'), get('application.' + state + 'Status')]))
+		}
+		for (const [state, label, keys] of [['accepted', 'Принята', ['acceptTitle', 'acceptDate']], ['rejected', 'Отклонена', ['rejectTitle', 'rejectReason']], ['interview', 'Обзвон', ['interviewTitle', 'interviewDate']]]) add('dm.document.' + state, 'Личные сообщения заявок', label, join(keys.map(key => get('dm.' + key))))
+		return result
+	}
+	const api = { documents }
+	if (typeof module !== 'undefined') module.exports = api
+	else root.templateLayout = api
+})(typeof globalThis !== 'undefined' ? globalThis : this)

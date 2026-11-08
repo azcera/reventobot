@@ -71,7 +71,8 @@ function mountMarkdownEditor(textarea, options = {}) {
 	]
 	for (const [label, title, ...args] of formats) button(label, title, () => insert(...args))
 	if (options.components !== false) {
-		button('―', 'Разделитель: ***, ___ или --- на отдельной строке', () => insert('', '', '---', true))
+		button('Разделитель', 'Обычный разделитель', () => insert('', '', '---', true))
+		button('Большой разделитель', 'Разделитель с большим отступом', () => insert('', '', '***', true))
 		button('Изображение', 'Изображение по прямой ссылке', () => insert('', '', '<img src="https://example.com/image.png" />', true))
 		button('Секция + кнопка', 'Текст с кнопкой справа', () => insert('<section buttonLabel="Открыть" buttonLink="https://example.com">', '</section>', 'Текст секции', true))
 	}
@@ -94,6 +95,7 @@ function renderComponentMarkdown(source, components = true) {
 	const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 	return componentMarkdown.parse(source).map(item => {
 		if (item.type === 'text') return '<div class="discord-text">' + discordMarkdownToHtml(item.value) + '</div>'
+		if (item.type === 'image' && item.value.startsWith('attachment://')) return '<img class="markdown-image" src="/template-images/' + escape(item.value.slice(13)) + '" alt="Изображение сообщения">'
 		if (item.type === 'image') return '<img class="markdown-image" src="' + escape(item.value) + '" alt="Изображение сообщения" loading="lazy">'
 		if (item.type === 'separator') return '<hr class="markdown-separator' + (item.divider ? '' : ' no-line') + (item.spacing === 'large' ? ' spacing-large' : '') + '">'
 		return '<div class="markdown-section"><div>' + discordMarkdownToHtml(item.value) + '</div><span class="preview-button discord-btn">' + escape(item.btnLabel) + '</span></div>'

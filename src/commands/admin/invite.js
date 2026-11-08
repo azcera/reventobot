@@ -5,8 +5,6 @@ const {
 	PermissionFlagsBits,
 	SeparatorBuilder,
 	TextDisplayBuilder,
-	MediaGalleryBuilder,
-	MediaGalleryItemBuilder,
 	AttachmentBuilder,
 	SeparatorSpacingSize,
 	SectionBuilder,
@@ -16,9 +14,7 @@ const {
 const path = require('path')
 const { replyWithAutoDelete } = require('../../utils/autoDelete')
 
-const inviteApplication = require('../../features/invite/inviteApplication')
 const { IMAGES_PATH } = require('../../config/path')
-const FORM_FIELDS = inviteApplication.MODAL_FIELDS
 
 /**
  * Команда !invite (только Administrator).
@@ -55,121 +51,13 @@ module.exports = {
 			name: 'revento.png'
 		})
 
-		const inviteImage = new MediaGalleryBuilder().addItems(
-			new MediaGalleryItemBuilder()
-				.setURL(dashboard.text('invite.1'))
-				.setDescription('REVENTO')
-		)
-
-		const reventoImage = new MediaGalleryBuilder().addItems(
-			new MediaGalleryItemBuilder()
-				.setURL(dashboard.text('invite.2'))
-				.setDescription('REVENTO')
-		)
-
-		// 2. Кнопка подачи заявки
-		const inviteButton = new SectionBuilder()
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.3'))
-			)
-			.setButtonAccessory(
-				new ButtonBuilder()
-					.setCustomId('open_invite_modal')
-					.setLabel(dashboard.text('invite.4'))
-					.setStyle(ButtonStyle.Primary)
-			)
-
-		// 3. Сборка основной части контейнера
 		const container = new ContainerBuilder()
-			.addMediaGalleryComponents(inviteImage)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.5'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.6'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.7'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.8'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.9'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.10'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addMediaGalleryComponents(reventoImage)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.11'))
-			)
-
-		// 🚀 4. ДИНАМИЧЕСКАЯ ГЕНЕРАЦИЯ ТЕКСТА ИЗ MODAL_FIELDS
-		// Цикл автоматически создаст ровно столько блоков, сколько полей в модалке (сейчас их 5)
-		FORM_FIELDS.forEach((field, index) => {
-			let fieldText = `### ${index + 1}. ${field.label}\n`
-
-			if (field.description) {
-				fieldText += `> ${field.description}\n`
-			}
-
-			fieldText += `> **Пример:** ||${field.placeholder}||`
-
-			container
-				.addSeparatorComponents(
-					new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-				)
-				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(dashboard.text('invite.form.' + field.customId, {}, fieldText))
-				)
-		})
-
-		// 5. Завершающая часть контейнера
-		container
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.12'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.13'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(dashboard.text('invite.14'))
-			)
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
-			.addSectionComponents(inviteButton)
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('invite.document')))
+			.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large))
+			.addSectionComponents(new SectionBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('invite.3')))
+				.setButtonAccessory(new ButtonBuilder().setCustomId('open_invite_modal')
+					.setLabel(dashboard.text('invite.4')).setStyle(ButtonStyle.Primary)))
 
 		// 6. Отправка и очистка команды
 		return {

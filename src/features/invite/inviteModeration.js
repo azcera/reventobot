@@ -88,17 +88,7 @@ async function handleModerationButton(interaction) {
 			if (targetUser) {
 				const container = new ContainerBuilder()
 					.setAccentColor(0x2ecc71)
-					.addTextDisplayComponents(
-						new TextDisplayBuilder().setContent(
-							dashboard.text('dm.acceptTitle', { server: interaction.guild.name })
-						)
-					)
-					.addSeparatorComponents(new SeparatorBuilder())
-					.addTextDisplayComponents(
-						new TextDisplayBuilder().setContent(
-							dashboard.text('dm.acceptDate', { time: Math.floor(Date.now() / 1000) })
-						)
-					)
+					.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('dm.document.accepted', { server: interaction.guild.name, time: Math.floor(Date.now() / 1000) })))
 
 				await targetUser
 					.send({

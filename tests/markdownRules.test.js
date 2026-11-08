@@ -63,7 +63,7 @@ test('new rules reject missing sections, excess components, text overflow and st
 	assert.equal(store.snapshot().templates.some(field => field.key === 'rules.heading.5'), false)
 })
 
-test('templates use one source textarea and retain unsaved source when switching groups', () => {
+test('templates use separate documents without service headings and retain drafts when switching groups', () => {
 	class Element {
 		constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.events = {}; this.classList = { add() {} }; this.style = {}; this.clientWidth = 600; this.clientHeight = 180; this.offsetHeight = 180; this.scrollHeight = 1200 }
 		append(...children) { this.children.push(...children) }
@@ -72,7 +72,7 @@ test('templates use one source textarea and retain unsaved source when switching
 		setAttribute() {}
 	}
 	const elements = { templateGroup: { value: 'Правила' }, templateFields: new Element('div'), templatePreview: new Element('div') }
-	const templates = Object.entries(require('../src/dashboard/templates.json')).map(([key, field]) => ({ key, ...field, value: field.default }))
+	const templates = require('../src/dashboard/store').store.snapshot().templates
 	const templateDocument = require('../public/template-document')
 	const observers = []
 	class ResizeObserver {
@@ -88,7 +88,8 @@ test('templates use one source textarea and retain unsaved source when switching
 	for (const group of new Set(templates.map(field => field.group))) {
 		elements.templateGroup.value = group
 		ui.renderTemplates()
-		assert.equal(descendants(elements.templateFields).filter(element => element.tagName === 'TEXTAREA').length, 1, group)
+		assert.equal(descendants(elements.templateFields).filter(element => element.tagName === 'TEXTAREA').length, ui.templateEditorFields().filter(field => field.type === 'text').length, group)
+		for (const input of descendants(elements.templateFields).filter(element => element.tagName === 'TEXTAREA')) assert.doesNotMatch(input.value, /^###### /m)
 	}
 	elements.templateGroup.value = 'Правила'; ui.renderTemplates()
 	let input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
@@ -112,7 +113,7 @@ test('templates use one source textarea and retain unsaved source when switching
 	elements.templateGroup.value = 'Заявка'; ui.renderTemplates()
 	input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
 	input.value = 'Незавершённый черновик'; input.events.input()
-	assert.throws(() => ui.readTemplateDocument(), /заголовк/)
+	assert.equal(ui.readTemplateDocument()['application.document.pending'], 'Незавершённый черновик')
 	ui.renderTemplates()
 	assert.equal(descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA').value, 'Незавершённый черновик')
 })

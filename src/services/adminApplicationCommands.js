@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, 
 
 const MOVED_BUTTON_IDS = new Set(['capt', 'group', 'move-all'])
 const definitions = [
-	['capt', 'Создать регистрацию на капт', interaction => require('../features/capture/captureInteractions').showCaptModal(interaction)],
+	['capt', 'Создать обычную регистрацию на мероприятие', interaction => require('../features/capture/captureInteractions').showCaptModal(interaction)],
 	['group', 'Создать группу: время, цель и код', interaction => require('../features/capture/groupInteractions').showGroupModal(interaction)],
 	['move-all', 'Переместить всех участников в один голосовой канал', interaction => require('../features/moveAll/moveAllInteractions').showMoveAllSelect(interaction)]
 ]

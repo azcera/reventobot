@@ -254,7 +254,7 @@ test('more than 50 participants use pages in the same message', () => {
 	)
 })
 
-test('both orders rank the whole queue and keep role ties in join order', t => {
+test('both orders keep confirmed and waiting lists separate and preserve role ties', t => {
 	const previous = process.env.PRIORITY_ROLES
 	process.env.PRIORITY_ROLES = 'strong,regular'
 	t.after(() => {
@@ -272,17 +272,19 @@ test('both orders rank the whole queue and keep role ties in join order', t => {
 	)
 	const priority = build('priority')
 	const text = JSON.stringify(priority.components[0].toJSON())
-	assert.match(text, /1\. <@strong1> — запись №2/)
-	assert.match(text, /2\. <@strong2> — запись №3/)
-	assert.match(text, /3\. <@early> — запись №1 ✅/)
+	assert.match(text, /1\. <@strong1>/)
+	assert.match(text, /2\. <@strong2>/)
+	assert.match(text, /Подтверждённые \(1\/1\)/)
+	assert.match(text, /Ожидание \(2\)/)
+	assert.match(text, /1\. <@early>/)
 	assert.match(text, /Сортировать по времени/)
 	assert.deepEqual(priority.components[2].toJSON().components[0].options.map(o => o.value),
 		['strong1', 'strong2', 'early'])
 	const time = build('time')
 	const timeText = JSON.stringify(time.components[0].toJSON())
-	assert.match(timeText, /1\. <@early> — приоритет №3 ✅/)
-	assert.match(timeText, /2\. <@strong1> — приоритет №1/)
-	assert.match(timeText, /3\. <@strong2> — приоритет №2/)
+	assert.match(timeText, /1\. <@early>/)
+	assert.match(timeText, /1\. <@strong1>/)
+	assert.match(timeText, /2\. <@strong2>/)
 	assert.match(timeText, /Сортировать по приоритету/)
 	assert.deepEqual(time.components[2].toJSON().components[0].options.map(o => o.value),
 		['early', 'strong1', 'strong2'])
@@ -305,11 +307,11 @@ test('sort mode persists through joins, approvals, time edits and reloads', asyn
 	const before = structuredClone(row)
 	await manager.handleApproval(interaction)
 	assert.deepEqual(row, { ...before, sort_mode: 'time' })
-	assert.match(JSON.stringify(payload.components[0].toJSON()), /приоритет №1 ✅/)
+	assert.match(JSON.stringify(payload.components[0].toJSON()), /Подтверждённые \(1\/20\)/)
 	interaction.customId = 'capt_join'
 	await manager.handleButton(interaction)
 	assert.equal(row.sort_mode, 'time')
-	assert.match(JSON.stringify(payload.components[0].toJSON()), /<@new> — приоритет №3/)
+	assert.match(JSON.stringify(payload.components[0].toJSON()), /2\. <@new>/)
 	interaction.customId = payload.components[2].toJSON().components[0].custom_id
 	interaction.isStringSelectMenu = () => true
 	interaction.values = [ids[0], ids[1]]
@@ -364,4 +366,48 @@ test('approval cannot exceed the capture limit across menus', async () => {
 	})
 	assert.match(reply.content, /не более 20/)
 	assert.deepEqual(row, before)
+})
+
+
+test('manual registration starts in waiting and only admin-approved users enter the limited confirmed list', () => {
+	const container = manager.buildCaptureMessage('now', [ids[0], ids[1]], [ids[2]], [], 'тренировка', 2, guild).components[0].toJSON()
+	const contents = container.components.filter(component => component.type === 10).map(component => component.content)
+	assert.equal(contents.find(text => text.startsWith('### ✅')), '### ✅ Подтверждённые (0/2)\nПусто')
+	assert.equal(contents.find(text => text.startsWith('### ⏳')), `### ⏳ Ожидание (3)\n1. <@${ids[0]}>\n2. <@${ids[1]}>\n3. <@${ids[2]}>`)
+	const approved = manager.buildCaptureMessage('now', [ids[1]], [ids[0], ids[2]], [], 'тренировка', 2, guild, [], [], [ids[1]]).components[0].toJSON()
+	const confirmed = approved.components.find(component => component.type === 10 && component.content.startsWith('### ✅')).content
+	const waiting = approved.components.find(component => component.type === 10 && component.content.startsWith('### ⏳')).content
+	assert.equal(confirmed, `### ✅ Подтверждённые (1/2)\n1. <@${ids[1]}>`)
+	assert.doesNotMatch(waiting, new RegExp(`<@${ids[1]}>`))
+})
+
+test('command form forwards the admin target and limit to manual registration and rejects invalid limits', async t => {
+	t.mock.method(global, 'setTimeout', () => 0)
+	const interactions = require('../src/features/capture/captureInteractions')
+	const currentManager = require('../src/features/capture/captureManager')
+	const calls = [], replies = []
+	t.mock.method(currentManager, 'sendCollection', async (...args) => calls.push(args))
+	let count = '2', target = 'Тренировка'
+	const interaction = {
+		fields: { getTextInputValue: key => ({ capt_time: '18:00', capt_target: target, capt_count: count })[key] },
+		reply: async payload => replies.push(payload)
+	}
+	let modal
+	await interactions.showCaptModal({ showModal: async value => { modal = value.toJSON() } })
+	assert.equal(modal.components[1].component.required, true)
+	assert.equal(modal.components[2].component.custom_id, 'capt_count')
+	await interactions.submitCaptModal(interaction)
+	assert.equal(calls.length, 1)
+	assert.equal(calls[0][0], interaction)
+	assert.equal(calls[0][2], 'Тренировка')
+	assert.equal(calls[0][3], 2)
+	assert.match(calls[0][1], /^<t:\d+:[tF]>$/)
+	for (count of ['0', '-1', '1.5', '2abc', '9007199254740992']) {
+		await interactions.submitCaptModal(interaction)
+		assert.match(replies.at(-1).content, /целым положительным/)
+	}
+	count = '2'; target = '  '
+	await interactions.submitCaptModal(interaction)
+	assert.match(replies.at(-1).content, /Укажите цель/)
+	assert.equal(calls.length, 1)
 })

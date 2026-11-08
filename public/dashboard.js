@@ -197,12 +197,12 @@ function showSyncResult(success) {
 	if (!failed.length && logErrors.length) return notice(success + ' ' + logErrors.map(result => result.logError).join(' '), true)
 	notice(failed.length ? 'Шаблон сохранён, но обновление в Discord не завершено: ' + failed.map(result => (permanentGroups[result.kind] || 'Навигация') + ': ' + result.error).join(' ') + ' Повторите обновление после устранения причины.' : success, failed.length > 0)
 }
-const examples = { user: '123456789012345678', name: 'Tony | 132961', age: '18', about: 'Хочу развиваться вместе с семьёй', history: 'Revento', admin: '123456789012345678', server: 'REVENTO', channel: '123456789012345678', time: '18:00 МСК', target: 'капт', count: '3', limit: '20', players: '1. @Tony\n2. @Alex\n3. @Sam', reason: 'Ошибка в анкете', part: '2' }
+const examples = { confirmedCount: '1', confirmedPlayers: '1. @Tony', waitingCount: '2', waitingPlayers: '1. @Alex\n2. @Sam', leftCount: '0', leftPlayers: 'Пусто', page: '1', pages: '1', map: 'Лес', zone: 'A1', status: 'active', mode: 'по роли и времени записи', registrationStatus: 'Время и состав обновляются автоматически.', freshness: '', user: '123456789012345678', name: 'Tony | 132961', age: '18', about: 'Хочу развиваться вместе с семьёй', history: 'Revento', admin: '123456789012345678', server: 'REVENTO', channel: '123456789012345678', time: '18:00 МСК', target: 'капт', count: '3', limit: '20', players: '1. @Tony\n2. @Alex\n3. @Sam', reason: 'Ошибка в анкете', part: '2' }
 function preview(root, fields, values, variables = false) {
 	root.replaceChildren()
 	for (const field of fields) {
 		let value = values[field.key ?? field.path] ?? field.value
-		if (variables) value = value.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name) => examples[name] || match)
+		if (variables) value = value.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name) => examples[name] ?? match)
 		if (field.type === 'color') { root.style.borderLeftColor = value || 'transparent'; continue }
 		if (field.type === 'url') {
 			if (/attachment:\/\//.test(value)) root.append(node('p', '▧ ' + value.slice(13), 'muted'))
@@ -253,7 +253,7 @@ function fieldsForm(root, fields, values, onInput) {
 		label.dataset.key = key
 		if (field.variables?.length) label.append(node('span', 'Сохраняй переменные: ' + field.variables.map(name => '{' + name + '}').join(', '), 'hint'))
 		root.append(label)
-		if (input.tagName === 'TEXTAREA' && typeof mountMarkdownEditor === 'function') mountMarkdownEditor(input, { components: field.components !== false, render: source => renderComponentMarkdown(source.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name) => examples[name] || match), field.components !== false) })
+		if (input.tagName === 'TEXTAREA' && typeof mountMarkdownEditor === 'function') mountMarkdownEditor(input, { components: field.components !== false, render: source => renderComponentMarkdown(source.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name) => examples[name] ?? match), field.components !== false) })
 	}
 }
 function groupFields() { return config.templates.filter(field => field.group === $('templateGroup').value) }
@@ -264,7 +264,10 @@ function groupDraft() {
 }
 function templateEditorFields(group = $('templateGroup').value) {
 	const fields = config.templates.filter(field => field.group === group)
-	if (group !== 'Правила') return fields
+	if (group !== 'Правила') {
+		const order = group === 'Приглашение' ? ['invite.document', 'invite.3', 'invite.4'] : group === 'Регистрация на капт' ? ['capture.title', 'capture.time', 'capture.info', 'capture.sort', 'capture.confirmed', 'capture.waiting', 'capture.2', 'capture.3', 'capture.sortTime', 'capture.sortPriority'] : []
+		return fields.sort((a, b) => order.length ? order.indexOf(a.key) - order.indexOf(b.key) : Number(b.key.includes('.document')) - Number(a.key.includes('.document')))
+	}
 	const document = fields.find(field => field.key === 'rules.document')
 	return [document || { key: 'rules.document', type: 'text', label: 'Правила целиком', value: fields.filter(field => /^rules\.(heading|rule)\./.test(field.key)).map(field => field.value).join('\n\n---\n\n'), variables: [] }]
 }
@@ -272,57 +275,52 @@ function isTemplateDirty(group) {
 	const values = templateDrafts.get(group)
 	if (!values) return false
 	const fields = templateEditorFields(group)
-	if (values._source !== undefined && values._source !== templateDocument.stringify(fields, Object.fromEntries(fields.map(field => [field.key, field.value])))) return true
 	return fields.some(field => values[field.key] !== undefined && values[field.key] !== field.value)
 }
-function readTemplateDocument() {
-	const fields = templateEditorFields(), values = groupDraft()
-	const parsed = templateDocument.parse(values._source ?? templateDocument.stringify(fields, values), fields)
-	Object.assign(values, parsed)
-	return values
-}
+function readTemplateDocument() { return groupDraft() }
 function renderTemplates() {
-	const fields = templateEditorFields(), values = groupDraft()
-	const root = $('templateFields')
+	const fields = templateEditorFields(), values = groupDraft(), root = $('templateFields')
 	templateResizeObserver?.disconnect()
 	root.replaceChildren()
-	const label = node('label', 'Шаблон целиком (Markdown)')
-	const input = node('textarea')
-	input.id = 'templateSource'
-	input.value = values._source ?? templateDocument.stringify(fields, values)
-	label.htmlFor = input.id
-	label.append(input); root.append(label)
-	const status = node('p', '', 'hint')
-	status.setAttribute('role', 'status')
-	root.append(status)
-	const resize = () => {
-		if (!input.clientWidth) return
-		input.style.height = 'auto'
-		input.style.height = (input.scrollHeight + input.offsetHeight - input.clientHeight) + 'px'
+	const inputs = []
+	for (const field of fields) {
+		const label = node('label', field.label || 'Текст сообщения')
+		const input = node(field.type === 'text' ? 'textarea' : 'input')
+		input.id = inputs.length ? 'templateSource-' + inputs.length : 'templateSource'
+		values[field.key] ??= field.value
+		input.value = values[field.key]
+		input.maxLength = field.maxLength || 16000
+		label.htmlFor = input.id; label.append(input); root.append(label)
+		const resize = () => { if (input.clientWidth) { input.style.height = 'auto'; input.style.height = (input.scrollHeight + input.offsetHeight - input.clientHeight) + 'px' } }
+		input.addEventListener('input', () => { values[field.key] = input.value; resize() })
+		if (field.type === 'text' && typeof mountMarkdownEditor === 'function') mountMarkdownEditor(input, { tabs: false, components: field.components !== false })
+		if (field.variables?.length) root.append(node('p', 'Переменные: ' + field.variables.map(name => '{' + name + '}').join(', '), 'hint'))
+		inputs.push({ input, resize })
 	}
-	input.addEventListener('input', () => {
-		resize()
-		values._source = input.value
-		try { readTemplateDocument(); status.textContent = '' }
-		catch (error) { status.textContent = error.message }
-	})
-	if (typeof mountMarkdownEditor === 'function') mountMarkdownEditor(input, { tabs: false })
-	const variables = [...new Set(fields.flatMap(field => field.variables || []))]
-	if (variables.length) root.append(node('p', 'Переменные: ' + variables.map(name => '{' + name + '}').join(', '), 'hint'))
 	const update = () => {
-		readTemplateDocument()
 		if (['Заявка', 'Личные сообщения заявок'].includes($('templateGroup').value)) return previewApplication($('templatePreview'), values)
-		preview($('templatePreview'), fields, values, true)
+		previewTemplate($('templatePreview'), fields, values)
 	}
 	if ($('templateForm')) setupPreviewTabs($('templateForm'), update)
-	let width = 0
-	templateResizeObserver = new ResizeObserver(() => {
-		if (input.clientWidth === width) return
-		width = input.clientWidth
-		resize()
-	})
-	templateResizeObserver.observe(input)
-	resize()
+	templateResizeObserver = new ResizeObserver(() => inputs.forEach(({ resize }) => resize()))
+	for (const { input, resize } of inputs) { templateResizeObserver.observe(input); resize() }
+}
+function previewTemplate(root, fields, values) {
+	const group = $('templateGroup').value
+	if (group === 'Приглашение') {
+		preview(root, fields.filter(field => field.key === 'invite.document'), values, true)
+		const section = node('div', null, 'markdown-section discord-text')
+		section.append(node('div'), node('span', values['invite.4'], 'preview-button'))
+		section.children[0].innerHTML = discordMarkdownToHtml(values['invite.3'])
+		root.append(node('hr', null, 'markdown-separator spacing-large'), section)
+		return
+	}
+	if (group === 'Регистрация на капт') {
+		const text = key => values['capture.' + key] ?? fields.find(field => field.key === 'capture.' + key)?.value ?? ''
+		fields = [{ type: 'text', value: [text('title') + '\n\n' + text('time') + '\n\n' + text('info'), text('sort') + '\n\n' + text('confirmed'), text('waiting')].join('\n\n---\n\n') }, ...['2', '3', 'sortTime'].map(key => fields.find(field => field.key === 'capture.' + key)).filter(Boolean)]
+	}
+	if (group === 'Обычная регистрация') fields = ['document', 'sortTime', 'join', 'leave', 'editTime'].map(key => fields.find(field => field.key === 'registration.' + key)).filter(Boolean)
+	preview(root, fields, values, true)
 }
 function previewApplication(root, values) {
 	root.replaceChildren()
@@ -348,18 +346,12 @@ function previewApplication(root, values) {
 	}
 	const separator = () => container.append(node('div', null, 'discord-separator'))
 	const state = applicationPreviewState
-	if (dm) {
-		const keys = { accepted: ['dm.acceptTitle', 'dm.acceptDate'], rejected: ['dm.rejectTitle', 'dm.rejectReason'], interview: ['dm.interviewTitle', 'dm.interviewDate'] }[state]
-		display(text(keys[0])); separator(); display(text(keys[1]))
-	} else {
-		display(state === 'pending' ? text('application.title') + text('application.help') : text('application.' + state))
-		separator(); display(text('application.details')); separator(); display(text('application.' + state + 'Status'))
-		if (state === 'pending') {
-			separator()
-			const buttons = node('div', null, 'application-preview-buttons')
-			for (const key of ['application.1', 'application.2', 'application.3']) buttons.append(node('span', text(key), 'preview-button'))
-			container.append(buttons)
-		}
+	display(text((dm ? 'dm' : 'application') + '.document.' + state))
+	if (!dm && state === 'pending') {
+		separator()
+		const buttons = node('div', null, 'application-preview-buttons')
+		for (const key of ['application.1', 'application.2', 'application.3']) buttons.append(node('span', text(key), 'preview-button'))
+		container.append(buttons)
 	}
 	root.append(container)
 }

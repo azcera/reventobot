@@ -35,12 +35,12 @@ async function showCaptModal(interaction) {
 		.setTextInputComponent(
 			new TextInputBuilder()
 				.setCustomId('capt_target')
-				.setPlaceholder('По умолчанию: КАПТ')
+				.setPlaceholder('Например: тренировка или мероприятие')
 				.setStyle(TextInputStyle.Short)
-				.setRequired(false)
+				.setRequired(true)
 		)
 	const countLabel = new LabelBuilder()
-		.setLabel('Количество участников в основе')
+		.setLabel('Лимит подтверждённых участников')
 		.setTextInputComponent(
 			new TextInputBuilder()
 				.setCustomId('capt_count')
@@ -70,13 +70,14 @@ async function submitCaptModal(interaction) {
 
 	const discordTimestamp = getDiscordTimestamp(parsedDate)
 	let target =
-		interaction.fields.getTextInputValue('capt_target').trim() || 'капт'
+		interaction.fields.getTextInputValue('capt_target').trim()
+	if (!target) return await sendEphemeralWithAutoDelete(interaction, { content: '❌ Укажите цель регистрации.' })
 	let maxMain = 20
 
 	const countInput = interaction.fields.getTextInputValue('capt_count').trim()
 	if (countInput) {
-		const parsedCount = parseInt(countInput, 10)
-		if (!isNaN(parsedCount) && parsedCount > 0) {
+		const parsedCount = Number(countInput)
+		if (/^\d+$/.test(countInput) && Number.isSafeInteger(parsedCount) && parsedCount > 0) {
 			maxMain = parsedCount
 		} else {
 			return await sendEphemeralWithAutoDelete(interaction, {
@@ -203,7 +204,7 @@ async function handleInlineEditTimeButton(interaction) {
 		!interaction.member.permissions.has(PermissionFlagsBits.Administrator)
 	) {
 		return await sendEphemeralWithAutoDelete(interaction, {
-			content: '❌ У вас нет необходимой роли для изменения времени капта.'
+			content: '❌ У вас нет необходимой роли для изменения времени регистрации.'
 		})
 	}
 

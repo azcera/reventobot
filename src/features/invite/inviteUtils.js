@@ -83,46 +83,12 @@ async function buildContainer(
 	isInterviewDisabled = false
 ) {
 	const timestamp = Math.floor(Date.now() / 1000)
-	let accentColor = null // Изначально цвета нет
-	let title = dashboard.text('application.title')
-	let statusText = dashboard.text('application.pendingStatus', { time: timestamp })
-
-	// Динамическая сборка содержимого на основе действия модерации
-	if (action === 'отправления') {
-		title +=
-			dashboard.text('application.help')
-		if (Array.isArray(dashboard.roleIds('ADMIN_ROLES')) && dashboard.roleIds('ADMIN_ROLES').length > 0) {
-			statusText += '\n' + dashboard.roleIds('ADMIN_ROLES').map(role => `<@&${role}>`).join(' ')
-		}
-	} else if (action === 'принятия') {
-		accentColor = colors.green
-		title = dashboard.text('application.accepted')
-		statusText = dashboard.text('application.acceptedStatus', { admin: adminId, time: timestamp })
-	} else if (action === 'отклонения') {
-		accentColor = colors.red
-		title = dashboard.text('application.rejected')
-		statusText = dashboard.text('application.rejectedStatus', { admin: adminId, reason: extraInfo || 'Не указана', time: timestamp })
-	} else if (action === 'обзвона') {
-		accentColor = colors.orange
-		title = dashboard.text('application.interview')
-		statusText = dashboard.text('application.interviewStatus', { admin: adminId, channel: extraInfo, time: timestamp })
-	}
-
-	const container = new ContainerBuilder()
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(title))
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent(
-				dashboard.text('application.details', { user: userId, name: fullName, age, about: aboutAndExpectations, history: previousExperience })
-			)
-		)
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(statusText))
-
-	// Накладываем цветную полоску ТОЛЬКО если это админское действие (принятие/отказ/обзвон)
-	if (accentColor) {
-		container.setAccentColor(accentColor)
-	}
+	const state = { 'отправления': 'pending', 'принятия': 'accepted', 'отклонения': 'rejected', 'обзвона': 'interview' }[action] || 'pending'
+	let content = dashboard.text('application.document.' + state, { user: userId, name: fullName, age, about: aboutAndExpectations, history: previousExperience, admin: adminId, time: timestamp, reason: extraInfo || 'Не указана', channel: extraInfo })
+	if (state === 'pending' && dashboard.roleIds('ADMIN_ROLES').length) content += '\n' + dashboard.roleIds('ADMIN_ROLES').map(role => `<@&${role}>`).join(' ')
+	const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+	const accentColor = { accepted: colors.green, rejected: colors.red, interview: colors.orange }[state]
+	if (accentColor) container.setAccentColor(accentColor)
 
 	if (action === 'отправления') {
 		const actionRow = new ActionRowBuilder().addComponents(

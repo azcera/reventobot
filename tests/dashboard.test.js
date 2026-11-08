@@ -132,9 +132,9 @@ test('template and settings changes persist, affect rendering immediately and re
 	const response = await f.request('/api/templates', { body: { revision: 0, values: { 'capture.title': '## Набор на {target}' } } })
 	assert.equal(response.status, 200)
 	assert.equal(store.text('capture.title', { target: 'мероприятие' }), '## Набор на мероприятие')
-	const setting = await f.request('/api/settings', { body: { revision: 1, values: { ADMIN_PANEL_CHANNEL_ID: f.channelId, TELEGRAM_BROADCAST_ENABLED: false } } })
+	const setting = await f.request('/api/settings', { body: { revision: 1, values: { PLUS_CHANNEL_ID: f.channelId, TELEGRAM_BROADCAST_ENABLED: false } } })
 	assert.equal(setting.status, 200)
-	assert.equal(store.getSetting('ADMIN_PANEL_CHANNEL_ID'), f.channelId)
+	assert.equal(store.getSetting('PLUS_CHANNEL_ID'), f.channelId)
 	assert.equal(store.getSetting('TELEGRAM_BROADCAST_ENABLED'), false)
 	assert.equal((await f.request('/api/templates', { body: { revision: 0, values: { 'capture.title': '{target}' } } })).status, 409)
 	const restarted = createStore(); await restarted.init(f.pool)
@@ -149,12 +149,12 @@ test('template and settings changes persist, affect rendering immediately and re
 test('template variables, color, lengths, unknown settings and wrong channel types are validated', async t => {
 	const f = await createFixture(); t.after(() => f.close())
 	for (const values of [{ 'capture.title': 'Без цели' }, { 'capture.title': '{evil}' }, { 'missing.key': 'text' }, { 'rules.1': 'http://example.com' }, { 'rules.1': 'https://' }, { 'capture.color': '#00000' }, JSON.parse('{"__proto__":null}')]) assert.throws(() => validateTemplates(values))
-	for (const [key, field] of Object.entries(catalog)) assert.doesNotThrow(() => validateTemplates({ [key]: field.default }), key)
+	for (const [key, field] of Object.entries(catalog).filter(([key]) => !/^(archives|unanswered)\./.test(key))) assert.doesNotThrow(() => validateTemplates({ [key]: field.default }), key)
 	await assert.rejects(() => validateSettings({ TOKEN: 'secret' }, f.guild), /Неизвестная/)
 	await assert.rejects(() => validateSettings(JSON.parse('{"__proto__":""}'), f.guild), /Неизвестная/)
 	await assert.rejects(() => validateSettings({ INVITE_CATEGORY_ID: f.channelId }, f.guild), /Недопустимый/)
 	await assert.rejects(() => validateSettings({ TELEGRAM_BROADCAST_ENABLED: 'false' }, f.guild), /переключатель/)
-	await assert.doesNotReject(() => validateSettings({ ADMIN_PANEL_CHANNEL_ID: f.channelId }, f.guild))
+	await assert.doesNotReject(() => validateSettings({ PLUS_CHANNEL_ID: f.channelId }, f.guild))
 })
 
 test('store rolls back failures and render substitution never interprets user-provided variables recursively', async () => {

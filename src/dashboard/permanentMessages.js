@@ -15,6 +15,12 @@ const definitions = {
 }
 const publications = new Set()
 
+// Attachments stay on the original message; Markdown uses their Discord URLs.
+function parsePermanentMessage(message) {
+	return parseContainerMessage({ flags: message.flags, components: message.components,
+		content: message.content, embeds: message.embeds, attachments: new Map() })
+}
+
 async function publish(kind, channelId, revision, client, guild, actor) {
 	if (!Object.hasOwn(definitions, kind)) throw problem(400, 'Неизвестный вид сообщения.')
 	if (revision !== store.revision) throw problem(409, 'Настройки изменились. Обновите данные.')
@@ -75,7 +81,7 @@ function bindingFor(kind, message) {
 	if (!definition) throw problem(400, 'Неизвестный вид сообщения.')
 	if (!definition.command) {
 		try {
-			const parsed = parseContainerMessage(message)
+			const parsed = parsePermanentMessage(message)
 			return { link: message.url, markdown: true, fields: [{ key: `permanent.${kind}.${message.id}.0`, path: 'markdown', group: definition.group, label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, default: markdown.stringify(parsed.items), variables: [] }] }
 		} catch (error) { if (error.status !== 422) throw error }
 	}
@@ -114,7 +120,7 @@ async function updateMessage(kind, binding, client, guild, actor) {
 			}
 			resolveMedia(payload.components)
 		} else if (binding.markdown) {
-			parseContainerMessage(message)
+			parsePermanentMessage(message)
 			payload = buildEditPayload({ items: markdown.parse(store.text(binding.fields[0].key)) })
 			payload.components = payload.components.map(component => component.toJSON())
 		} else {
@@ -141,4 +147,20 @@ async function syncMessages(keys, client, guild, selectedKind, actor) {
 	return results
 }
 
-module.exports = { definitions, bindingFor, fetchMessage, rememberSent, syncMessages, publish }
+async function upgradeLegacyBindings(client, guild) {
+	for (const kind of ['promotion', 'recruit']) {
+		const binding = store.bindings[kind]
+		if (!binding || binding.markdown) continue
+		try {
+			const message = await fetchMessage(client, guild, binding.link)
+			const payload = applyFields(message, Object.fromEntries(binding.fields.map(field => [field.path, store.text(field.key)])), { expandMarkdown: false })
+			const next = bindingFor(kind, { flags: message.flags, components: payload.components, content: message.content, embeds: message.embeds, attachments: message.attachments, url: message.url })
+			if (next.markdown) await store.save('bindings', { [kind]: next }, store.revision, 'bot')
+		} catch (error) {
+			// Keep the existing field editor for unsupported messages or unavailable Discord.
+			if (error.status === 409) break
+		}
+	}
+}
+
+module.exports = { definitions, bindingFor, fetchMessage, rememberSent, syncMessages, publish, upgradeLegacyBindings }

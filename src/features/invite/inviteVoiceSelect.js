@@ -55,17 +55,7 @@ async function handleVoiceSelect(interaction) {
 	if (targetUser) {
 		const container = new ContainerBuilder()
 			.setAccentColor(0xe67e22)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					dashboard.text('dm.interviewTitle', { server: interaction.guild.name })
-				)
-			)
-			.addSeparatorComponents(new SeparatorBuilder())
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					dashboard.text('dm.interviewDate', { channel: voiceChannelId, time: Math.floor(Date.now() / 1000) })
-				)
-			)
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('dm.document.interview', { server: interaction.guild.name, channel: voiceChannelId, time: Math.floor(Date.now() / 1000) })))
 
 		await targetUser
 			.send({

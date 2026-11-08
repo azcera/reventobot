@@ -249,7 +249,7 @@
   },
   "invite.3": {
     "group": "Приглашение",
-    "label": "## 😎 Оставить заявку на вступление",
+    "label": "Текст секции «Оставить заявку на вступление»",
     "default": "## 😎 Оставить заявку на вступление\nДля этого нажмите кнопку \"Подать заявку\" справа и заполните необходимые данные.",
     "type": "text",
     "variables": [],
@@ -257,35 +257,11 @@
   },
   "invite.4": {
     "group": "Приглашение",
-    "label": "Кнопка: 😎 Подать заявку",
+    "label": "Подпись кнопки подачи заявки",
     "default": "😎 Подать заявку",
     "type": "button",
     "variables": [],
     "maxLength": 80
-  },
-  "panel.1": {
-    "group": "Админ-панель",
-    "label": "attachment://panel.png",
-    "default": "attachment://panel.png",
-    "type": "url",
-    "variables": [],
-    "maxLength": 512
-  },
-  "panel.2": {
-    "group": "Админ-панель",
-    "label": "## 📌 Админ-панель",
-    "default": "## 📌 Админ-панель\nДля взаимодействия с ботом используйте кнопки ниже.",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
-  },
-  "panel.3": {
-    "group": "Админ-панель",
-    "label": "*Время необходимо указывать по МСК. Формат `ДД.ММ.ГГГГ ЧЧ:ММ` нужен только если ",
-    "default": "*Время необходимо указывать по МСК. Формат `ДД.ММ.ГГГГ ЧЧ:ММ` нужен только если дата не сегодняшняя.*",
-    "type": "text",
-    "variables": [],
-    "maxLength": 4000
   },
   "navigation.1": {
     "group": "Навигация",
@@ -592,7 +568,15 @@
     "label": "Очередь желающих и подтверждённый состав",
     "default": "### 👥 Желающие: {count} · Подтверждено: {approved}/{limit}\n-# Сортировка {mode} · Страница {page}/{pages} · ✅ — вписан в состав\n{players}",
     "type": "text",
-    "variables": ["count", "approved", "limit", "mode", "page", "pages", "players"],
+    "variables": [
+      "count",
+      "approved",
+      "limit",
+      "mode",
+      "page",
+      "pages",
+      "players"
+    ],
     "maxLength": 500
   },
   "capture.main": {
@@ -807,5 +791,145 @@
       "time"
     ],
     "maxLength": 500
+  },
+  "capture.info": {
+    "group": "Регистрация на капт",
+    "label": "Описание и состояние регистрации",
+    "type": "text",
+    "variables": [
+      "map",
+      "zone",
+      "status",
+      "registrationStatus",
+      "freshness"
+    ],
+    "maxLength": 4000,
+    "default": "Карта: {map} ({zone}) · Статус: {status}\n🎮 — в игре без подтверждения в Discord · ✅ — в игре и нажал «Принять» · ⏳ — нажал «Принять», ожидает записи в игре. {registrationStatus}{freshness}"
+  },
+  "capture.confirmed": {
+    "group": "Регистрация на капт",
+    "label": "В игре",
+    "type": "text",
+    "variables": [
+      "count",
+      "players"
+    ],
+    "maxLength": 4000,
+    "default": "### В игре: {count}\n{players}"
+  },
+  "capture.waiting": {
+    "group": "Регистрация на капт",
+    "label": "Ожидание",
+    "type": "text",
+    "variables": [
+      "count",
+      "players"
+    ],
+    "maxLength": 4000,
+    "default": "### Ожидание: {count}\n{players}"
+  },
+  "capture.sort": {
+    "group": "Регистрация на капт",
+    "label": "Порядок участников",
+    "type": "text",
+    "variables": [
+      "mode"
+    ],
+    "maxLength": 4000,
+    "default": "Сортировка {mode}"
+  },
+  "capture.sortTime": {
+    "group": "Регистрация на капт",
+    "label": "Кнопка: Сортировать по времени",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80,
+    "default": "Сортировать по времени"
+  },
+  "capture.sortPriority": {
+    "group": "Регистрация на капт",
+    "label": "Кнопка: Сортировать по приоритету",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80,
+    "default": "Сортировать по приоритету"
+  },
+  "registration.document": {
+    "group": "Обычная регистрация",
+    "label": "Текст регистрации",
+    "default": "## 📢 Рега на {target}!\n## Время проведения: {time}\n-# Нажмите «Записаться», чтобы попасть в список ожидания. Администратор подтверждает состав.\n-# Сортировка {mode} · Страница {page}/{pages}\n\n---\n\n### ✅ Подтверждённые ({confirmedCount}/{limit})\n{confirmedPlayers}\n\n---\n\n### ⏳ Ожидание ({waitingCount})\n{waitingPlayers}\n\n---\n\n### 🚪 Покинули набор ({leftCount})\n{leftPlayers}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "target",
+      "time",
+      "mode",
+      "page",
+      "pages",
+      "confirmedCount",
+      "limit",
+      "confirmedPlayers",
+      "waitingCount",
+      "waitingPlayers",
+      "leftCount",
+      "leftPlayers"
+    ],
+    "maxLength": 4000
+  },
+  "registration.join": {
+    "group": "Обычная регистрация",
+    "label": "Кнопка записи",
+    "default": "✅ Записаться",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "registration.leave": {
+    "group": "Обычная регистрация",
+    "label": "Кнопка выхода",
+    "default": "❌ Выйти",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "registration.editTime": {
+    "group": "Обычная регистрация",
+    "label": "Кнопка изменения времени",
+    "default": "✏️ Время",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "registration.previous": {
+    "group": "Обычная регистрация",
+    "label": "Предыдущая страница",
+    "default": "◀",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "registration.next": {
+    "group": "Обычная регистрация",
+    "label": "Следующая страница",
+    "default": "▶",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "registration.sortTime": {
+    "group": "Обычная регистрация",
+    "label": "Сортировка по времени",
+    "default": "Сортировать по времени",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
+  },
+  "registration.sortPriority": {
+    "group": "Обычная регистрация",
+    "label": "Сортировка по приоритету",
+    "default": "Сортировать по приоритету",
+    "type": "button",
+    "variables": [],
+    "maxLength": 80
   }
 }

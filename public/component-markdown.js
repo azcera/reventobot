@@ -22,9 +22,9 @@
 			const line = lines[i], trimmed = line.trim()
 			if (/^```/.test(trimmed)) { fence = !fence; buffer.push(line); continue }
 			if (fence) { buffer.push(line); continue }
-			if (/^(\*\*\*|___|---)$/.test(trimmed)) { flush(); items.push({ type: 'separator', spacing: 'small', divider: true }); continue }
+			if (/^(\*\*\*|___|---)$/.test(trimmed)) { flush(); items.push({ type: 'separator', spacing: trimmed === '***' ? 'large' : 'small', divider: true }); continue }
 			const image = /^<img\s+([\s\S]*?)\s*\/?\s*>$/.exec(trimmed)
-			if (image) { flush(); const a = attrs(image[1], ['src']); items.push({ type: 'image', value: url(a.src) }); continue }
+			if (image) { flush(); const a = attrs(image[1], ['src']); items.push({ type: 'image', value: /^attachment:\/\/[a-zA-Z0-9_.-]+$/.test(a.src) ? a.src : url(a.src) }); continue }
 			const separator = /^<separator\s+(.+?)\s*\/>$/.exec(trimmed)
 			if (separator) { flush(); const a = attrs(separator[1], ['spacing', 'divider']); if (!['small', 'large'].includes(a.spacing) || !['true', 'false'].includes(a.divider)) throw new Error('Проверьте параметры разделителя.'); items.push({ type: 'separator', spacing: a.spacing, divider: a.divider === 'true' }); continue }
 			if (/^<section\b/.test(trimmed)) {
@@ -49,7 +49,7 @@
 			if (item.type === 'section') return '<section buttonLabel="' + attribute(item.btnLabel) + '" buttonLink="' + attribute(item.btnLink) + '">' + item.value + '</section>'
 			if (item.type === 'separator') {
 				const spacing = item.spacing || (item.large ? 'large' : 'small'), divider = item.divider ?? !item.large
-				return spacing === 'small' && divider ? '---' : '<separator spacing="' + spacing + '" divider="' + divider + '" />'
+				return divider ? (spacing === 'large' ? '***' : '---') : '<separator spacing="' + spacing + '" divider="' + divider + '" />'
 			}
 			return item.value
 		}).join('\n\n')

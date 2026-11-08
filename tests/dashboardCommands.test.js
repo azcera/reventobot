@@ -45,14 +45,16 @@ test('application templates interpolate candidate data without changing moderati
 	assert.match(json, /Одобрить/)
 })
 
-test('capture refreshes retain customized headers while participant data and button IDs remain live', async () => {
+test('manual registration refreshes use their own template while participant data and button IDs remain live', async () => {
 	await store.init(memoryPool())
-	await store.save('templates', { 'capture.title': '# Запись на {target}' }, 0, 'admin')
+	await store.save('templates', { 'registration.document': catalog['registration.document'].default.replace('## 📢 Рега на {target}!', '# Запись на {target}'), 'capture.title': '# Только API капт {target}' }, 0, 'admin')
 	const first = buildCaptureMessage('<t:1:F>', ['111'], [], [], 'капт', 20)
 	const second = buildCaptureMessage('<t:1:F>', ['111', '222'], [], [], 'капт', 20)
+	assert.ok(store.snapshot().templates.some(field => field.key === 'registration.document' && field.group === 'Обычная регистрация'))
 	assert.match(components(first.components[0]), /Запись на капт/)
 	assert.match(components(second.components[0]), /Запись на капт/)
 	assert.match(components(second.components[0]), /<@222>/)
+	assert.doesNotMatch(components(second.components[0]), /Только API капт/)
 	assert.match(components(second.components[1]), /capt_join/)
 	assert.match(components(second.components[1]), /capt_leave/)
 })
