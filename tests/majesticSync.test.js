@@ -53,6 +53,51 @@ function bulkFixture(count = 150) {
 	return f
 }
 
+test('membership tracking persists confirmed statics across restarts and nickname changes', async () => {
+	const f = fixture()
+	let report = await f.sync.membershipSnapshot(f.guild)
+	assert.equal(report.bindings[f.member.id], '231542')
+	f.member.nickname = 'No static'
+	f.setFamily([{ id: 999, login: 'Another', rankName: 'Main', rankId: 1 }])
+	const restarted = createMajesticSync(f.options)
+	report = await restarted.membershipSnapshot(f.guild)
+	assert.equal(report.linked.get(f.member.id), '231542')
+	assert.equal(report.bindings[f.member.id], '231542')
+	assert.equal(report.statics.has('231542'), false)
+})
+
+test('membership tracking does not confirm unknown or ambiguous statics', async () => {
+	const f = fixture()
+	f.members.set('duplicate', { ...f.member, id: 'duplicate' })
+	let report = await f.sync.membershipSnapshot(f.guild)
+	assert.deepEqual(report.bindings, {})
+	f.members.delete('duplicate')
+	f.member.nickname = 'Unknown | 999'
+	report = await f.sync.membershipSnapshot(f.guild)
+	assert.equal(report.linked.get(f.member.id), '999')
+	assert.deepEqual(report.bindings, {})
+})
+
+test('membership tracking imports existing validated bindings but resets history on source change', async () => {
+	const f = fixture()
+	await f.sync.autoNicknames(f.guild)
+	await f.sync.wait(f.guild)
+	f.setFamily([{ id: 999, login: 'Another', rankName: 'Main', rankId: 1 }])
+	let report = await f.sync.membershipSnapshot(f.guild)
+	assert.equal(report.bindings[f.member.id], '231542')
+	f.options.env.MAJESTIC_SERVER = 'RU9'
+	report = await f.sync.membershipSnapshot(f.guild)
+	assert.deepEqual(report.bindings, {})
+})
+
+test('empty or incomplete membership snapshots never persist departure decisions', async () => {
+	for (const data of [{ total: 0, items: [] }, { total: 2, items: [{ id: 231542 }] }]) {
+		const f = fixture({ readFamily: async () => data })
+		await assert.rejects(f.sync.membershipSnapshot(f.guild), /пустой или неполный/)
+		assert.equal(f.saved(), undefined)
+	}
+})
+
 test('manual and automatic sync process 150 members sequentially and persist all results', async () => {
 	for (const automatic of [false, true]) {
 		const f = bulkFixture()

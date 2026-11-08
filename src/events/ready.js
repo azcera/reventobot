@@ -3,6 +3,7 @@ const { updateLists } = require('../features/archive/updateLists')
 const { createFamilyWars } = require('../services/familyWars')
 const { createMajesticSync } = require('../services/majesticSync')
 const { createMajesticNicknameScheduler } = require('../services/majesticNicknameScheduler')
+const { createFamilyMembership } = require('../services/familyMembership')
 const { store } = require('../dashboard/store')
 const pool = require('../services/database')
 const { createEventSchedule } = require('../services/eventSchedule')
@@ -20,6 +21,8 @@ module.exports = client => {
 		client.majesticSync ||= createMajesticSync({ pool, store })
 		client.majesticNicknames = createMajesticNicknameScheduler({ client, sync: client.majesticSync, store })
 		client.majesticNicknames.start()
+		client.familyMembership = createFamilyMembership({ client, pool, store, sync: client.majesticSync })
+		client.familyMembership.start()
 		const guild = client.guilds.cache.get(process.env.GUILD_ID)
 		if (guild) {
 			try {

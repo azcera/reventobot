@@ -43,6 +43,11 @@ module.exports = client => {
 			return client.familyWars.handle(interaction)
 		}
 
+		if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('family_cleanup_')) {
+			if (!client.familyMembership) return interaction.reply({ content: 'Проверка семьи ещё не готова.', flags: MessageFlags.Ephemeral })
+			return client.familyMembership.handle(interaction)
+		}
+
 		if (
 			interaction.isButton() &&
 			['capt_join', 'capt_leave'].includes(interaction.customId)

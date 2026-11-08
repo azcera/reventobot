@@ -154,6 +154,7 @@ const shutdown = async () => {
 	await client.stopTelegramBroadcast?.()
 	await client.familyWars?.stop()
 	await client.majesticNicknames?.stop()
+	await client.familyMembership?.stop()
 	await client.eventSchedule?.stop()
 	client.destroy()
 	server.close(() => {

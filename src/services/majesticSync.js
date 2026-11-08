@@ -3,7 +3,7 @@ const { randomUUID } = require('node:crypto')
 const { setTimeout: delay } = require('node:timers/promises')
 const { PermissionFlagsBits } = require('discord.js')
 const { readConfig, fetchMembers } = require('./majesticClient')
-const { buildPreview, rankRoles, tierRoles } = require('../features/majestic/syncPreview')
+const { buildPreview, rankRoles, tierRoles, parseNickname } = require('../features/majestic/syncPreview')
 
 const problem = (status, message) => Object.assign(new Error(message), { status })
 const describe = row => JSON.stringify([row.status, row.static, row.gameRank, row.currentNickname,
@@ -147,6 +147,34 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 	}
 	return {
 		async state(guild) { return view(await entry(guild.id)) },
+		async membershipSnapshot(guild) {
+			const item = await entry(guild.id)
+			if (item.busy) throw problem(409, 'Синхронизация уже выполняется. Повторите позже.')
+			item.busy = true
+			try {
+				const data = await family(guild.id)
+				if (!data.total || data.items.length !== data.total) throw problem(502, 'Получен пустой или неполный состав Majestic.')
+				const members = await discordMembers(guild)
+				const source = `${env.MAJESTIC_SERVER}/${env.MAJESTIC_CHARACTER_ID}`
+				const statics = new Set(data.items.map(character => String(character.id)))
+				const previous = item.state.familyMembership
+				const bindings = { ...(previous?.source === source ? previous.bindings : {}) }
+				// Existing decisions were saved only after confirming the static in the family.
+				if (!previous) for (const [id, decision] of Object.entries(item.state.decisions)) {
+					if (decision.static) bindings[id] = decision.static
+				}
+				const linked = new Map([...members.values()].filter(member => !member.user.bot).map(member =>
+					[member.id, item.state.decisions[member.id]?.static || bindings[member.id] || parseNickname(member.nickname)?.static]))
+				const counts = new Map()
+				for (const staticId of linked.values()) if (staticId) counts.set(staticId, (counts.get(staticId) || 0) + 1)
+				for (const [id, staticId] of linked) {
+					if (statics.has(staticId) && counts.get(staticId) === 1) bindings[id] = staticId
+				}
+				item.state.familyMembership = { source, bindings }
+				await save(guild.id, item)
+				return { members, statics, linked, bindings, source }
+			} finally { item.busy = false }
+		},
 		async autoNicknames(guild) {
 			const item = await entry(guild.id)
 			if (item.busy || !store.getSetting('MAJESTIC_AUTO_NICKNAMES')) return null

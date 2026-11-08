@@ -7,6 +7,7 @@ const {
 } = require('discord.js')
 const { getArchivesLists } = require('./archivesList')
 const { getUnansweredList } = require('./archiveUnansweredList')
+const { isMembershipMessage } = require('../../services/familyMembership')
 require('dotenv').config()
 
 
@@ -51,7 +52,7 @@ async function updateLists(guild) {
 	})
 	const channelMessages = Array.from(
 		channelMessagesCollection.values()
-	).reverse()
+	).filter(message => !isMembershipMessage(message)).reverse()
 
 	if (channelMessages.length > containers.length) {
 		for (let i = containers.length; i < channelMessages.length; i++) {
