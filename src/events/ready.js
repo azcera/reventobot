@@ -5,10 +5,16 @@ const { createMajesticSync } = require('../services/majesticSync')
 const { createMajesticNicknameScheduler } = require('../services/majesticNicknameScheduler')
 const { store } = require('../dashboard/store')
 const pool = require('../services/database')
+const { createEventSchedule } = require('../services/eventSchedule')
 
 module.exports = client => {
 	client.once(Events.ClientReady, async readyClient => {
 		console.log(`✅ Готово! Вход как ${readyClient.user.tag}`)
+		client.eventSchedule = createEventSchedule({ client, pool, store })
+		client.eventSchedule.start().catch(error => {
+			client.eventSchedule = null
+			console.error('[Schedule] Ошибка запуска:', error)
+		})
 		client.familyWars = createFamilyWars({ client, pool, store })
 		client.familyWars.start()
 		client.majesticSync ||= createMajesticSync({ pool, store })

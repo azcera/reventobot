@@ -70,8 +70,7 @@ async function showGroupSelect(interaction) {
  * Показывает модалку (время/цель/код) в зависимости от выбранного значения.
  * @param {StringSelectMenuInteraction} interaction
  */
-async function showGroupModal(interaction) {
-	const selectedTarget = interaction.values[0]
+async function showGroupModal(interaction, selectedTarget = interaction.values[0]) {
 
 	const modal = new ModalBuilder()
 		.setCustomId(`modal_group_${selectedTarget}`)
@@ -103,7 +102,7 @@ async function showGroupModal(interaction) {
 		.setTextInputComponent(
 			new TextInputBuilder()
 				.setCustomId('group_code')
-				.setPlaceholder('По умолчанию: Нет')
+				.setPlaceholder('Можно оставить пустым')
 				.setStyle(TextInputStyle.Short)
 				.setRequired(false)
 		)
@@ -123,9 +122,14 @@ async function showGroupModal(interaction) {
  */
 async function submitGroupModal(interaction) {
 	const selectedValue = interaction.customId.replace('modal_group_', '')
-	let timeInput, target
+	let timeInput, target, scheduledDate
 
-	if (selectedValue !== 'other') {
+	if (selectedValue.startsWith('schedule_')) {
+		const event = await scheduledGroupEvent(interaction, selectedValue.slice('schedule_'.length))
+		if (!event) return
+		scheduledDate = new Date(event.timestamp)
+		target = event.label.toUpperCase()
+	} else if (selectedValue !== 'other') {
 		timeInput = optionsMap[selectedValue].time
 		target = optionsMap[selectedValue].target
 	} else {
@@ -133,9 +137,9 @@ async function submitGroupModal(interaction) {
 		target = interaction.fields.getTextInputValue('group_target')
 	}
 
-	const code = interaction.fields.getTextInputValue('group_code')
+	const code = interaction.fields.getTextInputValue('group_code').trim()
 
-	const parsedDate = parseDateTime(timeInput)
+	const parsedDate = scheduledDate || parseDateTime(timeInput)
 	if (!parsedDate || isNaN(parsedDate.getTime())) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content:
@@ -147,7 +151,7 @@ async function submitGroupModal(interaction) {
 	const mskTimeWith5MinStr = getMskTimeString(parsedDate, -300)
 
 	await sendEphemeralWithAutoDelete(interaction, {
-		content: `✅ Группа создана!\nВремя: ${mskTimeStr}\nЦель: ${target}\nКод: ${code}`
+		content: `✅ Группа создана!\nВремя: ${mskTimeStr}\nЦель: ${target}${code ? `\nКод: ${code}` : ''}`
 	})
 
 	try {
@@ -165,7 +169,7 @@ async function submitGroupModal(interaction) {
 
 		const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : ''
 
-		const msgContent = `# 📢 ${roleMention} Групп на \`${target}\` в \`${mskTimeStr}\`, проверка явки в \`${mskTimeWith5MinStr}\`. 🔑 Код группы: \`${code}\``
+		const msgContent = `# 📢 ${roleMention} Групп на \`${target}\` в \`${mskTimeStr}\`, проверка явки в \`${mskTimeWith5MinStr}\`.${code ? ` 🔑 Код группы: \`${code}\`` : ''}`
 
 		for (let i = 0; i < 3; i++) {
 			await pingChannel.send(msgContent)
@@ -175,4 +179,24 @@ async function submitGroupModal(interaction) {
 	}
 }
 
-module.exports = { showGroupSelect, showGroupModal, submitGroupModal }
+async function scheduledGroupEvent(interaction, selection) {
+	const schedule = interaction.client.eventSchedule
+	if (!schedule?.canCreateGroup(interaction.member)) {
+		await sendEphemeralWithAutoDelete(interaction, { content: '❌ Создавать групп могут только администраторы и роли ADMIN_ROLES.' })
+		return null
+	}
+	const event = schedule.resolveSelection(selection)
+	if (!event) {
+		await sendEphemeralWithAutoDelete(interaction, { content: '❌ Событие уже началось или расписание изменилось/недоступно. Используйте обновлённое сообщение.' })
+		return null
+	}
+	return event
+}
+
+async function showScheduledGroupModal(interaction) {
+	const selection = interaction.customId.slice('schedule_group_'.length)
+	if (!await scheduledGroupEvent(interaction, selection)) return
+	return showGroupModal(interaction, `schedule_${selection}`)
+}
+
+module.exports = { showGroupSelect, showGroupModal, submitGroupModal, showScheduledGroupModal }

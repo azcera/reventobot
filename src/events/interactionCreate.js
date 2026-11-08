@@ -86,6 +86,8 @@ module.exports = client => {
 		// buttons
 
 		if (interaction.isButton()) {
+			if (customId.startsWith('schedule_group_'))
+				return await groupInteractions.showScheduledGroupModal(interaction)
 			if (customId === 'open_invite_modal')
 				return await inviteApplication.showModal(interaction)
 			if (customId.startsWith('invite_'))
