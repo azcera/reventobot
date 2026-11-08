@@ -69,6 +69,28 @@ test('dashboard shows proposals and conflicts and applies only explicit selectio
 	assert.ok(b.$('majesticRows').children[0].children[0].children.some(child => child.textContent === '<script> | 1'))
 })
 
+test('participant search matches nicknames, Discord ID and static together with the status filter', async () => {
+	const b = browser()
+	b.state.decisions.conflict = { static: '987654' }
+	await b.context.loadMajestic()
+	for (const query of [' SCRIPT ', 'mAyA', 'user', '1', '987654']) {
+		b.$('majesticSearch').value = query
+		b.$('majesticSearch').handlers.input()
+		assert.equal(b.$('majesticRows').children.length, 1)
+		assert.equal(b.$('majesticRows').children[0].tagName, 'ARTICLE')
+	}
+	b.$('majesticSearch').value = 'Maya'
+	b.$('majesticFilter').value = 'conflict'
+	b.$('majesticFilter').handlers.change()
+	assert.match(b.$('majesticRows').children[0].textContent, /Нет участников/)
+	b.$('majesticSearch').value = ''
+	b.$('majesticSearch').handlers.input()
+	assert.equal(b.$('majesticRows').children[0].tagName, 'ARTICLE')
+	b.$('majesticFilter').value = 'all'
+	b.$('majesticFilter').handlers.change()
+	assert.equal(b.$('majesticRows').children.length, 2)
+})
+
 test('dashboard blocks applying invalidated previews and enables stopping active runs', async () => {
 	const b = browser(); b.state.preview.invalidated = true
 	await b.context.loadMajestic()

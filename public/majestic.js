@@ -92,8 +92,11 @@ function renderMajestic() {
 	const root = $('majesticRows')
 	root.replaceChildren()
 	const filter = $('majesticFilter').value
+	const search = $('majesticSearch').value.trim().toLowerCase()
 	for (const row of report?.rows || []) {
 		if (filter === 'issues' ? !['change', 'conflict', 'blocked'].includes(row.status) : filter !== 'all' && row.status !== filter) continue
+		if (search && ![row.currentNickname, row.nickname, row.discordId, row.static, data.decisions[row.discordId]?.static]
+			.some(value => String(value ?? '').toLowerCase().includes(search))) continue
 		const card = node('article', null, 'card majestic-row')
 		const heading = node('div', null, 'majestic-heading')
 		if (row.status === 'change') {
@@ -146,7 +149,7 @@ function renderMajestic() {
 		if (row.reason?.includes('нескольких участников')) details.append(node('p', 'Подтверди правильный static для каждого аккаунта или исключи лишний аккаунт.'))
 		card.append(details); root.append(card)
 	}
-	if (!root.children.length) root.append(node('p', 'Нет участников для выбранного фильтра.', 'empty'))
+	if (!root.children.length) root.append(node('p', 'Нет участников для выбранного фильтра и поиска.', 'empty'))
 	const results = $('majesticResults')
 	results.replaceChildren(node('h3', 'Результат последней операции'))
 	for (const result of data.run?.results || []) results.append(node('p', `${result.before || result.discordId}: ${majesticLabels[result.status] || result.status}${result.error ? ' · ' + result.error : ''}`))
@@ -163,6 +166,7 @@ function initMajestic() {
 	})
 	$('majesticStop').addEventListener('click', () => majesticAction('stop'))
 	$('majesticFilter').addEventListener('change', renderMajestic)
+	$('majesticSearch').addEventListener('input', renderMajestic)
 	$('majesticSelect').addEventListener('click', () => {
 		if (majesticPending || majesticState?.busy || majesticPreviewIssue()) return
 		const rows = majesticState?.preview?.rows.filter(row => row.status === 'change') || []
