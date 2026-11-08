@@ -1,4 +1,5 @@
 const catalog = require('./templates.json')
+const { defaultRolePrefixes } = require('../utils/adminPrefix')
 
 function templateDefinition(key) {
 	if (Object.hasOwn(catalog, key)) return catalog[key]
@@ -18,6 +19,7 @@ const settingDefinitions = {
 	PLUS_CHANNEL_ID: { label: 'Канал регистрации на капт', type: 'channel', channelTypes: [0] },
 	CAPT_INFO_CHANNEL_ID: { label: 'Канал объявлений каптов из Majestic API', type: 'channel', channelTypes: [0] },
 	ADMIN_ROLES: { label: 'Роли модераторов бота (не дают доступ в дашборд)', type: 'roles' },
+	ROLE_PREFIXES: { label: 'Префиксы ролей в никах (приоритет сверху вниз)', type: 'rolePrefixes' },
 	MAIN_ROLE_ID: { label: 'Роль после принятия заявки', type: 'role' },
 	FAMILY_ADDITIONAL_ROLES: { label: 'Дополнительные роли после принятия', type: 'roles' },
 	AUTO_ROLE: { label: 'Роль участников для архивов', type: 'role' },
@@ -40,6 +42,7 @@ function createStore() {
 	let pool
 	let ready = false
 	const getSetting = key => {
+		if (key === 'ROLE_PREFIXES') return structuredClone(state.settings[key] ?? defaultRolePrefixes(String(getSetting('ADMIN_ROLES')).split(',').map(id => id.trim()).filter(Boolean)))
 		const value = Object.hasOwn(state.settings, key) ? state.settings[key]
 			: process.env[key] ?? settingDefinitions[key]?.default ?? ''
 		return settingDefinitions[key]?.type === 'boolean' ? value === true || value === 'true' : value

@@ -100,7 +100,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		const members = await diagnose('discord.members.fetch', guild.id, () => discordMembers(guild))
 		const rows = buildPreview(data.items, [...members.values()].map(member => ({
 			id: member.id, nickname: member.nickname, bot: member.user.bot, roleIds: [...member.roles.cache.keys()]
-		})), { decisions, adminRoleIds: store.roleIds('ADMIN_ROLES'), nicknamesOnly })
+		})), { decisions, adminRoleIds: store.roleIds('ADMIN_ROLES'), rolePrefixes: store.getSetting('ROLE_PREFIXES'), nicknamesOnly })
 		for (const row of rows) {
 			if (row.status !== 'change') continue
 			const member = members.get(row.discordId)

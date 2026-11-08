@@ -325,7 +325,42 @@ function renderSettings() {
 		const container = node('div')
 		const label = node('label', field.label)
 		container.append(label)
-		if (field.type === 'boolean') {
+		if (field.type === 'rolePrefixes') {
+			container.append(node('small', 'Формат: [Dep]. При нескольких ролях используется первый префикс. Пробел после него добавляется автоматически. Применяется при следующей смене роли.'))
+			const rows = node('div')
+			const draw = () => {
+				rows.replaceChildren()
+				settingsDraft[field.key].forEach((entry, index) => {
+					const row = node('div', null, 'selected-row prefix-row')
+					const select = node('select'); select.setAttribute('aria-label', 'Роль для префикса')
+					select.add(new Option('Выберите роль…', ''))
+					for (const role of resources.roles) select.add(new Option('@' + role.name, role.id))
+					if (entry.roleId && !resources.roles.some(role => role.id === entry.roleId)) select.add(new Option('Удалённая роль · ' + entry.roleId, entry.roleId))
+					select.value = entry.roleId
+					const input = node('input'); input.type = 'text'; input.maxLength = 24; input.placeholder = '[Dep]'; input.value = entry.prefix
+					input.setAttribute('aria-label', 'Префикс')
+					const update = () => { settingsDraft[field.key] = settingsDraft[field.key].map((item, i) => i === index ? { roleId: select.value, prefix: input.value } : item) }
+					select.addEventListener('change', update); input.addEventListener('input', update)
+					row.append(select, input)
+					for (const [text, offset] of [['↑', -1], ['↓', 1], ['×', 0]]) {
+						const button = node('button', text); button.type = 'button'
+						button.setAttribute('aria-label', offset === 0 ? 'Удалить префикс' : offset < 0 ? 'Повысить приоритет' : 'Понизить приоритет')
+						button.disabled = offset !== 0 && (index + offset < 0 || index + offset >= settingsDraft[field.key].length)
+						button.addEventListener('click', () => {
+							const entries = [...settingsDraft[field.key]]
+							if (offset === 0) entries.splice(index, 1)
+							else [entries[index], entries[index + offset]] = [entries[index + offset], entries[index]]
+							settingsDraft[field.key] = entries; draw()
+						})
+						row.append(button)
+					}
+					rows.append(row)
+				})
+			}
+			const add = node('button', 'Добавить префикс'); add.type = 'button'
+			add.addEventListener('click', () => { settingsDraft[field.key] = [...settingsDraft[field.key], { roleId: '', prefix: '' }]; draw() })
+			container.append(rows, add); draw()
+		} else if (field.type === 'boolean') {
 			const input = node('input')
 			input.type = 'checkbox'; input.checked = settingsDraft[field.key]
 			input.addEventListener('change', () => { settingsDraft[field.key] = input.checked })
@@ -400,7 +435,7 @@ $('resetTemplate').addEventListener('click', () => {
 $('settingsForm').addEventListener('submit', event => {
 	event.preventDefault()
 	action(async () => {
-		const values = Object.fromEntries(config.settings.filter(field => field.value !== settingsDraft[field.key]).map(field => [field.key, settingsDraft[field.key]]))
+		const values = Object.fromEntries(config.settings.filter(field => JSON.stringify(field.value) !== JSON.stringify(settingsDraft[field.key])).map(field => [field.key, settingsDraft[field.key]]))
 		if (!Object.keys(values).length) return notice('Нет изменений для сохранения.')
 		config = await api('settings', { revision: config.revision, values }); notice('Настройки сохранены и применены.')
 	})
@@ -427,7 +462,7 @@ $('logout').addEventListener('click', () => action(async () => { await api('logo
 window.addEventListener('hashchange', switchTab)
 window.addEventListener('beforeunload', event => {
 	if (!config) return
-	const dirty = [...templateDrafts.keys()].some(isTemplateDirty) || config.settings.some(field => settingsDraft[field.key] !== field.value) || currentMessage?.fields.some(field => currentMessage.values[field.path] !== field.value)
+	const dirty = [...templateDrafts.keys()].some(isTemplateDirty) || config.settings.some(field => JSON.stringify(settingsDraft[field.key]) !== JSON.stringify(field.value)) || currentMessage?.fields.some(field => currentMessage.values[field.path] !== field.value)
 	if (dirty) { event.preventDefault(); event.returnValue = '' }
 })
 async function start() {

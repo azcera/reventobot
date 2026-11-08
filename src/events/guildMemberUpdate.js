@@ -18,11 +18,13 @@ const { adminPrefix } = require('../utils/adminPrefix')
  * @param {GuildMember} newMember
  */
 let handleMakeAdmin = async (oldMember, newMember) => {
+	const rolePrefixes = dashboard.getSetting('ROLE_PREFIXES')
+	const prefixRoleIds = rolePrefixes.map(entry => entry.roleId)
 	const oldHasAdmin = oldMember.roles.cache.filter(role =>
-		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
+		prefixRoleIds.includes(role.id)
 	)
 	const newHasAdmin = newMember.roles.cache.filter(role =>
-		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
+		prefixRoleIds.includes(role.id)
 	)
 	const addedRole = newHasAdmin.find(role => !oldHasAdmin.has(role.id))
 	const removedRole = oldHasAdmin.find(role => !newHasAdmin.has(role.id))
@@ -31,7 +33,7 @@ let handleMakeAdmin = async (oldMember, newMember) => {
 
 	const cleanName = newMember.displayName.replace(/^\[[^\]]*\]\s*/, '').trim()
 
-	const newPrefix = adminPrefix([...newMember.roles.cache.keys()], dashboard.roleIds('ADMIN_ROLES'))
+	const newPrefix = adminPrefix([...newMember.roles.cache.keys()], dashboard.roleIds('ADMIN_ROLES'), rolePrefixes)
 	const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32)
 
 	if (newMember.displayName !== finalNickname && newMember.manageable) {

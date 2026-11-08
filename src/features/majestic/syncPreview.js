@@ -23,7 +23,7 @@ function parseNickname(nickname) {
 	return { prefix: match[1] || '', static: match[3], suffix: match[4] || '' }
 }
 
-function buildPreview(characters, members, { decisions = {}, adminRoleIds = [], nicknamesOnly = false } = {}) {
+function buildPreview(characters, members, { decisions = {}, adminRoleIds = [], rolePrefixes, nicknamesOnly = false } = {}) {
 	const byStatic = new Map(characters.map(character => [String(character.id), character]))
 	const parsedMembers = members.filter(member => !member.bot).map(member => ({
 		...member, parsed: parseNickname(member.nickname), decision: decisions[member.id] || {}
@@ -77,9 +77,10 @@ function buildPreview(characters, members, { decisions = {}, adminRoleIds = [], 
 			row.roleNote = 'Leader/Own.dep: синхронизация игрового ранга отключена.'
 			if (currentRoles.length > 1) return { ...row, status: 'conflict', nickname: null, reason: 'Leader/Own.dep и несколько ранговых ролей: требуется ручной выбор.' }
 		}
-		if ([...row.addRoles, ...row.removeRoles].some(id => adminRoleIds.includes(id))) {
+		const prefixRoleIds = Array.isArray(rolePrefixes) ? rolePrefixes.map(entry => entry.roleId) : adminRoleIds
+		if ([...row.addRoles, ...row.removeRoles].some(id => prefixRoleIds.includes(id))) {
 			const finalRoles = member.roleIds.filter(id => !row.removeRoles.includes(id)).concat(row.addRoles)
-			nickname = `${adminPrefix(finalRoles, adminRoleIds)}${name} | ${staticId}${suffix}`
+			nickname = `${adminPrefix(finalRoles, adminRoleIds, rolePrefixes)}${name} | ${staticId}${suffix}`
 			if (nickname.length > 32) return { ...row, status: 'conflict', nickname: null, reason: 'Новый ник с префиксом длиннее 32 символов.' }
 			row.nickname = nickname === member.nickname ? null : nickname
 		}

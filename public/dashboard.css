@@ -550,6 +550,16 @@ main {
 	gap:12px
 }
 
+.prefix-row {
+	flex-wrap:wrap
+}
+
+.prefix-row select, .prefix-row input {
+	flex:1;
+	min-width:120px;
+	width:0
+}
+
 .history {
 	margin-top:18px
 }

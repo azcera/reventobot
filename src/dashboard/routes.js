@@ -61,6 +61,15 @@ async function validateSettings(values, guild) {
 		if (value === null) continue
 		if (field.type === 'boolean') {
 			if (typeof value !== 'boolean') throw problem(400, 'Ожидается переключатель.')
+		} else if (field.type === 'rolePrefixes') {
+			if (!Array.isArray(value) || value.length > 100) throw problem(400, 'Ожидается список префиксов (не более 100).')
+			const seen = new Set()
+			for (const entry of value) {
+				if (!entry || typeof entry.roleId !== 'string' || !/^\d{17,20}$/.test(entry.roleId) || !guild.roles.cache.has(entry.roleId) || entry.roleId === guild.id) throw problem(400, 'Выберите роль этого сервера для префикса.')
+				if (seen.has(entry.roleId)) throw problem(400, 'Для каждой роли можно задать только один префикс.')
+				if (typeof entry.prefix !== 'string' || entry.prefix.length > 24 || !/^\[[^\[\]\r\n|]+\]$/.test(entry.prefix.trim())) throw problem(400, 'Префикс должен быть в квадратных скобках, например [Dep], и не длиннее 24 символов.')
+				seen.add(entry.roleId)
+			}
 		} else if (field.type === 'color') {
 			if (typeof value !== 'string' || !/^#[a-f0-9]{6}$/i.test(value)) throw problem(400, 'Некорректный цвет.')
 		} else {

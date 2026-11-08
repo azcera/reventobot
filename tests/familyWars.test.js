@@ -229,7 +229,7 @@ test('an ambiguous send recovers the existing message after restart instead of d
 	assert.equal(f.sent.length, 1); assert.equal(f.row().announcement_state, 'sent')
 })
 
-test('time and role/time sorting preserve registration timestamps and paging omits approval menus', () => {
+test('time and role/time sorting preserve timestamps and show the whole queue without paging', () => {
 	const f = fixture()
 	const second = { ...f.member, id: 'second', nickname: 'Second | 2', roles: { cache: new Collection([['priority', {}]]) } }
 	f.members.set('second', second)
@@ -241,8 +241,39 @@ test('time and role/time sorting preserve registration timestamps and paging omi
 	for (let i = 0; i < 55; i++) reg.joins['user' + i] = { joinedAt: i + 5 }
 	const catalog = createStore()
 	const payload = registrationMessage(war, reg, f.guild, {}, catalog, start)
-	assert.match(plain(payload), /war_page_RU8_45767_1/)
+	assert.match(plain(payload), /Ожидание: 57/)
+	for (const userId of Object.keys(reg.joins)) assert.ok(plain(payload).includes(`<@${userId}>`))
+	assert.ok(!plain(payload).includes('war_page_'))
+	assert.ok(!plain(payload).includes('Страница'))
 	assert.ok(!plain(payload).includes('capt_approve_'))
+})
+
+test('game and waiting lists have separate numbering and sorting, and confirmation removes waiting duplicates', () => {
+	const f = fixture(), catalog = createStore()
+	for (const [id, staticId, priority] of [['gameEarly', '1', false], ['gamePriority', '2', true],
+		['waitEarly', '3', false], ['waitPriority', '4', true]]) {
+		f.members.set(id, { ...f.member, id, nickname: `Player | ${staticId}`,
+			roles: { cache: new Collection(priority ? [['priority', {}]] : []) } })
+	}
+	const war = normalizeWar(rawWar({ players: { 1698: [{ id: 1, name: 'First' }, { id: 2, name: 'Second' }] } }), rulesFromEnv({}), null, start)
+	const reg = { joins: { gameEarly: { joinedAt: 1 }, gamePriority: { joinedAt: 2 },
+		waitEarly: { joinedAt: 3 }, waitPriority: { joinedAt: 4 } }, sortMode: 'priority', page: 10 }
+	const store = { roleIds: () => ['priority'], text: (...args) => catalog.text(...args), decorate: (key, component) => component }
+	const sections = () => registrationMessage(war, reg, f.guild, {}, store, start).components[0].toJSON().components
+		.filter(component => component.type === 10).map(component => component.content)
+	let content = sections()
+	assert.equal(content.find(text => text.startsWith('### В игре:')), '### В игре: 2\n1. ✅ <@gamePriority>\n2. ✅ <@gameEarly>')
+	assert.equal(content.find(text => text.startsWith('### Ожидание:')), '### Ожидание: 2\n1. ⏳ <@waitPriority>\n2. ⏳ <@waitEarly>')
+	reg.sortMode = 'time'
+	content = sections()
+	assert.equal(content.find(text => text.startsWith('### В игре:')), '### В игре: 2\n1. ✅ <@gameEarly>\n2. ✅ <@gamePriority>')
+	assert.equal(content.find(text => text.startsWith('### Ожидание:')), '### Ожидание: 2\n1. ⏳ <@waitEarly>\n2. ⏳ <@waitPriority>')
+	war.roster.push({ static: '3', name: 'Third' })
+	content = sections()
+	assert.match(content.find(text => text.startsWith('### В игре:')), /3\. ✅ <@waitEarly>/)
+	assert.equal(content.find(text => text.startsWith('### Ожидание:')), '### Ожидание: 1\n1. ⏳ <@waitPriority>')
+	assert.equal(content.join('\n').split('<@waitEarly>').length - 1, 1)
+	assert.equal(reg.joins.waitEarly.joinedAt, 3)
 })
 
 test('overlapping polls share one request and stopped scheduler cannot re-arm', async () => {
