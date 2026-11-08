@@ -176,10 +176,20 @@ test('dashboard renders permanent binding controls and mounts editable template 
 	const root = context.document.createElement('div')
 	context.$ = () => root
 	context.config = { bindings: {}, templates: [] }
+	context.resources = { channels: [{ id: 'channel', name: 'общий', type: 0, canSend: true }, { id: 'hidden', name: 'закрытый', type: 0, canSend: false }] }
+	context.Option = function (text, value) { const option = context.document.createElement('option'); option.textContent = text; option.value = value; return option }
+	const createElement = context.document.createElement
+	context.document.createElement = tag => { const element = createElement(tag); element.add = option => element.append(option); return element }
 	vm.runInContext(source.slice(source.indexOf('function node('), source.indexOf('function notice(')), context)
 	vm.runInContext(source.slice(source.indexOf('const permanentGroups ='), source.indexOf('function showSyncResult(')), context)
 	context.renderPermanentMessages()
 	assert.equal(root.children.filter(element => element.tagName === 'FORM').length, 4)
+	for (const form of root.children.filter(element => element.tagName === 'FORM')) {
+		const select = form.children[0].children[0]
+		assert.equal(select.tagName, 'SELECT')
+		assert.deepEqual(Array.from(select.children, option => option.value), ['', 'channel'])
+		assert.equal(form.children[1].textContent, 'Опубликовать / обновить')
+	}
 	vm.runInContext(source.slice(source.indexOf('function fieldsForm('), source.indexOf('function groupFields(')), context)
 	const values = { test: 'Черновик' }
 	context.fieldsForm(root, [{ key: 'test', type: 'text', maxLength: 4000, value: 'Исходный' }], values, () => {})

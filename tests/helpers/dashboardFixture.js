@@ -13,8 +13,12 @@ function memoryPool() {
 	const history = []
 	const dynamic = new Set()
 	const queries = []
+	const navigation = new Map()
 	const query = async (sql, params = []) => {
 		queries.push(sql)
+		if (sql.startsWith('INSERT INTO dashboard_navigation_messages')) navigation.set(params[0], { message_id: params[0], guild_id: params[1], channel_id: params[2], container_index: params[3], prefix_length: params[4] })
+		if (sql.startsWith('SELECT * FROM dashboard_navigation_messages')) return { rows: [...navigation.values()].filter(row => row.guild_id === params[0]) }
+		if (sql.startsWith('DELETE FROM dashboard_navigation_messages')) navigation.delete(params[0])
 		if (sql === 'BEGIN') backup = structuredClone(state)
 		if (sql === 'ROLLBACK') state = backup
 		if (sql.startsWith('SELECT revision')) return { rows: [structuredClone(state)] }

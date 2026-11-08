@@ -1,4 +1,4 @@
-const { MessageFlags } = require('discord.js')
+const { MessageFlags, PermissionsBitField } = require('discord.js')
 const { store, templateDefinition } = require('./store')
 const { problem } = require('./auth')
 const { parseMessageLink, parseContainerMessage, buildEditPayload } = require('../services/containerMessageService')
@@ -12,6 +12,51 @@ const definitions = {
 	invite: { group: 'Приглашение', command: 'invite' },
 	promotion: { group: 'Система повышения' },
 	recruit: { group: 'Памятка рекрута' }
+}
+const publications = new Set()
+
+async function publish(kind, channelId, revision, client, guild, actor) {
+	if (!Object.hasOwn(definitions, kind)) throw problem(400, 'Неизвестный вид сообщения.')
+	if (revision !== store.revision) throw problem(409, 'Настройки изменились. Обновите данные.')
+	if (publications.has(kind)) throw problem(409, 'Шаблон уже публикуется.')
+	publications.add(kind)
+	try {
+		const channel = await guild.channels.fetch(channelId)
+		if (!channel || ![0, 5].includes(channel.type) || !channel.send || !channel.permissionsFor(client.user)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])) throw problem(400, 'Выберите доступный текстовый канал сервера.')
+		const binding = store.bindings[kind]
+		if (binding && parseMessageLink(binding.link).channelId === channelId) {
+			await updateMessage(kind, binding, client, guild, actor)
+			return
+		}
+		let payload
+		if (definitions[kind].command) payload = await require('../commands/admin/' + definitions[kind].command).buildPayload()
+		else if (binding) {
+			const source = await fetchMessage(client, guild, binding.link)
+			payload = binding.markdown ? buildEditPayload({ items: markdown.parse(store.text(binding.fields[0].key)) })
+				: applyFields(source, Object.fromEntries(binding.fields.map(field => [field.path, store.text(field.key)])), { expandMarkdown: false })
+			payload.components = payload.components.map(component => component.toJSON ? component.toJSON() : component)
+			const resolve = components => {
+				for (const component of components) {
+					for (const item of component.items || []) if (item.media?.url.startsWith('attachment://')) {
+						const file = [...source.attachments.values()].find(file => file.name === item.media.url.slice(13))
+						if (!file?.url) throw problem(409, 'Не найдено вложение исходного сообщения.')
+						item.media.url = file.url
+					}
+					if (component.components) resolve(component.components)
+				}
+			}
+			resolve(payload.components)
+			delete payload.attachments
+		} else payload = buildEditPayload({ items: markdown.parse(store.text(kind + '.document', {}, templateDefinition(kind + '.document').default)) })
+		payload.flags = MessageFlags.IsComponentsV2
+		payload.allowedMentions = { parse: [], repliedUser: false }
+		const sent = await channel.send(payload)
+		try { await store.save('bindings', { [kind]: bindingFor(kind, sent) }, revision, actor) }
+		catch (error) {
+			try { await sent.delete() } catch { throw problem(503, 'Сообщение опубликовано, но привязка не сохранена. Сохраните ссылку вручную: ' + sent.url) }
+			throw error
+		}
+	} finally { publications.delete(kind) }
 }
 
 async function fetchMessage(client, guild, link) {
@@ -96,4 +141,4 @@ async function syncMessages(keys, client, guild, selectedKind, actor) {
 	return results
 }
 
-module.exports = { definitions, bindingFor, fetchMessage, rememberSent, syncMessages }
+module.exports = { definitions, bindingFor, fetchMessage, rememberSent, syncMessages, publish }

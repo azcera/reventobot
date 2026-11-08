@@ -65,7 +65,7 @@ test('new rules reject missing sections, excess components, text overflow and st
 
 test('templates use one source textarea and retain unsaved source when switching groups', () => {
 	class Element {
-		constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.events = {}; this.classList = { add() {} } }
+		constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.events = {}; this.classList = { add() {} }; this.style = {}; this.clientWidth = 600; this.clientHeight = 180; this.offsetHeight = 180; this.scrollHeight = 1200 }
 		append(...children) { this.children.push(...children) }
 		replaceChildren(...children) { this.children = children }
 		addEventListener(event, listener) { this.events[event] = listener }
@@ -74,7 +74,13 @@ test('templates use one source textarea and retain unsaved source when switching
 	const elements = { templateGroup: { value: 'Правила' }, templateFields: new Element('div'), templatePreview: new Element('div') }
 	const templates = Object.entries(require('../src/dashboard/templates.json')).map(([key, field]) => ({ key, ...field, value: field.default }))
 	const templateDocument = require('../public/template-document')
-	const ui = vm.createContext({ document: { createElement: tag => new Element(tag) }, $: id => elements[id], config: { templates }, templateDrafts: new Map(), templateDocument, discordMarkdownToHtml: markdown, examples: {} })
+	const observers = []
+	class ResizeObserver {
+		constructor(callback) { this.callback = callback; observers.push(this) }
+		observe(input) { this.input = input }
+		disconnect() { this.disconnected = true }
+	}
+	const ui = vm.createContext({ document: { createElement: tag => new Element(tag) }, $: id => elements[id], config: { templates }, templateDrafts: new Map(), templateDocument, templateResizeObserver: undefined, ResizeObserver, discordMarkdownToHtml: markdown, examples: {} })
 	const source = readFileSync(require.resolve('../public/dashboard.js'), 'utf8')
 	vm.runInContext(source.slice(source.indexOf('function node('), source.indexOf('function notice(')), ui)
 	vm.runInContext(source.slice(source.indexOf('function preview('), source.indexOf('function previewApplication(')), ui)
@@ -86,18 +92,27 @@ test('templates use one source textarea and retain unsaved source when switching
 	}
 	elements.templateGroup.value = 'Правила'; ui.renderTemplates()
 	let input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
+	assert.equal(input.style.height, '1200px')
+	input.scrollHeight = 1500
 	const original = input.value
 	input.value = original.replace('## Общие положения', '## Несохранённая правка'); input.events.input()
+	assert.equal(input.style.height, '1500px')
+	input.scrollHeight = 240; input.events.input()
+	assert.equal(input.style.height, '240px')
+	input.clientWidth = 0; observers.at(-1).callback()
+	input.clientWidth = 300; input.scrollHeight = 800; observers.at(-1).callback()
+	assert.equal(input.style.height, '800px')
 	assert.match(ui.groupDraft()['rules.document'], /## Несохранённая правка/)
 	assert.doesNotMatch(input.value, /<!-- template:/)
 	elements.templateGroup.value = 'Заявка'; ui.renderTemplates()
+	assert.equal(observers.at(-2).disconnected, true)
 	elements.templateGroup.value = 'Правила'; ui.renderTemplates()
 	input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
 	assert.match(input.value, /Несохранённая правка/)
 	elements.templateGroup.value = 'Заявка'; ui.renderTemplates()
 	input = descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA')
 	input.value = 'Незавершённый черновик'; input.events.input()
-	assert.throws(() => ui.readTemplateDocument(), /метк/)
+	assert.throws(() => ui.readTemplateDocument(), /заголовк/)
 	ui.renderTemplates()
 	assert.equal(descendants(elements.templateFields).find(element => element.tagName === 'TEXTAREA').value, 'Незавершённый черновик')
 })

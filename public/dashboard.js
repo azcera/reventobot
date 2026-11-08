@@ -9,6 +9,7 @@ let busy = false
 let applicationPreviewState = 'pending'
 const titles = { overview: 'Обзор', builder: 'Конструктор v2', templates: 'Шаблоны сообщений', messages: 'Сообщения в Discord', settings: 'Настройки', history: 'История изменений', majestic: 'Majestic — синхронизация' }
 let builderResizeObserver
+let templateResizeObserver
 $('builderFrame').addEventListener('load', () => {
 	builderResizeObserver?.disconnect()
 	const frame = $('builderFrame')
@@ -141,13 +142,33 @@ const permanentGroups = { rules: 'Правила', invite: 'Приглашени
 function renderPermanentMessages() {
 	const root = $('permanentMessages')
 	root.replaceChildren(node('h3', 'Постоянные сообщения'))
-	root.append(node('p', 'Укажи ссылку один раз. Привязки сохраняются после перезапуска бота.', 'muted'))
+	root.append(node('p', 'Выбери канал: бот опубликует сохранённый шаблон и запомнит сообщение. В том же канале обновляется существующее сообщение. При выборе другого канала прежняя копия остаётся без дальнейшей синхронизации.', 'muted'))
 	for (const [kind, group] of Object.entries(permanentGroups)) {
 		const form = node('form', null, 'permanent-row')
-		const label = node('label', group)
+		const channelLabel = node('label', group)
+		const channel = node('select')
+		channel.add(new Option('Выберите канал', ''))
+		for (const resource of resources.channels.filter(channel => [0, 5].includes(channel.type) && channel.canSend)) channel.add(new Option('# ' + resource.name, resource.id))
+		channel.value = config.bindings?.[kind]?.link.split('/')[5] || ''
+		channelLabel.append(channel); form.append(channelLabel)
+		const publish = node('button', 'Опубликовать / обновить', 'quiet'); publish.type = 'button'
+		publish.addEventListener('click', () => {
+			if (!channel.value) return notice('Выберите канал публикации.', true)
+			if (isTemplateDirty(group)) return notice('Сначала сохраните изменения шаблона.', true)
+			action(async () => {
+				config = await api('permanent-message/publish', { kind, channelId: channel.value, revision: config.revision })
+				templateDrafts.delete(group); renderTemplateGroups(); renderPermanentMessages(); renderTemplates()
+				notice('Шаблон опубликован. Сообщение сохранено для дальнейших обновлений.')
+			})
+		}); form.append(publish)
+		if (config.bindings?.[kind]) {
+			const link = node('a', 'Открыть сообщение ↗'); link.href = config.bindings[kind].link; link.target = '_blank'; link.rel = 'noopener'; form.append(link)
+		}
+		const advanced = node('details'); advanced.append(node('summary', 'Привязать существующее сообщение по ссылке'))
+		const label = node('label', 'Ссылка на сообщение')
 		const input = node('input'); input.type = 'url'; input.placeholder = 'https://discord.com/channels/…/…/…'; input.value = config.bindings?.[kind]?.link || ''
-		label.append(input); form.append(label)
-		const bind = node('button', 'Сохранить привязку', 'quiet'); bind.type = 'submit'; form.append(bind)
+		label.append(input); advanced.append(label)
+		const bind = node('button', 'Сохранить привязку', 'quiet'); bind.type = 'submit'; advanced.append(bind); form.append(advanced)
 		form.addEventListener('submit', event => {
 			event.preventDefault()
 			if (isTemplateDirty(group) && !confirm('Изменение привязки сбросит несохранённые правки этого раздела. Продолжить?')) return
@@ -161,12 +182,20 @@ function renderPermanentMessages() {
 		}
 		root.append(form)
 	}
+	const syncNavigation = node('button', 'Обновить навигацию во всех архивах', 'quiet'); syncNavigation.type = 'button'
+	syncNavigation.addEventListener('click', () => action(async () => {
+		if (isTemplateDirty('Навигация')) return notice('Сначала сохраните изменения навигации.', true)
+		notice('Обновляется навигация. Поиск и обновление сообщений могут занять время.')
+		config = await api('navigation/sync', {})
+		showSyncResult('Навигация обновлена. Сообщений: ' + (config.syncResults[0]?.updated || 0) + '.')
+	})); root.append(syncNavigation)
+	root.append(node('p', 'Сохранение шаблона навигации обновляет её копии в главном канале архивов и ветках. Приветствие личного архива и кнопка поиска сохраняются.', 'muted'))
 }
 function showSyncResult(success) {
 	const failed = (config.syncResults || []).filter(result => !result.ok)
 	const logErrors = (config.syncResults || []).filter(result => result.logError)
 	if (!failed.length && logErrors.length) return notice(success + ' ' + logErrors.map(result => result.logError).join(' '), true)
-	notice(failed.length ? 'Шаблон сохранён, но обновление в Discord не завершено: ' + failed.map(result => permanentGroups[result.kind] + ': ' + result.error).join(' ') + ' Нажми «Обновить в Discord» после устранения причины.' : success, failed.length > 0)
+	notice(failed.length ? 'Шаблон сохранён, но обновление в Discord не завершено: ' + failed.map(result => (permanentGroups[result.kind] || 'Навигация') + ': ' + result.error).join(' ') + ' Повторите обновление после устранения причины.' : success, failed.length > 0)
 }
 const examples = { user: '123456789012345678', name: 'Tony | 132961', age: '18', about: 'Хочу развиваться вместе с семьёй', history: 'Revento', admin: '123456789012345678', server: 'REVENTO', channel: '123456789012345678', time: '18:00 МСК', target: 'капт', count: '3', limit: '20', players: '1. @Tony\n2. @Alex\n3. @Sam', reason: 'Ошибка в анкете', part: '2' }
 function preview(root, fields, values, variables = false) {
@@ -255,6 +284,7 @@ function readTemplateDocument() {
 function renderTemplates() {
 	const fields = templateEditorFields(), values = groupDraft()
 	const root = $('templateFields')
+	templateResizeObserver?.disconnect()
 	root.replaceChildren()
 	const label = node('label', 'Шаблон целиком (Markdown)')
 	const input = node('textarea')
@@ -265,7 +295,13 @@ function renderTemplates() {
 	const status = node('p', '', 'hint')
 	status.setAttribute('role', 'status')
 	root.append(status)
+	const resize = () => {
+		if (!input.clientWidth) return
+		input.style.height = 'auto'
+		input.style.height = (input.scrollHeight + input.offsetHeight - input.clientHeight) + 'px'
+	}
 	input.addEventListener('input', () => {
+		resize()
 		values._source = input.value
 		try { readTemplateDocument(); status.textContent = '' }
 		catch (error) { status.textContent = error.message }
@@ -279,6 +315,14 @@ function renderTemplates() {
 		preview($('templatePreview'), fields, values, true)
 	}
 	if ($('templateForm')) setupPreviewTabs($('templateForm'), update)
+	let width = 0
+	templateResizeObserver = new ResizeObserver(() => {
+		if (input.clientWidth === width) return
+		width = input.clientWidth
+		resize()
+	})
+	templateResizeObserver.observe(input)
+	resize()
 }
 function previewApplication(root, values) {
 	root.replaceChildren()

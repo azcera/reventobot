@@ -14,9 +14,11 @@ module.exports = {
 			.delete()
 			.catch(err => console.log('Не удалось удалить сообщение:', err))
 
-		return await message.channel.send({
+		const sent = await message.channel.send({
 			flags: [MessageFlags.IsComponentsV2],
 			components: [getNavigationContainer(null, false)]
 		})
+		await require('../../dashboard/navigationMessages').rememberSent(sent)
+		return sent
 	}
 }

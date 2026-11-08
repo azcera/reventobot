@@ -4,6 +4,7 @@ const { defaultRolePrefixes } = require('../utils/adminPrefix')
 function templateDefinition(key) {
 	if (Object.hasOwn(catalog, key)) return catalog[key]
 	if (key === 'rules.document') return { group: 'Правила', label: 'Правила целиком', type: 'text', maxLength: 4000, variables: [] }
+	if (['promotion.document', 'recruit.document'].includes(key)) return { group: key.startsWith('promotion.') ? 'Система повышения' : 'Памятка рекрута', label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, variables: [], default: key.startsWith('promotion.') ? '# Система повышения' : '# Памятка рекрута' }
 	const match = /^rules\.(?:heading\.([1-9]\d*)|rule\.([1-9]\d*)\.([1-9]\d*))$/.exec(key)
 	if (!match) return null
 	return { group: 'Правила', label: match[1] ? 'Раздел ' + match[1] : 'Правило ' + match[2] + '-' + match[3], type: 'text', maxLength: 4000, variables: [] }
@@ -64,6 +65,7 @@ function createStore() {
 		},
 		snapshot() {
 			const fields = { ...catalog }
+			for (const kind of ['promotion', 'recruit']) if (!state.bindings?.[kind]) fields[kind + '.document'] = templateDefinition(kind + '.document')
 			for (const key of Object.keys(state.templates)) if (templateDefinition(key)) fields[key] = templateDefinition(key)
 			return { revision, bindings: this.bindings, templates: Object.entries(fields).sort(([a], [b]) => {
 				if (a.startsWith('rules.') !== b.startsWith('rules.')) return a.startsWith('rules.') ? -1 : 1
@@ -78,7 +80,11 @@ function createStore() {
 		},
 		async init(database) {
 			pool = database
-			await pool.query(`CREATE TABLE IF NOT EXISTS dashboard_state (
+			await pool.query(`CREATE TABLE IF NOT EXISTS dashboard_navigation_messages (
+				message_id TEXT PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL,
+				container_index INTEGER NOT NULL, prefix_length INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS dashboard_state (
 				id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL DEFAULT 0,
 				value JSONB NOT NULL DEFAULT '{"templates":{},"settings":{}}'
 			);
@@ -92,6 +98,17 @@ function createStore() {
 			refreshBoundFields(state)
 			revision = result.rows[0].revision
 			ready = true
+		},
+		async trackNavigation(message, location) {
+			await pool.query(`INSERT INTO dashboard_navigation_messages (message_id, guild_id, channel_id, container_index, prefix_length)
+				VALUES ($1, $2, $3, $4, $5) ON CONFLICT (message_id) DO UPDATE SET container_index = EXCLUDED.container_index, prefix_length = EXCLUDED.prefix_length`,
+				[message.id, message.guildId || message.guild.id, message.channelId, location.containerIndex, location.prefixLength])
+		},
+		async navigationMessages(guildId) {
+			return (await pool.query('SELECT * FROM dashboard_navigation_messages WHERE guild_id = $1', [guildId])).rows
+		},
+		async forgetNavigation(messageId) {
+			await pool.query('DELETE FROM dashboard_navigation_messages WHERE message_id = $1', [messageId])
 		},
 		async save(section, values, expectedRevision, actor) {
 			const db = await pool.connect()
@@ -109,6 +126,7 @@ function createStore() {
 				if (section === 'bindings') {
 					next.templates = { ...current.value.templates }
 					for (const [kind, binding] of Object.entries(values)) {
+						if (binding && ['promotion', 'recruit'].includes(kind)) delete next.templates[kind + '.document']
 						for (const field of [...(current.value.bindings?.[kind]?.fields || []), ...(binding?.fields || [])]) delete next.templates[field.key]
 					}
 				}

@@ -5,6 +5,7 @@ const { parseMessageLink, messageRevision } = require('../services/containerMess
 const { snapshot, applyFields, isHttpsUrl } = require('./messageEditor')
 const locks = require('../services/messageLocks')
 const permanent = require('./permanentMessages')
+const navigation = require('./navigationMessages')
 const { linesOf, logMessageChange, diffLines } = require('./changeLog')
 const { createMajesticSync } = require('../services/majesticSync')
 const { syncRolePrefixes } = require('../services/rolePrefixSync')
@@ -151,6 +152,7 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }), m
 			else await validateSettings(values, req.guild)
 			await store.save(section, values, revision, req.dashboardUser)
 			const syncResults = section === 'templates' ? await permanent.syncMessages(Object.keys(values), client, req.guild, undefined, req.dashboardUser) : []
+			if (section === 'templates' && Object.keys(values).some(key => key.startsWith('navigation.'))) syncResults.push(...await navigation.sync(client, req.guild))
 			if (syncResults.length) await store.audit(req.dashboardUser, 'message.sync', Object.keys(values).join(', '), { syncResults })
 				.catch(error => console.error('[Dashboard audit]', error.message))
 			res.json({ ...store.snapshot(), syncResults })
@@ -169,6 +171,21 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client }), m
 			res.json(result)
 		} catch (error) { respondError(res, error) }
 		finally { prefixSyncs.delete(req.guild.id) }
+	})
+	app.post('/api/permanent-message/publish', async (req, res) => {
+		try {
+			const { kind, channelId, revision } = req.body
+			if (!channelId || !Number.isSafeInteger(revision)) throw problem(400, 'Выберите канал и обновите данные.')
+			await permanent.publish(kind, channelId, revision, client, req.guild, req.dashboardUser)
+			res.json(store.snapshot())
+		} catch (error) { respondError(res, error) }
+	})
+	app.post('/api/navigation/sync', async (req, res) => {
+		try {
+			const syncResults = await navigation.sync(client, req.guild)
+			await store.audit(req.dashboardUser, 'message.sync', 'navigation', { syncResults })
+			res.json({ ...store.snapshot(), syncResults })
+		} catch (error) { respondError(res, error) }
 	})
 	app.post('/api/permanent-message', async (req, res) => {
 		try {

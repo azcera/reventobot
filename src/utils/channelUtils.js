@@ -74,7 +74,8 @@ async function createArchiveChannel(
 				)
 			]
 		})
-		.catch(() => {})
+		.then(async sent => { await require('../dashboard/navigationMessages').rememberSent(sent) })
+		.catch(error => console.error('[Archive navigation]', error.message))
 
 	// 5. Отвечаем на саму кнопку (если вызов был через взаимодействие)
 	if (isInteraction) {

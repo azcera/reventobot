@@ -9,6 +9,7 @@ test('all template groups round-trip through one document without changing their
 	for (const group of new Set(Object.values(catalog).map(field => field.group))) {
 		const fields = Object.entries(catalog).filter(([, field]) => field.group === group).map(([key, field]) => ({ ...field, key, value: field.default }))
 		const values = Object.fromEntries(fields.map(field => [field.key, field.value]))
+		assert.doesNotMatch(document.stringify(fields, values), /<!-- template:/)
 		assert.deepEqual(document.parse(document.stringify(fields, values), fields), values, group)
 	}
 })
@@ -19,10 +20,18 @@ test('source edits retain variables, button labels, URLs and line endings', () =
 	assert.deepEqual(document.parse(source, fields), { title: '# Добро пожаловать, {user}\n', button: 'Перейти', url: 'https://example.com' })
 })
 
-test('missing, duplicate and unknown markers cannot silently overwrite other template values', () => {
-	const fields = [{ key: 'first', value: 'Первый' }, { key: 'second', value: 'Второй' }]
+test('missing, duplicate and renamed Markdown sections cannot silently overwrite values', () => {
+	const fields = [{ key: 'first', label: 'Первое сообщение', value: 'Первый' }, { key: 'second', label: 'Второе сообщение', value: 'Второй' }]
 	const source = document.stringify(fields, {})
-	for (const invalid of [source.replace('<!-- template:first -->', ''), source.replace('template:second', 'template:first'), source.replace('template:second', 'template:other')]) assert.throws(() => document.parse(invalid, fields))
+	assert.doesNotMatch(source, /first|second/)
+	for (const invalid of [source.replace('###### Первое сообщение', ''), source.replace('###### Второе сообщение', '###### Первое сообщение'), source.replace('###### Второе сообщение', '###### Другое сообщение')]) assert.throws(() => document.parse(invalid, fields))
+	const reordered = source.split('\n\n###### Второе сообщение\n\n')
+	assert.deepEqual(document.parse('###### Второе сообщение\n\n' + reordered[1] + '\n\n' + reordered[0], fields), { first: 'Первый', second: 'Второй' })
+})
+
+test('Markdown sections preserve empty values, nested headings and code fences across fields', () => {
+	const fields = [{ key: 'first', label: 'Начало', value: '## Заголовок\n```ansi\n' }, { key: 'second', label: 'Конец', value: 'содержимое\n```' }, { key: 'empty', label: 'Кнопка', value: '' }]
+	assert.deepEqual(document.parse(document.stringify(fields, {}), fields), Object.fromEntries(fields.map(field => [field.key, field.value])))
 })
 
 test('existing single-document templates stay plain Markdown without markers', () => {

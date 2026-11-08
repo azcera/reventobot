@@ -88,7 +88,7 @@ test('binding rejects wrong guild, author, duplicate, stale revision and dynamic
 	assert.equal((await bind({ revision: 0 })).status, 409)
 	assert.equal((await bind({ link: '' })).status, 200)
 	assert.equal(store.bindings.recruit, undefined)
-	assert.equal(store.snapshot().templates.some(field => field.group === 'Памятка рекрута'), false)
+	assert.equal(store.snapshot().templates.find(field => field.key === 'recruit.document').value, '# Памятка рекрута')
 })
 
 test('new singleton command publications are remembered only in the configured guild', async t => {
