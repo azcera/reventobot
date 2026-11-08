@@ -1,6 +1,6 @@
 const { createHash } = require('node:crypto')
 const { PermissionFlagsBits, MessageFlags, TextDisplayBuilder } = require('discord.js')
-const { SERVER, rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, registrationClosed, battleSummary, bindingIndex } = require('../features/capture/familyWarData')
+const { SERVER, rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, registrationClosed, bindingIndex } = require('../features/capture/familyWarData')
 const { announcement, registrationMessage } = require('../features/capture/familyWarMessages')
 
 const FAMILY_WAR_SCHEMA = `CREATE TABLE IF NOT EXISTS family_wars (
@@ -93,7 +93,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 	async function edit(row, kind, payload) {
 		const target = await channel(row[`${kind}_channel_id`], row.guild_id)
 		const message = await target.messages.fetch(row[`${kind}_id`])
-		await message.edit(payload)
+		await message.edit(payload.files ? { ...payload, attachments: [] } : payload)
 	}
 	async function refresh(row, guild, bindings) {
 		if (row.registration_id && !row.registration.closedAt) {
@@ -103,9 +103,10 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 				await save(row)
 			}
 		}
-		const version = JSON.stringify([row.data.startAt, row.data.status, row.data.neutral, row.data.closed, row.data.enemy, row.data.map, row.data.zone, battleSummary(row.data), registrationClosed(row.data, now()), url(row)])
+		const payload = announcement(row.data, url(row), now(), guild.members.cache.values(), bindings)
+		const version = JSON.stringify(payload.components.map(component => component.toJSON()))
 		if (row.announcement_id && !row.registration.announcementFinished && row.registration.announcementVersion !== version) {
-			await edit(row, 'announcement', announcement(row.data, url(row), now()))
+			await edit(row, 'announcement', payload)
 			row.registration.announcementVersion = version
 			if (row.data.closed) row.registration.announcementFinished = true
 			await save(row)
@@ -189,9 +190,10 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 						}
 						await deliver(row, 'announcement', payload)
 					}
-					if ((row.registration_id && !row.registration.closedAt) || row.registration_state === 'sending') {
+					if ((row.registration_id && !row.registration.closedAt) || row.registration_state === 'sending' ||
+						(war.status === 'finished' && row.announcement_id && !row.registration.announcementFinished)) {
 						if (!rosterLoaded) { await guild.members.fetch({ time: 30000 }); bindings = await decisions(guild.id); rosterLoaded = true }
-						if (!row.registration_id) await deliver(row, 'registration', registrationMessage(war, row.registration, guild, bindings, store, now()))
+						if (!row.registration_id && row.registration_state === 'sending') await deliver(row, 'registration', registrationMessage(war, row.registration, guild, bindings, store, now()))
 					}
 					// Bindings and role priorities can change even when API data stays identical.
 					await refresh(row, guild, bindings || {})
@@ -228,7 +230,8 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		const previous = await load(source.key, message.guild.id)
 		source = normalizeWar(source.raw, rules, previous?.data, now())
 		if (preview) {
-			const payload = announcement(source, null, now())
+			await message.guild.members.fetch({ time: 30000 })
+			const payload = announcement(source, null, now(), message.guild.members.cache.values(), await decisions(message.guild.id))
 			payload.components[0].addTextDisplayComponents(new TextDisplayBuilder().setContent(`🧪 Просмотр последнего завершённого капта №${source.apiId}.`))
 			return message.reply(payload)
 		}

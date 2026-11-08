@@ -50,7 +50,7 @@ function normalizeWar(raw, rules, previous, now = Date.now()) {
 		key: `${SERVER}:${raw.id}`, apiId: raw.id, captureId: raw.captureId ?? null,
 		attack: raw.attackersId === FAMILY_ID,
 		enemy: name(raw.attackersId === FAMILY_ID ? raw.defendersName : raw.attackersName) || 'Неизвестная семья',
-		zone: raw.gangZoneId, map: name(raw.selectedMapName) || 'Карта не указана',
+		zone: raw.gangZoneId, map: name(raw.selectedMapName) || 'Неопределена',
 		startAt, status, neutral, closed: rules.closed.has(status), updatedAt: now,
 		roster: roster ?? previous?.roster ?? [], rosterFresh: roster !== null,
 		rosterUpdatedAt: roster !== null ? now : previous?.rosterUpdatedAt ?? null,
@@ -70,28 +70,16 @@ function registrationClosed(war, now) {
 function battleSummary(war) {
 	const raw = war.raw
 	const enemyId = war.attack ? raw.defendersId : raw.attackersId
-	const count = value => Number.isInteger(value) && value >= 0
-	let ours = raw.score?.[FAMILY_ID], theirs = raw.score?.[enemyId], estimated = false
-	if (!count(ours) || !count(theirs)) {
-		const stats = id => {
-			const players = raw.players?.[id]
-			if (!Array.isArray(players) || !players.length || !players.every(player =>
-				Number.isFinite(player.damage) && player.damage >= 0 && count(player.kills))) return null
-			return { initial: players.filter(player => player.damage >= 1).length,
-				kills: players.reduce((total, player) => total + player.kills, 0) }
-		}
-		const own = stats(FAMILY_ID), enemy = stats(enemyId)
-		if (own && enemy) {
-			ours = Math.max(0, own.initial - enemy.kills)
-			theirs = Math.max(0, enemy.initial - own.kills)
-			estimated = true
-		} else ours = theirs = null
-	}
-	const winner = raw.winnerFamilyId ?? raw.winnerId
-	const result = winner === FAMILY_ID ? 'Победа' : winner === enemyId ? 'Поражение' :
-		war.status === 'finished' && ours !== null && (ours === 0 || theirs === 0) ?
-			(ours === theirs ? 'Ничья' : ours > theirs ? 'Победа' : 'Поражение') : 'Неизвестен'
-	return { ours, theirs, estimated, result }
+	const winner = Number(raw.winnerId ?? raw.winnerFamilyId)
+	const result = winner === FAMILY_ID ? 'Победа' : winner > 0 && winner === enemyId ? 'Поражение' : 'Неопределено'
+	const players = raw.players?.[FAMILY_ID]
+	const best = field => Array.isArray(players) ? players.filter(player =>
+		player && Number.isSafeInteger(player.id) && player.id > 0 &&
+		Number.isFinite(player[field]) && player[field] >= 0 &&
+		(player.familyId === undefined || player.familyId === FAMILY_ID))
+		.reduce((top, player) => !top || player[field] > top[field] ? player : top, null) : null
+	return { result, damageMvp: war.status === 'finished' ? best('damage') : null,
+		killsMvp: war.status === 'finished' ? best('kills') : null }
 }
 
 function bindingIndex(members, decisions = {}) {

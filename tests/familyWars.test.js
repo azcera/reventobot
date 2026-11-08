@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { Collection } = require('discord.js')
 const { createStore } = require('../src/dashboard/store')
 const { rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, registrationClosed, battleSummary, queueRows } = require('../src/features/capture/familyWarData')
-const { registrationMessage } = require('../src/features/capture/familyWarMessages')
+const { announcement, registrationMessage } = require('../src/features/capture/familyWarMessages')
 const { createFamilyWars } = require('../src/services/familyWars')
 
 const start = Date.parse('2026-11-08T12:00:05Z')
@@ -380,20 +380,46 @@ test('API key is sent as x-api-key only to the fixed source and invalid credenti
 	await assert.rejects(forbidden.poll(), /доступ отклонён/)
 })
 
-test('score prefers explicit remaining counts, otherwise subtracts opposing kills from players with damage', () => {
-	const war = normalizeWar(rawWar({ status: 'finished', players: {
-		1698: [{ damage: 10, kills: 1 }, { damage: 1, kills: 0 }, { damage: 0, kills: 0 }],
-		1331: [{ damage: 2, kills: 2 }]
+test('result uses winner ID only, accepting numeric strings and preferring winnerId', () => {
+	const summary = extra => battleSummary(normalizeWar(rawWar(extra), rulesFromEnv({}), null, start))
+	for (const winnerId of [1698, '1698']) assert.equal(summary({ winnerId }).result, 'Победа')
+	for (const winnerId of [1331, '1331']) assert.equal(summary({ winnerId }).result, 'Поражение')
+	assert.equal(summary({ winnerId: '1698', winnerFamilyId: 1331 }).result, 'Победа')
+	assert.equal(summary({ winnerFamilyId: 1331 }).result, 'Поражение')
+	for (const winnerId of [undefined, null, 0, '', 'bad', 999]) {
+		assert.equal(summary({ status: 'finished', winnerId, score: { 1698: 10, 1331: 0 } }).result, 'Неопределено')
+	}
+})
+
+test('announcement restores Telegram layout and shows own-family MVPs with unambiguous static bindings', () => {
+	const f = fixture()
+	const war = normalizeWar(rawWar({ status: 'finished', winnerId: '1698', selectedMapName: null, players: {
+		1698: [{ id: 231542, name: 'Maya Well', damage: 1500, kills: 2 },
+			{ id: 42, name: 'Other Player', damage: 1000, kills: 5 }],
+		1331: [{ id: 7, name: 'Enemy MVP', damage: 99999, kills: 99 }]
 	} }), rulesFromEnv({}), null, start)
-	assert.deepEqual(battleSummary(war), { ours: 0, theirs: 0, estimated: true, result: 'Ничья' })
-	war.raw.players[1331][0].kills = 1
-	assert.deepEqual(battleSummary(war), { ours: 1, theirs: 0, estimated: true, result: 'Победа' })
-	war.raw.score = { 1698: 0, 1331: 10 }
-	war.raw.winnerFamilyId = 1331
-	assert.deepEqual(battleSummary(war), { ours: 0, theirs: 10, estimated: false, result: 'Поражение' })
-	delete war.raw.score
-	delete war.raw.players[1331][0].kills
-	assert.equal(battleSummary(war).ours, null)
+	const payload = announcement(war, null, start, f.members.values())
+	const rendered = plain(payload)
+	assert.match(rendered, /attachment:\/\/capt.png/)
+	assert.match(rendered, /# 🛡️ КАПТ ЗАЩИТА 🛡️/)
+	assert.match(rendered, /> ### 🆚 Против: `Enemy`/)
+	assert.match(rendered, /08.11.2026 15:30:00/)
+	assert.match(rendered, /Карта: `Неопределена`/)
+	assert.match(rendered, /🏆 Результат: `Победа`/)
+	assert.match(rendered, /Статус: `finished`/)
+	assert.match(rendered, /💥 MVP по урону: `Maya Well` \/ <@222222222222222222> — \*\*1500\*\*/)
+	assert.match(rendered, /🎯 MVP по киллам: `Other Player` \/ `42` — \*\*5\*\*/)
+	assert.doesNotMatch(rendered, /Осталось|Статус API|Enemy MVP/)
+	assert.equal(payload.files[0].name, 'capt.png')
+	assert.deepEqual(payload.allowedMentions, { parse: [] })
+	f.member.nickname = 'Maya | 999'
+	assert.match(plain(announcement(war, null, start, f.members.values(), { [f.member.id]: { static: '231542' } })), /<@222222222222222222>/)
+	f.members.set('duplicate', { ...f.member, id: 'duplicate', nickname: 'Copy | 231542' })
+	assert.doesNotMatch(plain(announcement(war, null, start, f.members.values(), { [f.member.id]: { static: '231542' } })), /<@/)
+	war.status = 'upcoming'
+	assert.doesNotMatch(plain(announcement(war, null, start)), /MVP/)
+	war.status = 'finished'; war.raw.players = {}
+	assert.match(plain(announcement(war, null, start)), /MVP по урону: Неопределено/)
 })
 
 test('registration deadline follows changed start time and freezes registration while announcement keeps updating', async () => {
@@ -416,11 +442,11 @@ test('registration deadline follows changed start time and freezes registration 
 	await f.service.poll()
 	assert.equal(f.changes.length, edits + 1)
 	assert.match(plain(f.changes.at(-1)), /Другая карта/)
-	assert.match(plain(f.changes.at(-1)), /0:10/)
+	assert.doesNotMatch(plain(f.changes.at(-1)), /Осталось/)
 	assert.equal(f.changes.findLast(payload => plain(payload).includes('war_join_')), frozen)
 	f.setCaptures([rawWar({ status: 'finished', score: { 1698: 0, 1331: 1 }, winnerFamilyId: 1331 })])
 	await f.service.poll()
-	assert.match(plain(f.changes.at(-1)), /0:1/)
+	assert.doesNotMatch(plain(f.changes.at(-1)), /Осталось/)
 	assert.match(plain(f.changes.at(-1)), /Поражение/)
 	const finalRow = structuredClone(f.row()), finalEdits = f.changes.length
 	f.setCaptures([rawWar({ selectedMapName: 'Should not update' })])
@@ -450,18 +476,37 @@ test('restart restores exact closure timer and API failure does not prevent regi
 	assert.ok(cleared.length > 0)
 })
 
-test('testcapt info previews latest finished announcement with historical time, map, result and score', async () => {
+test('finished announcement loads MVP bindings even without a registration', async () => {
+	const f = fixture()
+	await f.service.poll()
+	let fetches = 0
+	f.guild.members.fetch = async () => { fetches++; return f.members }
+	f.setCaptures([rawWar({ status: 'finished', winnerId: '1698', players: {
+		1698: [{ id: 231542, name: 'Maya Well', damage: 1500, kills: 5 }]
+	} })])
+	await f.service.poll()
+	assert.equal(fetches, 1)
+	assert.equal(f.row().registration_id, null)
+	assert.match(plain(f.changes.at(-1)), /MVP по урону: `Maya Well` \/ <@222222222222222222>/)
+	assert.match(plain(f.changes.at(-1)), /🏆 Результат: `Победа`/)
+	assert.deepEqual(f.changes.at(-1).attachments, [])
+})
+
+test('testcapt info previews latest finished announcement with historical time, map, result and MVPs', async () => {
 	const f = fixture(), replies = []
-	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z', score: { 1698: 0, 1331: 10 }, winnerId: 1331 }),
+	f.setCaptures([rawWar({ status: 'finished', startAt: '2026-11-07T12:30:00Z', score: { 1698: 0, 1331: 10 }, winnerId: 1331,
+		players: { 1698: [{ id: 231542, name: 'Maya Well', damage: 1500, kills: 5 }] } }),
 		rawWar({ id: 2, status: 'finished', startAt: '2026-11-06T12:30:00Z' }), rawWar()])
 	await require('../src/commands/admin/testcapt').execute({ guild: f.guild, member: f.member,
 		client: { familyWars: f.service }, reply: async payload => replies.push(payload) }, ['info'])
 	const payload = plain(replies[0])
 	assert.match(payload, /Просмотр последнего завершённого капта №45767/)
-	assert.match(payload, /0:10/)
+	assert.doesNotMatch(payload, /Осталось/)
+	assert.match(payload, /MVP по урону/)
+	assert.match(payload, /<@222222222222222222>/)
 	assert.match(payload, /Поражение/)
 	assert.match(payload, /Палето-Бей/)
-	assert.ok(payload.includes(String(Date.parse('2026-11-07T12:30:00Z') / 1000)))
+	assert.match(payload, /07.11.2026 15:30:00/)
 	assert.equal(f.saved.size, 0)
 	assert.equal(f.sent.length, 0)
 })

@@ -1,25 +1,56 @@
+const path = require('node:path')
 const { ContainerBuilder } = require('../../services/markdownContainer')
-const { MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextDisplayBuilder, SeparatorBuilder, escapeMarkdown } = require('discord.js')
-const { queueRows, registrationClosed, battleSummary } = require('./familyWarData')
+const { MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextDisplayBuilder, SeparatorBuilder, AttachmentBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, escapeMarkdown } = require('discord.js')
+const { queueRows, registrationClosed, battleSummary, bindingIndex } = require('./familyWarData')
 
 const text = value => escapeMarkdown(String(value ?? '')).replace(/@/g, '＠')
 const timestamp = time => `<t:${Math.floor(time / 1000)}:F>`
 const suffix = war => `RU8_${war.apiId}`
 const textBlock = value => new TextDisplayBuilder().setContent(value)
 
-function announcement(war, registrationUrl, now = Date.now()) {
+function announcement(war, registrationUrl, now = Date.now(), members = [], decisions = {}) {
 	const closed = registrationClosed(war, now)
 	const battle = battleSummary(war)
-	const score = battle.ours === null ? 'Неизвестен' : `${battle.ours}:${battle.theirs}${battle.estimated ? ' (расчёт по урону и убийствам)' : ''}`
+	const icon = war.attack ? '⚔️' : '🛡️'
+	const title = war.attack ? 'АТАКА' : 'ЗАЩИТА'
+	const enemyId = war.attack ? war.raw.defendersId : war.raw.attackersId
+	const enemies = war.raw.players?.[enemyId]
+	const code = value => '`' + text(value).replace(/`/g, 'ˋ') + '`'
+	const startTime = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow',
+		day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+		.format(war.startAt).replace(',', '')
 	const button = new ButtonBuilder().setStyle(war.attack ? ButtonStyle.Success : ButtonStyle.Primary)
 		.setCustomId(`capt_api_${suffix(war)}`).setDisabled(closed)
-		.setLabel(war.attack ? '⚔️ Создать регу на АТАКУ' : '🛡️ Создать регу на ЗАЩИТУ')
+		.setLabel(`${icon} Создать регу на ${war.attack ? 'АТАКУ' : 'ЗАЩИТУ'} ${icon}`)
 	const container = new ContainerBuilder().setAccentColor(war.attack ? 0x57f287 : 0x5865f2)
-		.addTextDisplayComponents(textBlock(war.attack ? '# ⚔️ КАПТ АТАКА' : '# 🛡️ КАПТ ЗАЩИТА'))
+		.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+			new MediaGalleryItemBuilder().setURL('attachment://capt.png').setDescription('CAPT')))
+		.addTextDisplayComponents(textBlock(`# ${icon} КАПТ ${title} ${icon}`))
 		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(textBlock(`Против: **${text(war.enemy)}**\nНачало: ${timestamp(war.startAt)}\nКарта: ${text(war.map)} · Квадрат: ${text(war.zone)}\nОсталось (мы : противник): **${score}**\nРезультат: ${battle.result}\nСтатус API: ${text(war.status || 'не указан')}${war.neutral ? ' · Нейтральная территория' : ''}${registrationUrl ? '\n[Открыть регистрацию](' + registrationUrl + ')' : ''}`))
+		.addTextDisplayComponents(textBlock([
+			`> ### 🆚 Против: ${code(war.enemy)}`,
+			`> ### ⏰ Начало: ${code(startTime)}`,
+			`> ### 🗺️ Квадрат: ${code(war.zone ?? 'Неопределён')}`,
+			`> ### 👥 Кол-во врагов: ${code(Array.isArray(enemies) ? enemies.length : 'Неопределено')}`,
+			`> ### 🌍 Карта: ${code(war.map)}`,
+			`> ### ${battle.result === 'Победа' ? '🏆' : battle.result === 'Поражение' ? '❌' : '❔'} Результат: ${code(battle.result)}`,
+			`> ### 📋 Статус: ${code(war.status || 'не указан')}${war.neutral ? ' · Нейтральная территория' : ''}`,
+			...(registrationUrl ? [`[Открыть регистрацию](${registrationUrl})`] : [])
+		].join('\n')))
 		.addActionRowComponents(new ActionRowBuilder().addComponents(button))
-	return { flags: MessageFlags.IsComponentsV2, components: [container], allowedMentions: { parse: [] } }
+	if (war.status === 'finished') {
+		const bindings = bindingIndex(members, decisions)
+		const label = (player, field) => {
+			if (!player) return 'Неопределено'
+			const ids = bindings.get(String(player.id)) || []
+			return `${code(player.name || 'Неизвестный игрок')} / ${ids.length === 1 ? `<@${ids[0]}>` : code(player.id)} — **${player[field]}**`
+		}
+		container.addSeparatorComponents(new SeparatorBuilder())
+			.addTextDisplayComponents(textBlock(`### 💥 MVP по урону: ${label(battle.damageMvp, 'damage')}\n### 🎯 MVP по киллам: ${label(battle.killsMvp, 'kills')}`))
+	}
+	return { flags: MessageFlags.IsComponentsV2, components: [container],
+		files: [new AttachmentBuilder(path.join(__dirname, '../../images/capt.png'), { name: 'capt.png' })],
+		allowedMentions: { parse: [] } }
 }
 
 function registrationMessage(war, registration, guild, decisions, store, now = Date.now()) {
@@ -37,7 +68,7 @@ function registrationMessage(war, registration, guild, decisions, store, now = D
 	const container = new ContainerBuilder()
 		.addTextDisplayComponents(textBlock(store.text('capture.title', { target: `капт против ${text(war.enemy)}` })),
 			textBlock(store.text('capture.time', { time: timestamp(war.startAt) })),
-			textBlock(`Карта: ${text(war.map)} (${text(war.zone)}) · Статус API: ${text(war.status || 'не указан')}\n🎮 — в игре без подтверждения в Discord · ✅ — в игре и нажал «Принять» · ⏳ — нажал «Принять», ожидает записи в игре. ${closed ? 'Регистрация закрыта. Обновление остановлено.' : 'Время и состав обновляются автоматически.'}${freshness}`))
+			textBlock(`Карта: ${text(war.map)} (${text(war.zone)}) · Статус: ${text(war.status || 'не указан')}\n🎮 — в игре без подтверждения в Discord · ✅ — в игре и нажал «Принять» · ⏳ — нажал «Принять», ожидает записи в игре. ${closed ? 'Регистрация закрыта. Обновление остановлено.' : 'Время и состав обновляются автоматически.'}${freshness}`))
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(textBlock(`Сортировка ${registration.sortMode === 'time' ? 'по времени записи' : 'по роли и времени записи'}`),
 			textBlock(`### В игре: ${confirmed.length}\n${list(confirmed)}`))
