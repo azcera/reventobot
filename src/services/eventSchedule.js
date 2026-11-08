@@ -41,7 +41,7 @@ function selectionId(event) {
 function buildSchedule(events, updatedAt, stale, now = Date.now()) {
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
-	const container = new ContainerBuilder().setAccentColor(0x5865F2)
+	const container = new ContainerBuilder({ accent_color: null })
 		.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
 			new MediaGalleryItemBuilder().setURL('attachment://schedule.png').setDescription('Расписание')))
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Расписание Majestic RP'))

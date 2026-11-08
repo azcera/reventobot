@@ -307,6 +307,10 @@ function renderTemplates() {
 }
 function previewTemplate(root, fields, values) {
 	const group = $('templateGroup').value
+	if (group === 'Правила' && !fields.some(field => componentMarkdown.parse(values[field.key] ?? field.value).some(item => item.type === 'image'))) {
+		const banner = config.templates.find(field => field.key === 'rules.1')
+		fields = [{ type: 'text', value: componentMarkdown.stringify([{ type: 'image', value: banner?.value ?? 'attachment://rules.png' }, { type: 'separator', divider: true }]) }, ...fields]
+	}
 	if (group === 'Приглашение') {
 		preview(root, fields.filter(field => field.key === 'invite.document'), values, true)
 		const section = node('div', null, 'markdown-section discord-text')

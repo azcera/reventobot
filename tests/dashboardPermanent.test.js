@@ -77,6 +77,35 @@ test('rules and invite sync reuse command builders, images and working buttons',
 	}
 })
 
+test('rules sync restores missing banner and explicit images replace the automatic banner', async t => {
+	const f = await createFixture(); t.after(() => f.close()); await f.login()
+	await f.request('/api/permanent-message', { body: { kind: 'rules', link: f.message.url, revision: store.revision } })
+	const command = require('../src/commands/admin/rules')
+	for (const [source, expected] of [
+		['## Новые правила', 'attachment://rules.png'],
+		['<img src="attachment://rules.png" />\n\n## Правила с баннером', 'attachment://rules.png'],
+		['<img src="https://example.com/custom.png" />\n\n## Свой баннер', 'https://example.com/custom.png']
+	]) {
+		const response = await f.request('/api/templates', { body: { revision: store.revision, values: { 'rules.document': source } } })
+		assert.equal(response.status, 200)
+		assert.equal((await response.json()).syncResults[0].ok, true)
+		const media = components => components.flatMap(component => [...(component.items || []).map(item => item.media.url), ...media(component.components || [])])
+		assert.deepEqual(media(f.message.components), [expected])
+		assert.deepEqual(media((await command.buildPayload()).components.map(component => component.toJSON())), [expected])
+		if (expected.startsWith('attachment://')) {
+			assert.deepEqual(f.message.lastPayload.files.map(file => file.name), ['rules.png'])
+			assert.ok(require('node:fs').existsSync(f.message.lastPayload.files[0].attachment))
+		} else assert.equal(f.message.lastPayload.files, undefined)
+	}
+	// Once restored, the next edit must reuse the existing attachment.
+	f.message.attachments.set('rules', { name: 'rules.png', url: 'https://cdn.example.com/rules.png' })
+	await store.save('templates', { 'rules.document': '## Ещё правка' }, store.revision, 'admin')
+	const response = await f.request('/api/permanent-message/sync', { body: { kind: 'rules' } })
+	assert.equal((await response.json()).syncResults[0].ok, true)
+	assert.equal(f.message.lastPayload.files, undefined)
+	assert.equal(f.message.components[0].components[0].items[0].media.url, 'https://cdn.example.com/rules.png')
+})
+
 test('binding rejects wrong guild, author, duplicate, stale revision and dynamic messages', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()
 	const bind = body => f.request('/api/permanent-message', { body: { kind: 'recruit', revision: store.revision, link: f.message.url, ...body } })
@@ -97,6 +126,24 @@ test('new singleton command publications are remembered only in the configured g
 	process.env.GUILD_ID = f.guild.id
 	f.message.guildId = 'other'; await rememberSent('invite', f.message); assert.equal(store.bindings.invite, undefined)
 	f.message.guildId = f.guild.id; await rememberSent('invite', f.message); assert.equal(store.bindings.invite.link, f.message.url)
+})
+
+test('rules preview includes the automatic banner only when Markdown has no image', () => {
+	const context = vm.createContext({
+		$: () => ({ value: 'Правила' }),
+		componentMarkdown: require('../public/component-markdown'),
+		config: { templates: [{ key: 'rules.1', value: 'attachment://rules.png' }] },
+		preview: (root, fields, values) => { root.fields = fields; root.values = values }
+	})
+	const source = readFileSync(require.resolve('../public/dashboard.js'), 'utf8')
+	vm.runInContext(source.slice(source.indexOf('function previewTemplate('), source.indexOf('function previewApplication(')), context)
+	for (const value of ['## Правила', '<img src="attachment://rules.png" />\n\n## Правила']) {
+		const root = {}
+		context.previewTemplate(root, [{ key: 'rules.document', type: 'text', value }], {})
+		const images = root.fields.flatMap(field => context.componentMarkdown.parse(field.value)).filter(item => item.type === 'image')
+		assert.equal(images.length, 1)
+		assert.equal(images[0].value, 'attachment://rules.png')
+	}
 })
 
 test('shared preview renders Markdown safely, and dashboard controls cannot add container color', () => {

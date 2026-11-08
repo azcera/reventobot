@@ -72,6 +72,19 @@ test('automatically kicks former linked members and publishes only manual candid
 	assert.ok(f.audits.some(entry => entry[1] === 'family.kick.result'))
 })
 
+test('publishes reasons and selection labels without the FRIEND and former-member notice', async () => {
+	const f = fixture(2)
+	const ids = [...f.members.keys()]
+	f.snapshot.linked.set(ids[1], '999')
+	await f.service.refresh(f.guild)
+	const payload = f.sent[0].components[0].toJSON()
+	const text = payload.components[0].content
+	assert.ok(text.includes(`<@${ids[0]}> → ник не по форме: нужен формат Имя | static`))
+	assert.ok(text.includes(`<@${ids[1]}> → не в составе семьи`))
+	assert.doesNotMatch(text, /FRIEND|Бывшие участники/)
+	assert.deepEqual(payload.components[1].components.map(button => button.label), ['Выбрать для кика', 'Выбрать для снятия ролей'])
+})
+
 test('multi-select removes all roles only from selected eligible members', async () => {
 	const f = fixture()
 	const ids = [...f.members.keys()]

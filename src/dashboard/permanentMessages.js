@@ -108,17 +108,23 @@ async function updateMessage(kind, binding, client, guild, actor) {
 		if (definitions[kind].command) {
 			const built = await require('../commands/admin/' + definitions[kind].command).buildPayload()
 			payload = { components: built.components.map(component => component.toJSON()), allowedMentions: { parse: ['roles'], repliedUser: false } }
+			const files = new Set()
 			const resolveMedia = components => {
 				for (const component of components) {
 					for (const item of component.items || []) if (item.media?.url.startsWith('attachment://')) {
 						const attachment = [...message.attachments.values()].find(file => file.name === item.media.url.slice(13))
-						if (!attachment?.url) throw problem(409, 'В сообщении отсутствует изображение шаблона. Повторно отправьте его командой бота.')
-						item.media.url = attachment.url
+						if (attachment?.url) item.media.url = attachment.url
+						else {
+							const file = built.files?.find(file => file.name === item.media.url.slice(13))
+							if (!file) throw problem(409, 'Не найден файл изображения шаблона.')
+							files.add(file)
+						}
 					}
 					if (component.components) resolveMedia(component.components)
 				}
 			}
 			resolveMedia(payload.components)
+			if (files.size) payload.files = [...files]
 		} else if (binding.markdown) {
 			parsePermanentMessage(message)
 			payload = buildEditPayload({ items: markdown.parse(store.text(binding.fields[0].key)) })

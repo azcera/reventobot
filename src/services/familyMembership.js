@@ -10,14 +10,18 @@ const isMembershipMessage = message => message.components.some(component => JSON
 
 function classify(snapshot, applications) {
 	const manual = [], automatic = []
+	const reasons = new Map()
 	for (const member of snapshot.members.values()) {
 		if (member.user.bot || member.id === member.guild?.ownerId ||
 			member.roles.cache.has(FRIEND_ROLE_ID) || applications.has(member.id)) continue
 		if (snapshot.statics.has(snapshot.linked.get(member.id))) continue
 		if (snapshot.bindings[member.id] && !snapshot.statics.has(snapshot.bindings[member.id])) automatic.push(member)
-		else manual.push(member)
+		else {
+			manual.push(member)
+			reasons.set(member.id, snapshot.linked.get(member.id) ? 'не в составе семьи' : 'ник не по форме: нужен формат Имя | static')
+		}
 	}
-	return { manual, automatic }
+	return { manual, automatic, reasons }
 }
 
 function createFamilyMembership({ client, pool, store, sync, env = process.env, logger = console,
@@ -77,13 +81,12 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 			const members = report.manual.slice(page * 25, (page + 1) * 25)
 			const text = `## Участники вне семьи — ${report.manual.length}\n` +
 				`Страница ${page + 1}/${pages}. Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
-				'FRIEND и активные заявки исключены. Бывшие участники с подтверждённой привязкой удаляются автоматически.\n' +
 				(failed ? `⚠️ Не удалось автоматически кикнуть: ${failed}. Проверьте права и журнал бота.\n` : '') +
-				(members.map((member, index) => `${page * 25 + index + 1}. <@${member.id}>`).join('\n') || 'Список пуст.')
+				(members.map((member, index) => `${page * 25 + index + 1}. <@${member.id}> → ${report.reasons.get(member.id)}`).join('\n') || 'Список пуст.')
 			const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
 			container.addActionRowComponents(new ActionRowBuilder().addComponents(
 				...['kick', 'roles'].map(action => new ButtonBuilder().setCustomId(`${PREFIX}open_${action}_${page}`)
-					.setLabel(action === 'kick' ? 'Кикнуть участников' : 'Снять все роли')
+					.setLabel(action === 'kick' ? 'Выбрать для кика' : 'Выбрать для снятия ролей')
 					.setStyle(action === 'kick' ? ButtonStyle.Danger : ButtonStyle.Secondary).setDisabled(!members.length))))
 			const payload = { components: [container], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }
 			if (existing[page]) await existing[page].edit(payload)
