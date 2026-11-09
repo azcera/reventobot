@@ -22,7 +22,7 @@ const settingDefinitions = {
 	PARENT_CHANNEL_ID: { label: 'Канал архивов', type: 'channel', channelTypes: [0] },
 	ARCHIVE_SETTINGS_CHANNEL: { label: 'Канал списков архивов', type: 'channel', channelTypes: [0] },
 	PLUS_CHANNEL_ID: { label: 'Канал регистрации на капт', type: 'channel', channelTypes: [0] },
-	CAPT_INFO_CHANNEL_ID: { label: 'Канал объявлений каптов из Majestic API', type: 'channel', channelTypes: [0] },
+	CAPT_INFO_CHANNEL_ID: { label: 'Канал объявлений каптов из Telegram', type: 'channel', channelTypes: [0] },
 	ADMIN_ROLES: { label: 'Роли модераторов бота (не дают доступ в дашборд)', type: 'roles' },
 	ROLE_PREFIXES: { label: 'Префиксы ролей в никах (приоритет сверху вниз)', type: 'rolePrefixes' },
 	MAIN_ROLE_ID: { label: 'Роль после принятия заявки', type: 'role' },

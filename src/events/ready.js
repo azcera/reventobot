@@ -1,6 +1,5 @@
 const { Events } = require('discord.js')
 const { updateLists } = require('../features/archive/updateLists')
-const { createFamilyWars } = require('../services/familyWars')
 const { createMajesticSync } = require('../services/majesticSync')
 const { createMajesticNicknameScheduler } = require('../services/majesticNicknameScheduler')
 const { createFamilyMembership } = require('../services/familyMembership')
@@ -17,8 +16,6 @@ module.exports = client => {
 			client.eventSchedule = null
 			console.error('[Schedule] Ошибка запуска:', error)
 		})
-		client.familyWars = createFamilyWars({ client, pool, store })
-		client.familyWars.start()
 		client.majesticSync ||= createMajesticSync({ pool, store })
 		client.majesticNicknames = createMajesticNicknameScheduler({ client, sync: client.majesticSync, store })
 		client.majesticNicknames.start()

@@ -122,16 +122,17 @@ async function handleAutoCaptButton(interaction) {
 	const customId = interaction.customId
 	const parts = customId.split('_')
 
-	if (parts.length < 3) {
+	if (parts.length < 3 || (parts[1] === 'tg' && parts.length < 4)) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: '❌ Не удалось распознать данные из кнопки.'
 		})
 	}
 
-	const enemyRaw = parts[1]
-	const timeRaw = parts.slice(2).join('_')
+	const fromTelegram = parts[1] === 'tg'
+	const enemyRaw = parts[fromTelegram ? 2 : 1]
+	const timeRaw = parts.slice(fromTelegram ? 3 : 2).join('_')
 
-	const target = enemyRaw.replace(/-/g, ' ')
+	const target = fromTelegram ? Buffer.from(enemyRaw.replace(/\./g, '_'), 'base64url').toString('utf8') : enemyRaw.replace(/-/g, ' ')
 	const timeInput = timeRaw.replace(/-/g, ' ')
 	const cleanTimeInput = timeInput.substring(0, 16)
 

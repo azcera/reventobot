@@ -43,7 +43,7 @@ module.exports = client => {
 		}
 
 		if (interaction.isButton() && (interaction.customId.startsWith('capt_api_') || interaction.customId.startsWith('war_'))) {
-			if (!client.familyWars) return interaction.reply({ content: 'Модуль каптов ещё не готов. Повторите позже.', flags: MessageFlags.Ephemeral })
+			if (!client.familyWars) return interaction.reply({ content: 'API-регистрация каптов временно отключена.', flags: MessageFlags.Ephemeral })
 			return client.familyWars.handle(interaction)
 		}
 
