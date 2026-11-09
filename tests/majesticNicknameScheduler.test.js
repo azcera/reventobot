@@ -8,9 +8,10 @@ function fixture() {
 	const env = { GUILD_ID: 'guild', MAJESTIC_SESSION_ID: 'fake', MAJESTIC_SERVER: 'RU8', MAJESTIC_CHARACTER_ID: '289229' }
 	const sync = { autoNicknames: async guild => { calls.push(['sync', guild.id]); return {} },
 		wait: async () => { calls.push(['wait']) }, stop: async () => { calls.push(['stop']) } }
-	const scheduler = createMajesticNicknameScheduler({ client: { guilds: { fetch: async id => ({ id }) } }, sync, store, env,
+	const client = { guilds: { fetch: async id => ({ id }) } }
+	const scheduler = createMajesticNicknameScheduler({ client, sync, store, env,
 		setTimer: (callback, delay) => { timers.push({ callback, delay }); return timers.length }, clearTimer: () => {}, logger: { error() {} } })
-	return { timers, calls, scheduler, sync, store, env }
+	return { timers, calls, scheduler, sync, store, env, client }
 }
 
 test('sync scheduler starts immediately then waits ten minutes after completion', async () => {
@@ -46,4 +47,20 @@ test('busy manual jobs are skipped and stopping an active automatic pass request
 	const stop = f.scheduler.stop(); release(); await Promise.all([tick, stop])
 	assert.ok(f.calls.some(call => call[0] === 'stop'))
 	assert.equal(f.timers.length, 1)
+})
+
+test('scheduler logs the failing stage and only safe error fields', async () => {
+	for (const [stage, fail] of [
+		['discord.guild.fetch', f => { f.client.guilds.fetch = async () => { throw Object.assign(new Error('secret'), { name: 'DiscordFailure', code: '10062;secret' }) } }],
+		['sync.start', f => { f.sync.autoNicknames = async () => { throw Object.assign(new Error('secret'), { code: 'START_FAILED' }) } }],
+		['sync.wait', f => { f.sync.wait = async () => { throw Object.assign(new Error('secret'), { code: 'WAIT_FAILED' }) } }]
+	]) {
+		const logs = [], f = fixture()
+		f.scheduler = createMajesticNicknameScheduler({ client: f.client, sync: f.sync, store: f.store, env: f.env,
+			setTimer: (callback, delay) => { f.timers.push({ callback, delay }); return f.timers.length }, clearTimer: () => {}, logger: { error: (...args) => logs.push(args) } })
+		fail(f); f.scheduler.start(); await f.timers[0].callback()
+		assert.deepEqual(logs[0][1], { stage, name: stage === 'discord.guild.fetch' ? 'DiscordFailure' : 'Error', code: stage === 'discord.guild.fetch' ? '' : stage === 'sync.start' ? 'START_FAILED' : 'WAIT_FAILED' })
+		assert.ok(!JSON.stringify(logs).includes('secret'))
+		await f.scheduler.stop()
+	}
 })

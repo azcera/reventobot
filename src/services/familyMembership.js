@@ -121,7 +121,10 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 				active = exclusive(async () => refresh(await client.guilds.fetch(env.GUILD_ID)))
 				await active
 			}
-		} catch (error) { logger.error('[Family] Проверка состава остановлена:', error.message) }
+		} catch (error) {
+			if (error.code === 'MAJESTIC_SYNC_BUSY') logger.info('[Family] Проверка состава пропущена: синхронизация уже выполняется.')
+			else logger.error('[Family] Проверка состава остановлена:', error.message)
+		}
 		finally {
 			active = null
 			if (!stopped) { timer = setTimer(tick, INTERVAL_MS); timer.unref?.() }

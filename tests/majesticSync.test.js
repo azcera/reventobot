@@ -328,6 +328,43 @@ test('concurrent runs are rejected and stop prevents the next Discord mutation',
 	assert.equal((await f.sync.state(f.guild)).run.status, 'stopped')
 })
 
+test('automatic sync releases its busy lock when startup audit or save fails', async () => {
+	for (const failure of ['audit', 'save']) {
+		const f = fixture()
+		if (failure === 'audit') f.options.store.audit = async () => { throw new Error('audit unavailable') }
+		else {
+			const query = f.options.pool.query
+			let failed = false
+			f.options.pool.query = async (...args) => {
+				if (!failed && args[0].startsWith('INSERT INTO majestic_sync_state')) { failed = true; throw new Error('save unavailable') }
+				return query(...args)
+			}
+		}
+		await assert.rejects(f.sync.autoNicknames(f.guild))
+		assert.equal((await f.sync.state(f.guild)).busy, false)
+		if (failure === 'audit') f.options.store.audit = async () => {}
+		else {
+			const query = f.options.pool.query
+			f.options.pool.query = (...args) => query(...args)
+		}
+		assert.ok(await f.sync.autoNicknames(f.guild))
+		await f.sync.wait(f.guild)
+	}
+})
+
+test('automatic sync claims the loaded state before a concurrent membership snapshot', async () => {
+	const f = fixture()
+	await f.sync.state(f.guild) // Resolve the shared entry before starting either caller.
+	const automatic = f.sync.autoNicknames(f.guild)
+	const membership = f.sync.membershipSnapshot(f.guild)
+	const [autoResult, membershipResult] = await Promise.allSettled([automatic, membership])
+	assert.equal(autoResult.status, 'fulfilled')
+	assert.equal(autoResult.value.run.status, 'running')
+	assert.equal(membershipResult.status, 'rejected')
+	assert.equal(membershipResult.reason.code, 'MAJESTIC_SYNC_BUSY')
+	await f.sync.wait(f.guild)
+})
+
 test('Discord failure is recorded without exposing response details', async () => {
 	const f = fixture(); const preview = await f.preview()
 	f.member.edit = async () => { throw new Error('private token and response') }

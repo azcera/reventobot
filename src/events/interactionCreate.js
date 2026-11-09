@@ -27,6 +27,8 @@ module.exports = client => {
 				await command.execute(interaction)
 			} catch (error) {
 				console.error(error)
+				if (error?.code === 10062) return
+				if (!interaction.replied && !interaction.deferred && Date.now() - interaction.createdTimestamp >= 3000) return
 				const payload = {
 					content: '❌ Произошла ошибка при запуске команды!',
 					flags: [MessageFlags.Ephemeral]

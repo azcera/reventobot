@@ -104,8 +104,8 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		for (const row of rows) summary[row.status] = (summary[row.status] || 0) + 1
 		return { id: randomUUID(), generatedAt: now(), source: `${env.MAJESTIC_SERVER}/${env.MAJESTIC_CHARACTER_ID}`, familyTotal: data.total, rows, summary }
 	}
-	async function start(guild, actor, kind, work) {
-		const item = await entry(guild.id)
+	async function start(guild, actor, kind, work, existingItem) {
+		const item = existingItem || await entry(guild.id)
 		if (item.busy) throw problem(409, 'Синхронизация уже выполняется.')
 		item.busy = true
 		try {
@@ -137,7 +137,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		async state(guild) { return view(await entry(guild.id)) },
 		async membershipSnapshot(guild) {
 			const item = await entry(guild.id)
-			if (item.busy) throw problem(409, 'Синхронизация уже выполняется. Повторите позже.')
+			if (item.busy) throw Object.assign(problem(409, 'Синхронизация уже выполняется. Повторите позже.'), { code: 'MAJESTIC_SYNC_BUSY' })
 			item.busy = true
 			try {
 				const data = await family(guild.id)
@@ -216,7 +216,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 					await save(guild.id, current)
 					await audit(actor, 'majestic.member.result', row.discordId, { runId: current.state.run.id, ...result })
 				}
-			})
+			}, item)
 		},
 		preview(guild, actor) {
 			return start(guild, actor, 'preview', async item => {

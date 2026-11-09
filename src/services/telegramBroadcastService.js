@@ -131,7 +131,10 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 				}
 			} catch (error) {
 				if (signal.aborted) break
-				console.error('[Telegram broadcast] Получение команд:', error.code || 'network/database error')
+				const safe = value => /^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
+				console.error('[Telegram broadcast] Получение команд:', {
+					name: safe(error?.name), code: safe(error?.code), causeCode: safe(error?.cause?.code)
+				})
 				await pause(Math.max(5, error.retryAfter || 0) * 1000)
 			}
 		}

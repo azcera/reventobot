@@ -4,7 +4,7 @@ const { Collection } = require('discord.js')
 const { createFamilyMembership, classify, isMembershipMessage, CHANNEL_ID, FRIEND_ROLE_ID, INTERVAL_MS } = require('../src/services/familyMembership')
 
 function fixture(count = 3) {
-	const edits = [], kicks = [], audits = [], sent = [], timers = []
+	const edits = [], kicks = [], audits = [], sent = [], timers = [], logs = []
 	const members = new Collection()
 	const pending = new Set()
 	const snapshot = { members, statics: new Set(['100']), linked: new Map(), bindings: {}, source: 'RU8/1' }
@@ -26,7 +26,7 @@ function fixture(count = 3) {
 	const env = { GUILD_ID: 'guild', MAJESTIC_SESSION_ID: 'test', MAJESTIC_SERVER: 'RU8', MAJESTIC_CHARACTER_ID: '1' }
 	let clock = 0
 	const service = createFamilyMembership({ client: { user: { id: 'bot' }, guilds: { fetch: async () => guild } }, pool, sync, store, env,
-		logger: { error() {} }, now: () => clock, setTimer: (callback, delay) => { timers.push({ callback, delay }); return 1 }, clearTimer() {} })
+		logger: { info: (...args) => logs.push(['info', ...args]), error: (...args) => logs.push(['error', ...args]) }, now: () => clock, setTimer: (callback, delay) => { timers.push({ callback, delay }); return 1 }, clearTimer() {} })
 	function interaction(customId, values) {
 		const replies = []
 		return { customId, values, guild, channelId: CHANNEL_ID, user: { id: 'actor' }, replies,
@@ -38,7 +38,7 @@ function fixture(count = 3) {
 		const data = event.replies[0].components?.[0].toJSON().components[0]
 		return { event, data }
 	}
-	return { service, members, pending, snapshot, guild, channel, actor, pool, sync, edits, kicks, audits, sent, timers, store,
+	return { service, members, pending, snapshot, guild, channel, actor, pool, sync, edits, kicks, audits, sent, timers, store, logs,
 		interaction, open, expire() { clock += 6 * 60 * 1000 } }
 }
 
@@ -233,4 +233,22 @@ test('scheduler checks every ten minutes independently of nickname synchronizati
 	await f.service.stop()
 	await f.timers[1].callback()
 	assert.equal(f.sent.length, 1)
+})
+
+test('scheduler treats Majestic busy as a skipped overlap and keeps its interval', async () => {
+	const f = fixture()
+	f.sync.membershipSnapshot = async () => { throw Object.assign(new Error('busy'), { code: 'MAJESTIC_SYNC_BUSY' }) }
+	f.service.start(); await f.timers[0].callback()
+	assert.deepEqual(f.logs, [['info', '[Family] Проверка состава пропущена: синхронизация уже выполняется.']])
+	assert.equal(f.timers[1].delay, INTERVAL_MS)
+	await f.service.stop()
+})
+
+test('scheduler logs other refresh failures and still schedules its next check', async () => {
+	const f = fixture()
+	f.sync.membershipSnapshot = async () => { throw new Error('unavailable') }
+	f.service.start(); await f.timers[0].callback()
+	assert.deepEqual(f.logs, [['error', '[Family] Проверка состава остановлена:', 'unavailable']])
+	assert.equal(f.timers[1].delay, INTERVAL_MS)
+	await f.service.stop()
 })

@@ -11,19 +11,26 @@ function createMajesticNicknameScheduler({ client, sync, store, env = process.en
 	}
 	async function tick() {
 		if (stopped) return
+		let stage = 'settings'
 		active = (async () => {
 			if (!store.ready || !store.getSetting('MAJESTIC_AUTO_NICKNAMES')) return
 			if (!env.MAJESTIC_SESSION_ID || !env.MAJESTIC_SERVER || !env.MAJESTIC_CHARACTER_ID) return
+			stage = 'discord.guild.fetch'
 			const guild = await client.guilds.fetch(env.GUILD_ID)
 			if (stopped) return
+			stage = 'sync.start'
 			const started = await sync.autoNicknames(guild)
 			if (!started) return
 			runningGuild = guild
 			if (stopped) await sync.stop(guild, actor)
+			stage = 'sync.wait'
 			await sync.wait(guild)
 		})()
 		try { await active }
-		catch { logger.error('[Majestic] Не удалось запустить автосинхронизацию. Проверьте базу и подключение Discord.') }
+		catch (error) {
+			const safe = value => /^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
+			logger.error('[Majestic] Не удалось запустить автосинхронизацию.', { stage, name: safe(error?.name), code: safe(error?.code) })
+		}
 		finally { active = null; runningGuild = null; schedule(INTERVAL_MS) }
 	}
 	return {

@@ -255,3 +255,36 @@ test('slow archive lookup acknowledges on time and offers a notification modal b
 	await f.listen()(button)
 	assert.match(f.modals[0].components[0].content, /Архив уже создан/)
 })
+
+test('command errors with expired interactions do not attempt a second response', async () => {
+	const f = fixture(), handle = f.listen(), event = f.interaction('capt')
+	f.client.commands.set('capt', { execute: async () => { throw Object.assign(new Error('expired'), { code: 10062 }) } })
+	await handle(event)
+	assert.deepEqual(f.replies, [])
+})
+
+test('other command errors still receive the ephemeral error response', async () => {
+	const f = fixture(), handle = f.listen(), event = f.interaction('capt')
+	f.client.commands.set('capt', { execute: async () => { throw Object.assign(new Error('failure'), { code: 'OTHER' }) } })
+	await handle(event)
+	assert.equal(f.replies.length, 1)
+	assert.match(f.replies[0].content, /ошибка при запуске команды/i)
+})
+
+test('other command errors still use a follow-up after the interaction was deferred', async () => {
+	const f = fixture(), handle = f.listen(), event = f.interaction('capt')
+	event.deferred = true
+	event.followUp = async payload => f.replies.push(payload)
+	f.client.commands.set('capt', { execute: async () => { throw new Error('failure') } })
+	await handle(event)
+	assert.equal(f.replies.length, 1)
+	assert.match(f.replies[0].content, /ошибка при запуске команды/i)
+})
+
+test('other command errors do not reply after the interaction response window expired', async () => {
+	const f = fixture(), handle = f.listen(), event = f.interaction('capt')
+	event.createdTimestamp = Date.now() - 4000
+	f.client.commands.set('capt', { execute: async () => { throw new Error('late failure') } })
+	await handle(event)
+	assert.deepEqual(f.replies, [])
+})
