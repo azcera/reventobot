@@ -30,7 +30,7 @@ function fixture(count = 3) {
 	function interaction(customId, values) {
 		const replies = []
 		return { customId, values, guild, channelId: CHANNEL_ID, user: { id: 'actor' }, replies,
-			deferReply: async () => {}, editReply: async payload => { replies.push(payload) } }
+			deferReply: async () => {}, editReply: async payload => { replies.push(payload) }, followUp: async payload => { replies.push(payload) } }
 	}
 	async function open(action = 'kick', page = 0) {
 		const event = interaction(`family_cleanup_open_${action}_${page}`)
@@ -90,7 +90,7 @@ test('publishes separate categories with the new title and copy buttons', async 
 			['Выбрать для кика', 'Выбрать для снятия ролей', 'Скопировать список'])
 		const event = f.interaction(payload.components[1].components[2].custom_id)
 		await f.service.handle(event)
-		assert.equal(event.replies[0].files[0].attachment.toString('utf8'), `<@${id}>`)
+		assert.equal(event.replies[0].content, '```\n' + `<@${id}>` + '\n```')
 	}
 })
 
@@ -294,22 +294,27 @@ test('copies the whole category across pages without pings or moderation permiss
 		const button = payload.components[0].toJSON().components[1].components[2]
 		const event = f.interaction(button.custom_id)
 		await f.service.handle(event)
-		assert.equal(event.replies[0].files[0].name, 'participants.txt')
-		assert.equal(event.replies[0].files[0].attachment.toString('utf8'), ids.map(id => `<@${id}>`).join(', '))
+		assert.equal(event.replies.map(reply => reply.content.slice(4, -4)).join(', '), ids.map(id => `<@${id}>`).join(', '))
 		assert.deepEqual(event.replies[0].allowedMentions, { parse: [] })
 	}
 	assert.equal(f.kicks.length, 0)
 	assert.equal(f.edits.length, 0)
 })
 
-test('copies large categories to a text file and handles empty categories', async () => {
+test('copies large categories in private code blocks and handles empty categories', async () => {
 	const f = fixture(100), ids = [...f.members.keys()]
 	const event = f.interaction('family_cleanup_copy_1')
 	await f.service.handle(event)
-	assert.equal(event.replies[0].files[0].attachment.toString('utf8'), ids.map(id => `<@${id}>`).join(', '))
+	assert.equal(event.replies.map(reply => reply.content.slice(4, -4)).join(', '), ids.map(id => `<@${id}>`).join(', '))
+	assert.ok(event.replies.length > 1)
+	for (const reply of event.replies) {
+		assert.ok(reply.content.length <= 2000)
+		assert.ok(reply.content.startsWith('```\n') && reply.content.endsWith('\n```'))
+		assert.equal(reply.files, undefined)
+	}
+	assert.equal(event.replies[1].flags, require('discord.js').MessageFlags.Ephemeral)
 	f.members.clear()
 	const empty = f.interaction('family_cleanup_copy_1')
 	await f.service.handle(empty)
-	assert.equal(empty.replies[0].files[0].name, 'participants.txt')
-	assert.equal(empty.replies[0].files[0].attachment.toString('utf8'), 'Список пуст.')
+	assert.equal(empty.replies[0].content, '```\nСписок пуст.\n```')
 })

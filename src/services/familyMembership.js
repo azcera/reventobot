@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto')
 const { parseNickname } = require('../features/majestic/syncPreview')
 const { ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-	StringSelectMenuBuilder, AttachmentBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
+	StringSelectMenuBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
 
 const CHANNEL_ID = '1569055629098745896'
 const FRIEND_ROLE_ID = '1499398714765348896'
@@ -162,12 +162,22 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 						const report = await load(guild)
 						const reason = CATEGORIES[Number(copy[1])]
 						const mentions = report.manual.filter(member => report.reasons.get(member.id) === reason)
-							.map(member => `<@${member.id}>`).join(', ')
-						return interaction.editReply({
-							content: `Список категории «${reason}» в файле.`,
-							files: [new AttachmentBuilder(Buffer.from(mentions || 'Список пуст.', 'utf8'), { name: 'participants.txt' })],
-							allowedMentions: { parse: [] }
-						})
+							.map(member => `<@${member.id}>`)
+						const chunks = ['']
+						for (const mention of mentions) {
+							const last = chunks.length - 1
+							if (chunks[last].length + mention.length + 2 > 1900) chunks.push(mention)
+							else chunks[last] += (chunks[last] ? ', ' : '') + mention
+						}
+						for (let index = 0; index < chunks.length; index++) {
+							const payload = {
+								content: '```\n' + (chunks[index] || 'Список пуст.') + '\n```',
+								allowedMentions: { parse: [] }
+							}
+							if (index === 0) await interaction.editReply(payload)
+							else await interaction.followUp({ ...payload, flags: MessageFlags.Ephemeral })
+						}
+						return
 					}
 					const match = /^family_cleanup_open_(kick|roles)_(\d+)$/.exec(interaction.customId)
 					const token = interaction.customId.startsWith(PREFIX + 'apply_') ? interaction.customId.slice((PREFIX + 'apply_').length) : null
