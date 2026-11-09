@@ -132,6 +132,14 @@ function registerDashboard(app, client, pool, { auth = createAuth({ client, pool
 			roles: [...req.guild.roles.cache.values()].filter(role => role.id !== req.guild.id).sort((a, b) => b.position - a.position).map(role => ({ id: role.id, name: role.name })) })
 		} catch (error) { respondError(res, error) }
 	})
+	client.mclLists ||= require('../services/mclLists').createMclLists({ client, pool, store })
+	app.get('/api/mcl-lists', (req, res) => res.json({ lists: Object.values(store.mclLists), revision: store.revision }))
+	app.post('/api/mcl-lists', async (req, res) => {
+		try {
+			if (!Number.isSafeInteger(req.body.revision)) throw problem(400, 'Обновите страницу перед сохранением.')
+			res.json(await client.mclLists.save(req.guild, req.body.lists, req.body.revision, req.dashboardUser))
+		} catch (error) { respondError(res, error) }
+	})
 	app.get('/api/config', async (req, res) => {
 		try {
 			await permanent.upgradeLegacyBindings(client, req.guild)

@@ -29,6 +29,9 @@ module.exports = client => {
 				console.error('❌ Ошибка регистрации команд приложения:', error)
 			}
 			try {
+				await client.mclLists.sync(guild)
+			} catch (error) { console.error('[MCL] Ошибка синхронизации:', error) }
+			try {
 				await updateLists(guild)
 				console.log('✅ Успешное обновление списков.')
 			} catch (error) {

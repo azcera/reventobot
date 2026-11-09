@@ -6,6 +6,7 @@ import { Templates } from './pages/Templates.jsx'
 import { Builder } from './pages/Builder.jsx'
 import { Settings } from './pages/Settings.jsx'
 import { Majestic } from './pages/Majestic.jsx'
+import { MclLists } from './pages/MclLists.jsx'
 import { dirtyGroup } from './lib/templates.mjs'
 import { showGuide } from './guides.jsx'
 
@@ -14,6 +15,7 @@ const pages = {
 	builder: { title: 'Конструктор v2', label: 'Конструктор v2', description: 'Собери сообщение и проверь его перед отправкой.', icon: PanelsTopLeft },
 	templates: { title: 'Шаблоны сообщений', label: 'Шаблоны', description: 'Редактируй содержимое. Структуру и кнопки сохранит бот.', icon: Files },
 	settings: { title: 'Настройки', label: 'Настройки', description: 'Каналы, роли и параметры работы бота.', icon: Settings2 },
+	mcl: { title: 'Списки', label: 'Списки', description: 'Управляй списками участников по ролям.', icon: Files },
 	majestic: { title: 'Majestic — синхронизация', label: 'Majestic', description: 'Сверь состав семьи с Discord перед применением изменений.', icon: RefreshCw },
 	history: { title: 'История изменений', label: 'История изменений', description: 'Последние 100 действий администраторов. Время — московское.', icon: History }
 }
@@ -157,6 +159,7 @@ export function App() {
 						<div hidden={page !== 'builder'}><Builder resources={resources} api={api} run={run} notify={notify} onDirty={setBuilderDirty} /></div>
 						<div hidden={page !== 'templates'}><Templates config={config} setConfig={setConfig} resources={resources} drafts={drafts} setDrafts={setDrafts} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'settings'}><Settings config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
+						<div hidden={page !== 'mcl'}><MclLists active={page === 'mcl'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>
 						<div hidden={page !== 'majestic'}><Majestic active={page === 'majestic'} resources={resources} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'history'}><HistoryPage active={page === 'history'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
 					</fieldset>}

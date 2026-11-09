@@ -57,6 +57,7 @@ function createStore() {
 		get revision() { return revision },
 		getSetting,
 		get bindings() { return structuredClone(state.bindings || {}) },
+		get mclLists() { return structuredClone(state.mclLists || {}) },
 		roleIds(key) { return String(getSetting(key)).split(',').map(id => id.trim()).filter(Boolean) },
 		decorate(key, container) {
 			return container.clearAccentColor()
@@ -94,6 +95,8 @@ function createStore() {
 				message_id TEXT PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL,
 				container_index INTEGER NOT NULL, prefix_length INTEGER NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS mcl_messages (guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, message_id TEXT NOT NULL, PRIMARY KEY (guild_id, channel_id));
+			CREATE TABLE IF NOT EXISTS mcl_commands (guild_id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY (guild_id, name));
 			CREATE TABLE IF NOT EXISTS dashboard_state (
 				id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL DEFAULT 0,
 				value JSONB NOT NULL DEFAULT '{"templates":{},"settings":{}}'
