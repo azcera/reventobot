@@ -29,9 +29,13 @@ test('публикация объединяет списки и повторно
  const other = { ...list, id: '00000000-0000-4000-8000-000000000002', title: 'Вторая группа', addName: 'Добавить второго', removeName: 'Убрать второго' }
  await f.service.save(f.guild, [list, other], 0, { id: 'admin' })
  assert.equal(f.sent.length, 1)
- assert.match(f.sent[0].components[0].toJSON().components[0].content, /### Игроки\n- <@1>[\s\S]*### Вторая группа\n- <@1>/)
+ const components = f.sent[0].components[0].toJSON().components
+ assert.match(components[0].content, /### Игроки\n- <@1>/)
+ assert.deepEqual(components[1].components.map(button => button.custom_id), [`mcl_add_${id}`, `mcl_remove_${id}`])
+ assert.match(components[2].content, /### Вторая группа\n- <@1>/)
+ assert.deepEqual(components[3].components.map(button => button.custom_id), [`mcl_add_${other.id}`, `mcl_remove_${other.id}`])
  assert.equal(f.sent[0].flags, MessageFlags.IsComponentsV2)
- assert.equal(f.sent[0].components[0].toJSON().components.length, 1)
+ assert.equal(components.length, 4)
  assert.deepEqual(f.sent[0].allowedMentions, { parse: [] })
  await f.service.sync(f.guild, true)
  assert.equal(f.edits.length, 1)
@@ -57,4 +61,37 @@ test('контекстная команда проверяет доступ и �
  interaction.member.permissions.has = () => true
  await f.client.commands.get(list.addName).execute(interaction)
  assert.equal(added, 'role')
+})
+
+test('кнопки проверяют доступ и меняют роль выбранного участника', async () => {
+ const previousGuildId = process.env.GUILD_ID
+ process.env.GUILD_ID = 'guild'
+ try {
+  const f = fixture()
+  f.guild.roles.cache.set('access', {})
+  await f.service.save(f.guild, [{ ...list, accessRoleId: 'access' }], 0, { id: 'admin' })
+  let response, changed
+  const interaction = { guild: f.guild, channelId: 'channel', customId: `mcl_add_${id}`, member: { permissions: { has: () => false }, roles: { cache: new Collection() } }, isButton: () => true, reply: async value => { response = value }, deferUpdate: async () => {}, editReply: async value => { response = value }, values: ['target'] }
+  await f.service.handle(interaction)
+  assert.match(response.content, /Недостаточно прав/)
+  interaction.member.roles.cache.set('access', {})
+  await f.service.handle(interaction)
+  assert.match(response.content, /Добавить в список «Игроки»/)
+  assert.equal(response.flags, MessageFlags.Ephemeral)
+  assert.equal(response.components[0].toJSON().components[0].type, 5)
+  interaction.isButton = () => false
+  f.guild.members.fetch = async target => ({ roles: { add: async role => { changed = [target, role] }, remove: async role => { changed = [target, role, 'remove'] } } })
+  await f.service.handle(interaction)
+  assert.deepEqual(changed, ['target', 'role'])
+  interaction.customId = `mcl_remove_${id}`
+  await f.service.handle(interaction)
+  assert.deepEqual(changed, ['target', 'role', 'remove'])
+  interaction.member.roles.cache.clear()
+  changed = null
+  await f.service.handle(interaction)
+  assert.equal(changed, null)
+  assert.match(response.content, /Недостаточно прав/)
+ } finally {
+  if (previousGuildId === undefined) delete process.env.GUILD_ID; else process.env.GUILD_ID = previousGuildId
+ }
 })

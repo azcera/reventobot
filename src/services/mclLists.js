@@ -1,4 +1,4 @@
-const { ApplicationCommandType, ContextMenuCommandBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
+const { ApplicationCommandType, ContextMenuCommandBuilder, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
 const { problem } = require('../dashboard/auth')
 
 function validateLists(lists, guild) {
@@ -18,6 +18,10 @@ function validateLists(lists, guild) {
    names.add(name)
   }
  }
+}
+
+function canManage(interaction, list, store) {
+ return interaction.member.permissions.has(PermissionFlagsBits.Administrator) || store.roleIds('ADMIN_ROLES').some(id => interaction.member.roles.cache.has(id)) || Boolean(list.accessRoleId && interaction.member.roles.cache.has(list.accessRoleId))
 }
 
 function createMclLists({ client, pool, store }) {
@@ -45,7 +49,7 @@ function createMclLists({ client, pool, store }) {
     const current = Object.values(store.mclLists).find(item => item.id === entry.list.id)
     const add = current?.addName === name
     if (!current || (!add && current.removeName !== name)) return interaction.reply({ content: 'Команда больше не настроена.', flags: MessageFlags.Ephemeral })
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !store.roleIds('ADMIN_ROLES').some(id => interaction.member.roles.cache.has(id)) && !(current.accessRoleId && interaction.member.roles.cache.has(current.accessRoleId))) return interaction.reply({ content: 'Недостаточно прав.', flags: MessageFlags.Ephemeral })
+    if (!canManage(interaction, current, store)) return interaction.reply({ content: 'Недостаточно прав.', flags: MessageFlags.Ephemeral })
     await interaction.deferReply({ flags: MessageFlags.Ephemeral })
     const member = await interaction.guild.members.fetch(interaction.targetId)
     if (add) await member.roles.add(current.roleId); else await member.roles.remove(current.roleId)
@@ -67,12 +71,18 @@ function createMclLists({ client, pool, store }) {
     if (message) await message.delete()
     await pool.query('DELETE FROM mcl_messages WHERE guild_id = $1 AND channel_id = $2', [guild.id, channelId]); continue
    }
-   const content = channelLists.map(list => {
+   const sections = channelLists.map(list => {
     const members = [...guild.members.cache.values()].filter(member => member.roles.cache.has(list.roleId)).map(member => `- <@${member.id}>`)
     return `### ${list.title.replace(/([\\*_~\x60|])/g, '\\$1')}\n${members.join('\n') || 'Нет участников'}`
-   }).join('\n\n')
-   if (content.length > 2000) throw new Error('Списки в канале превышают лимит Discord в 2000 символов.')
-   const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+   })
+   if (sections.join('\n\n').length > 2000) throw new Error('Списки в канале превышают лимит Discord в 2000 символов.')
+   const container = new ContainerBuilder()
+   channelLists.forEach((list, index) => {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(sections[index]))
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+     new ButtonBuilder().setCustomId(`mcl_add_${list.id}`).setLabel('+').setStyle(ButtonStyle.Secondary),
+     new ButtonBuilder().setCustomId(`mcl_remove_${list.id}`).setLabel('−').setStyle(ButtonStyle.Secondary)))
+   })
    const payload = { components: [container], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }
    if (message) await message.edit({ ...payload, ...(message.content ? { content: null } : {}) }); else {
     message = await channel.send(payload)
@@ -80,7 +90,26 @@ function createMclLists({ client, pool, store }) {
    }
   }
  }
- return { sync: (guild, messagesOnly = false) => serial(() => sync(guild, messagesOnly)), async save(guild, lists, revision, actor) {
+ return { sync: (guild, messagesOnly = false) => serial(() => sync(guild, messagesOnly)), async handle(interaction) {
+  const match = /^mcl_(add|remove)_([a-f0-9-]{36})$/.exec(interaction.customId)
+  const list = match && store.mclLists[match[2]]
+  if (!list || interaction.guild?.id !== process.env.GUILD_ID || interaction.channelId !== list.channelId) return interaction.reply({ content: 'Список больше недоступен.', flags: MessageFlags.Ephemeral })
+  if (!canManage(interaction, list, store)) return interaction.reply({ content: 'Недостаточно прав.', flags: MessageFlags.Ephemeral })
+  const add = match[1] === 'add'
+  if (interaction.isButton()) {
+   const menu = new UserSelectMenuBuilder().setCustomId(interaction.customId).setPlaceholder(add ? 'Выберите участника для добавления' : 'Выберите участника для удаления').setMinValues(1).setMaxValues(1)
+   return interaction.reply({ content: `${add ? 'Добавить в список' : 'Убрать из списка'} «${list.title}»:`, components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } })
+  }
+  await interaction.deferUpdate()
+  try {
+   const member = await interaction.guild.members.fetch(interaction.values[0])
+   if (add) await member.roles.add(list.roleId); else await member.roles.remove(list.roleId)
+   await interaction.editReply({ content: add ? 'Роль выдана.' : 'Роль снята.', components: [] })
+  } catch (error) {
+   console.error('[Lists] Ошибка изменения роли:', error)
+   await interaction.editReply({ content: 'Не удалось изменить роль. Проверьте права и иерархию ролей бота.', components: [] })
+  }
+ }, async save(guild, lists, revision, actor) {
   validateLists(lists, guild)
   return serial(async () => {
    const old = store.mclLists

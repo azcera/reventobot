@@ -47,6 +47,13 @@ module.exports = client => {
 			return client.familyWars.handle(interaction)
 		}
 
+		if (interaction.customId?.startsWith('mcl_') && (interaction.isButton() || interaction.isUserSelectMenu())) {
+			if (!client.mclLists) return interaction.reply({ content: 'Списки временно недоступны.', flags: MessageFlags.Ephemeral })
+			try { await client.mclLists.handle(interaction) }
+			catch (error) { console.error('[Lists] Ошибка обработки:', error); if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: 'Не удалось выполнить действие.', flags: MessageFlags.Ephemeral }) }
+			return
+		}
+
 		if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('family_cleanup_')) {
 			if (!client.familyMembership) return interaction.reply({ content: 'Проверка семьи ещё не готова.', flags: MessageFlags.Ephemeral })
 			return client.familyMembership.handle(interaction)
