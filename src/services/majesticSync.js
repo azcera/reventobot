@@ -3,6 +3,7 @@ const { randomUUID } = require('node:crypto')
 const { setTimeout: delay } = require('node:timers/promises')
 const { PermissionFlagsBits } = require('discord.js')
 const { readConfig, fetchMembers } = require('./majesticClient')
+const { loadDiscordMembers } = require('./discordMembers')
 const { buildPreview, rankRoles, tierRoles, parseNickname } = require('../features/majestic/syncPreview')
 
 const problem = (status, message) => Object.assign(new Error(message), { status })
@@ -78,21 +79,8 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 		return structuredClone({ ...item.state, busy: item.busy, rankRoles,
 			configured: Boolean(readFamily || (env.MAJESTIC_SESSION_ID && env.MAJESTIC_SERVER && env.MAJESTIC_CHARACTER_ID)) })
 	}
-	async function discordMembers(guild) {
-		for (let attempt = 0; ; attempt++) {
-			try { return await guild.members.fetch({ time: 30000 }) }
-			catch (error) {
-				const seconds = error?.data?.retry_after
-				if (error?.name !== 'GatewayRateLimitError' || error.data?.opcode !== 8 ||
-					!Number.isFinite(seconds) || seconds < 0 || seconds > 60 || attempt >= 2) throw error
-				const waitMs = Math.ceil(seconds * 1000) + 250
-				logger.error('[Majestic] Лимит Discord: ожидание перед повтором загрузки участников', {
-					guildId: guild.id, attempt: attempt + 1, waitMs
-				})
-				await sleep(waitMs)
-			}
-		}
-	}
+	const discordMembers = guild => loadDiscordMembers(guild, { now, sleep,
+		onRateLimit: details => logger.error('[Majestic] Лимит Discord: ожидание перед повтором загрузки участников', details) })
 	async function snapshot(guild, decisions, { nicknamesOnly = false } = {}) {
 		const data = await family(guild.id)
 		if (!data.total || data.items.length !== data.total) throw problem(502, 'Получен пустой или неполный состав Majestic. Изменения остановлены.')

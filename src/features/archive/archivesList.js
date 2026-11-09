@@ -1,3 +1,4 @@
+const { loadDiscordMembers } = require('../../services/discordMembers')
 const { store: dashboard } = require('../../dashboard/store')
 const { ContainerBuilder } = require('../../services/markdownContainer')
 const {
@@ -25,7 +26,7 @@ async function getArchivesLists(guild) {
 		return
 	}
 
-	await guild.members.fetch()
+	await loadDiscordMembers(guild)
 
 	/**
 	 * @type {Object.<string, Array<{member: GuildMember, archiveChannel: GuildChannel|null, staticId: number, hasValidArchive: boolean, isInvalidNick: boolean}>>}

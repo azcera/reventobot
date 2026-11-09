@@ -79,7 +79,7 @@ test('bulk sync uses saved prefixes and role priority, preserves names and conti
 		member('last', 'Tony', [second])
 	]
 	const fetchMember = f.guild.members.fetch
-	f.guild.members.fetch = async id => id ? fetchMember(id) : new Collection(members.map(item => [item.id, item]))
+	f.guild.members.fetch = async id => typeof id === 'string' || id?.user ? fetchMember(id) : new Collection(members.map(item => [item.id, item]))
 	f.setAdmin(false)
 	assert.equal((await f.request('/api/role-prefixes/sync', { body: {} })).status, 403)
 	f.setAdmin(true)
@@ -99,7 +99,7 @@ test('bulk sync prevents overlapping runs and releases its lock after a fetch er
 	let release, started
 	const fetching = new Promise(resolve => { started = resolve })
 	f.guild.members.fetch = async id => {
-		if (id) return fetchMember(id)
+		if (typeof id === 'string' || id?.user) return fetchMember(id)
 		started()
 		return new Promise((resolve, reject) => { release = () => reject(new Error('Fetch failed')) })
 	}
@@ -108,6 +108,6 @@ test('bulk sync prevents overlapping runs and releases its lock after a fetch er
 	assert.equal((await f.request('/api/role-prefixes/sync', { body: {} })).status, 409)
 	release()
 	assert.equal((await running).status, 502)
-	f.guild.members.fetch = async id => id ? fetchMember(id) : new Collection()
+	f.guild.members.fetch = async id => typeof id === 'string' || id?.user ? fetchMember(id) : new Collection()
 	assert.equal((await f.request('/api/role-prefixes/sync', { body: {} })).status, 200)
 })

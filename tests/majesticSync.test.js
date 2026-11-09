@@ -35,7 +35,7 @@ function fixture(overrides = {}) {
 	const sync = createMajesticSync(options)
 	async function preview() { await sync.preview(guild, actor); await sync.wait(guild); return (await sync.state(guild)).preview }
 	return { sync, options, actor, guild, member, members, edits, audits, preview,
-		setFamily(value) { family = value }, advance() { clock += 16 * 60 * 1000 }, saved: () => saved }
+		setFamily(value) { family = value }, advance(ms = 16 * 60 * 1000) { clock += ms }, saved: () => saved }
 }
 
 function bulkFixture(count = 150) {
@@ -211,7 +211,7 @@ test('expired previews and non-change rows cannot be applied', async () => {
 test('apply waits for the opcode 8 rate limit then fetches fresh members before editing', async () => {
 	const waits = []
 	const f = fixture({ sleep: async ms => { waits.push(ms); assert.equal(f.edits.length, 0) } })
-	const preview = await f.preview()
+	const preview = await f.preview(); f.advance(30000)
 	const fetch = f.guild.members.fetch
 	let requests = 0
 	f.guild.members.fetch = async options => {
@@ -239,7 +239,7 @@ test('member fetch retries are bounded and do not retry unrelated or invalid rat
 	]) {
 		const waits = []
 		const f = fixture({ sleep: async ms => waits.push(ms) })
-		const preview = await f.preview()
+		const preview = await f.preview(); f.advance(30000)
 		let requests = 0
 		f.guild.members.fetch = async () => { requests++; throw Object.assign(new Error('fetch failed'), { name, data }) }
 		await f.sync.apply(f.guild, f.actor, { previewId: preview.id, discordIds: [f.member.id] })
@@ -253,7 +253,7 @@ test('member fetch retries are bounded and do not retry unrelated or invalid rat
 
 test('stopping while waiting for member fetch prevents edits', async () => {
 	const f = fixture({ sleep: async () => { await f.sync.stop(f.guild, f.actor) } })
-	const preview = await f.preview()
+	const preview = await f.preview(); f.advance(30000)
 	const fetch = f.guild.members.fetch
 	let requests = 0
 	f.guild.members.fetch = async options => {
@@ -342,7 +342,7 @@ test('apply diagnostics identify failing stages and redact secrets without expos
 	for (const stage of ['discord.roles.fetch', 'discord.members.fetch', 'database.save', 'audit: majestic.member.request', 'discord.member.edit:222222222222222222']) {
 		const logs = []
 		const f = fixture({ logger: { error: (...args) => logs.push(args) }, env: { MAJESTIC_SESSION_ID: 'test-session-secret', TOKEN: 'test-bot-secret' } })
-		const preview = await f.preview()
+		const preview = await f.preview(); f.advance(30000)
 		const error = Object.assign(new Error('Failure test-session-secret test-bot-secret https://example.com/private sessionId=unknown-secret'), { code: 'TEST_FAILURE', status: 503,
 			requestBody: { token: 'request-body-secret' }, response: { secret: 'response-secret' } })
 		const fail = async () => { throw error }

@@ -1,7 +1,8 @@
+const { loadDiscordMembers } = require('./discordMembers')
 const { adminPrefix } = require('../utils/adminPrefix')
 
 async function syncRolePrefixes(guild, rolePrefixes) {
-	const members = await guild.members.fetch()
+	const members = await loadDiscordMembers(guild)
 	const result = { updated: 0, unchanged: 0, skipped: 0, failed: 0 }
 	for (const member of members.values()) {
 		const prefix = adminPrefix([...member.roles.cache.keys()], [], rolePrefixes)

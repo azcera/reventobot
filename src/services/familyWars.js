@@ -1,5 +1,6 @@
 const { createHash } = require('node:crypto')
 const { setTimeout: delay } = require('node:timers/promises')
+const { loadDiscordMembers } = require('./discordMembers')
 const { PermissionFlagsBits, MessageFlags, TextDisplayBuilder } = require('discord.js')
 const { SERVER, rulesFromEnv, nextPollAt, normalizeWar, canAnnounce, registrationClosed, bindingIndex } = require('../features/capture/familyWarData')
 const { announcement, registrationMessage } = require('../features/capture/familyWarMessages')
@@ -21,31 +22,7 @@ function hasButton(message, marker) {
 function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = fetch,
 	now = Date.now, logger = console, setTimer = setTimeout, clearTimer = clearTimeout, sleep = delay }) {
 	const locks = new Map()
-	const memberLoads = new WeakMap()
-	async function loadMembers(guild) {
-		const previous = memberLoads.get(guild)
-		if (previous?.pending) return previous.pending
-		if (previous && now() - previous.loadedAt < 30000) return guild.members.cache
-		const state = {}
-		memberLoads.set(guild, state)
-		state.pending = (async () => {
-			for (let attempt = 0; ; attempt++) {
-				try {
-					const members = await guild.members.fetch({ time: 30000 })
-					state.loadedAt = now()
-					return members
-				} catch (error) {
-					const seconds = error?.data?.retry_after
-					if (error?.name !== 'GatewayRateLimitError' || error.data?.opcode !== 8 ||
-						!Number.isFinite(seconds) || seconds < 0 || seconds > 60 || attempt >= 2) throw error
-					await sleep(Math.ceil(seconds * 1000) + 250)
-				}
-			}
-		})()
-		try { return await state.pending }
-		catch (error) { memberLoads.delete(guild); throw error }
-		finally { state.pending = null }
-	}
+	const loadMembers = guild => loadDiscordMembers(guild, { now, sleep })
 	let schema, timer, closeTimer, polling, stopped = true
 	const rules = rulesFromEnv(env)
 	function ensureSchema() {
