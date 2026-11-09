@@ -51,6 +51,18 @@ test('message has a group button beside nearest event and marks stale data', () 
 	assert.match(stale.components.at(-1).content, /Источник недоступен/)
 })
 
+test('capture status follows Moscow weekdays and includes start but excludes end', () => {
+	for (let day = 9; day <= 15; day++) {
+		for (const time of ['14:59', '15:00', '18:00', '20:59', '21:00', '23:59']) {
+			const timestamp = Date.parse(`2026-11-${String(day).padStart(2, '0')}T${time}:00+03:00`)
+			const active = [9, 11, 13, 14].includes(day) && time >= '15:00' && time < '21:00'
+			const container = buildSchedule(getSchedule(timestamp).events, timestamp, false, timestamp).components[0].toJSON()
+			const captures = container.components.find(component => component.content?.includes('⚔️'))
+			assert.equal(captures.content.split('\n').at(-1), active ? 'Капты активны' : 'Капты не активны', `${day} ${time} МСК`)
+		}
+	}
+})
+
 test('schedule resolves server emoji names and keeps fallback for missing or unavailable emoji', () => {
 	const names = ['airdrop', 'chest', 'dilers', 'ceha', 'postavka', 'ostrov', 'capts']
 	const emojis = new Collection(names.map((name, index) => [name, {

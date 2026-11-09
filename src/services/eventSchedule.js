@@ -64,7 +64,20 @@ function buildSchedule(events, updatedAt, stale, now = Date.now(), emojis) {
 	}
 	const rows = upcoming.slice(1, 4).map(event => `### ${eventEmoji(event.label)} ${event.time} — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`)
 	const special = events.filter(event => event.is247 || event.window || !/^([01]\d|2[0-3]):[0-5]\d$/.test(event.time))
-		.map(event => `### ${eventEmoji(event.label)} ${escapeMarkdown(event.label)} — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n${escapeMarkdown(event.note)}` : ''}`)
+		.map(event => {
+			let status = ''
+			if (event.id === 'captures') {
+				const moscow = new Date(now + MSK)
+				const minutes = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
+				const [start, end] = event.time.split('–').map(time => {
+					const [hours, minutes] = time.split(':').map(Number)
+					return hours * 60 + minutes
+				})
+				const active = event.days.includes(WEEKDAYS[moscow.getUTCDay()]) && minutes >= start && minutes < end
+				status = `\nКапты ${active ? 'активны' : 'не активны'}`
+			}
+			return `### ${eventEmoji(event.label)} ${escapeMarkdown(event.label)} — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n${escapeMarkdown(event.note)}` : ''}${status}`
+		})
 	if (rows.length) container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large))
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(rows.join('\n')))
 	for (const row of special) container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large))
