@@ -46,6 +46,7 @@ test('classifies only outsiders: excludes family, FRIEND, applications, owner an
 	const f = fixture(8)
 	const list = [...f.members.values()]
 	f.snapshot.linked.set(list[0].id, '100')
+	list[0].nickname = 'User | 100'
 	list[1].roles.cache.set(FRIEND_ROLE_ID, { id: FRIEND_ROLE_ID })
 	f.pending.add(list[2].id)
 	list[3].user.bot = true
@@ -72,18 +73,25 @@ test('automatically kicks former linked members and publishes only manual candid
 	assert.ok(f.audits.some(entry => entry[1] === 'family.kick.result'))
 })
 
-test('publishes reasons and selection labels without the FRIEND and former-member notice', async () => {
+test('publishes separate categories with the new title and copy buttons', async () => {
 	const f = fixture(2)
 	const ids = [...f.members.keys()]
 	f.snapshot.linked.set(ids[1], '999')
+	f.members.get(ids[1]).nickname = 'User | 999'
 	await f.service.refresh(f.guild)
-	const payload = f.sent[0].components[0].toJSON()
-	const text = payload.components[0].content
-	assert.ok(text.includes(`### ник не по форме: нужен формат Имя | static\n- <@${ids[0]}>`))
-	assert.ok(text.includes(`### не в составе семьи\n- <@${ids[1]}>`))
-	assert.doesNotMatch(text, / → /)
-	assert.doesNotMatch(text, /FRIEND|Бывшие участники/)
-	assert.deepEqual(payload.components[1].components.map(button => button.label), ['Выбрать для кика', 'Выбрать для снятия ролей'])
+	assert.equal(f.sent.length, 2)
+	for (const [page, reason, id] of [[0, 'Не в составе семьи', ids[1]], [1, 'Ник не по форме', ids[0]]]) {
+		const payload = f.sent[page].components[0].toJSON()
+		const text = payload.components[0].content
+		assert.ok(text.includes('## Несинхронизированно с игрой — 2'))
+		assert.ok(text.includes(`### ${reason}\n- <@${id}>`))
+		assert.doesNotMatch(text, /FRIEND|Бывшие участники/)
+		assert.deepEqual(payload.components[1].components.map(button => button.label),
+			['Выбрать для кика', 'Выбрать для снятия ролей', 'Скопировать список'])
+		const event = f.interaction(payload.components[1].components[2].custom_id)
+		await f.service.handle(event)
+		assert.equal(event.replies[0].files[0].attachment.toString('utf8'), `<@${id}>`)
+	}
 })
 
 test('multi-select removes all roles only from selected eligible members', async () => {
@@ -100,7 +108,7 @@ test('multi-select removes all roles only from selected eligible members', async
 
 test('selection rechecks family membership, FRIEND, active applications and permissions', async () => {
 	for (const protect of [
-		(f, id) => { f.snapshot.linked.set(id, '100') },
+		(f, id) => { f.snapshot.linked.set(id, '100'); f.members.get(id).nickname = 'User | 100' },
 		(f, id) => { f.pending.add(id) },
 		(f, id) => { f.members.get(id).roles.cache.set(FRIEND_ROLE_ID, { id: FRIEND_ROLE_ID }) },
 		f => { f.actor.permissions.has = () => false },
@@ -165,16 +173,19 @@ test('groups mixed reasons before pagination and selects the same members shown 
 	const ids = [...f.members.keys()]
 	const outside = ids.filter((id, index) => index % 2 === 1)
 	const malformed = ids.filter((id, index) => index % 2 === 0)
-	for (const id of outside) f.snapshot.linked.set(id, '999')
+	for (const id of outside) {
+		f.snapshot.linked.set(id, '999')
+		f.members.get(id).nickname = 'User | 999'
+	}
 	await f.service.refresh(f.guild)
-	const grouped = [...outside, ...malformed]
-	assert.equal(f.sent.length, 3)
-	for (let page = 0; page < 3; page++) {
+	const groups = [outside.slice(0, 25), outside.slice(25), malformed.slice(0, 25), malformed.slice(25)]
+	assert.equal(f.sent.length, 4)
+	for (let page = 0; page < 4; page++) {
 		const text = f.sent[page].components[0].toJSON().components[0].content
-		const expected = grouped.slice(page * 25, (page + 1) * 25)
+		const expected = groups[page]
 		assert.deepEqual([...text.matchAll(/<@(\d+)>/g)].map(match => match[1]), expected)
-		assert.equal((text.match(/### не в составе семьи/g) || []).length, page < 2 ? 1 : 0)
-		assert.equal((text.match(/### ник не по форме/g) || []).length, page > 0 ? 1 : 0)
+		assert.equal((text.match(/### Не в составе семьи/g) || []).length, page < 2 ? 1 : 0)
+		assert.equal((text.match(/### Ник не по форме/g) || []).length, page >= 2 ? 1 : 0)
 		for (const action of ['kick', 'roles']) {
 			const { data } = await f.open(action, page)
 			assert.deepEqual(data.options.map(option => option.value), expected)
@@ -251,4 +262,54 @@ test('scheduler logs other refresh failures and still schedules its next check',
 	assert.deepEqual(f.logs, [['error', '[Family] Проверка состава остановлена:', 'unavailable']])
 	assert.equal(f.timers[1].delay, INTERVAL_MS)
 	await f.service.stop()
+})
+
+test('roleless members take priority over nickname, roster, bindings and pending applications', () => {
+	const f = fixture(5), list = [...f.members.values()]
+	for (const member of list) member.roles.cache = new Collection([[f.guild.id, { id: f.guild.id }]])
+	list[0].nickname = 'User | 100'
+	f.snapshot.linked.set(list[0].id, '100')
+	list[1].nickname = 'User | 999'
+	f.snapshot.linked.set(list[1].id, '999')
+	f.snapshot.bindings[list[2].id] = '999'
+	f.pending.add(list[3].id)
+	const report = classify(f.snapshot, f.pending)
+	assert.equal(report.manual.length, 5)
+	assert.equal(report.automatic.length, 0)
+	assert.deepEqual([...report.reasons.values()], Array(5).fill('Без ролей'))
+})
+
+test('malformed nickname stays visible even when linked to the family', () => {
+	const f = fixture(1), id = [...f.members.keys()][0]
+	f.snapshot.linked.set(id, '100')
+	const report = classify(f.snapshot, f.pending)
+	assert.equal(report.reasons.get(id), 'Ник не по форме')
+})
+
+test('copies the whole category across pages without pings or moderation permissions', async () => {
+	const f = fixture(30), ids = [...f.members.keys()]
+	f.actor.permissions.has = () => false
+	await f.service.refresh(f.guild)
+	for (const payload of f.sent) {
+		const button = payload.components[0].toJSON().components[1].components[2]
+		const event = f.interaction(button.custom_id)
+		await f.service.handle(event)
+		assert.equal(event.replies[0].files[0].name, 'participants.txt')
+		assert.equal(event.replies[0].files[0].attachment.toString('utf8'), ids.map(id => `<@${id}>`).join(', '))
+		assert.deepEqual(event.replies[0].allowedMentions, { parse: [] })
+	}
+	assert.equal(f.kicks.length, 0)
+	assert.equal(f.edits.length, 0)
+})
+
+test('copies large categories to a text file and handles empty categories', async () => {
+	const f = fixture(100), ids = [...f.members.keys()]
+	const event = f.interaction('family_cleanup_copy_1')
+	await f.service.handle(event)
+	assert.equal(event.replies[0].files[0].attachment.toString('utf8'), ids.map(id => `<@${id}>`).join(', '))
+	f.members.clear()
+	const empty = f.interaction('family_cleanup_copy_1')
+	await f.service.handle(empty)
+	assert.equal(empty.replies[0].files[0].name, 'participants.txt')
+	assert.equal(empty.replies[0].files[0].attachment.toString('utf8'), 'Список пуст.')
 })

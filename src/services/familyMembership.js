@@ -1,11 +1,13 @@
 const { randomUUID } = require('node:crypto')
+const { parseNickname } = require('../features/majestic/syncPreview')
 const { ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-	StringSelectMenuBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
+	StringSelectMenuBuilder, AttachmentBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
 
 const CHANNEL_ID = '1569055629098745896'
 const FRIEND_ROLE_ID = '1499398714765348896'
 const INTERVAL_MS = 10 * 60 * 1000
 const PREFIX = 'family_cleanup_'
+const CATEGORIES = ['Не в составе семьи', 'Ник не по форме', 'Без ролей']
 const isMembershipMessage = message => message.components.some(component => JSON.stringify(component.toJSON()).includes(PREFIX))
 
 function classify(snapshot, applications) {
@@ -13,16 +15,34 @@ function classify(snapshot, applications) {
 	const reasons = new Map()
 	for (const member of snapshot.members.values()) {
 		if (member.user.bot || member.id === member.guild?.ownerId ||
-			member.roles.cache.has(FRIEND_ROLE_ID) || applications.has(member.id)) continue
-		if (snapshot.statics.has(snapshot.linked.get(member.id))) continue
+			member.roles.cache.has(FRIEND_ROLE_ID)) continue
+		if (!member.roles.cache.some(role => role.id !== member.guild.id)) {
+			manual.push(member)
+			reasons.set(member.id, 'Без ролей')
+			continue
+		}
+		if (applications.has(member.id)) continue
+		const malformed = !parseNickname(member.nickname)
+		if (!malformed && snapshot.statics.has(snapshot.linked.get(member.id))) continue
 		if (snapshot.bindings[member.id] && !snapshot.statics.has(snapshot.bindings[member.id])) automatic.push(member)
 		else {
 			manual.push(member)
-			reasons.set(member.id, snapshot.linked.get(member.id) ? 'не в составе семьи' : 'ник не по форме: нужен формат Имя | static')
+			reasons.set(member.id, malformed ? 'Ник не по форме' : 'Не в составе семьи')
 		}
 	}
 	manual.sort((a, b) => reasons.get(a.id).localeCompare(reasons.get(b.id), 'ru'))
 	return { manual, automatic, reasons }
+}
+
+function reportPages(report) {
+	const pages = []
+	for (const reason of CATEGORIES) {
+		const members = report.manual.filter(member => report.reasons.get(member.id) === reason)
+		for (let offset = 0; offset < members.length; offset += 25) {
+			pages.push({ reason, members: members.slice(offset, offset + 25) })
+		}
+	}
+	return pages.length ? pages : [{ members: [] }]
 }
 
 function createFamilyMembership({ client, pool, store, sync, env = process.env, logger = console,
@@ -77,29 +97,25 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 			before = messages.last().id
 		}
 		existing.sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-		const pages = Math.max(1, Math.ceil(report.manual.length / 25))
-		for (let page = 0; page < pages; page++) {
-			const members = report.manual.slice(page * 25, (page + 1) * 25)
-			const groups = new Map()
-			for (const member of members) {
-				const reason = report.reasons.get(member.id)
-				if (!groups.has(reason)) groups.set(reason, [])
-				groups.get(reason).push(member)
-			}
-			const text = `## Участники вне семьи — ${report.manual.length}\n` +
-				`Страница ${page + 1}/${pages}. Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
+		const pages = reportPages(report)
+		for (let page = 0; page < pages.length; page++) {
+			const { members, reason } = pages[page]
+			const text = `## Несинхронизированно с игрой — ${report.manual.length}\n` +
+				`Страница ${page + 1}/${pages.length}. Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
 				(failed ? `⚠️ Не удалось автоматически кикнуть: ${failed}. Проверьте права и журнал бота.\n` : '') +
-				([...groups].map(([reason, group]) => `### ${reason}\n${group.map(member => `- <@${member.id}>`).join('\n')}`).join('\n\n') || 'Список пуст.')
+				(members.length ? `### ${reason}\n${members.map(member => `- <@${member.id}>`).join('\n')}` : 'Список пуст.')
 			const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
 			container.addActionRowComponents(new ActionRowBuilder().addComponents(
 				...['kick', 'roles'].map(action => new ButtonBuilder().setCustomId(`${PREFIX}open_${action}_${page}`)
 					.setLabel(action === 'kick' ? 'Выбрать для кика' : 'Выбрать для снятия ролей')
-					.setStyle(action === 'kick' ? ButtonStyle.Danger : ButtonStyle.Secondary).setDisabled(!members.length))))
+					.setStyle(action === 'kick' ? ButtonStyle.Danger : ButtonStyle.Secondary).setDisabled(!members.length)),
+				new ButtonBuilder().setCustomId(`${PREFIX}copy_${CATEGORIES.indexOf(reason)}`)
+					.setLabel('Скопировать список').setStyle(ButtonStyle.Secondary).setDisabled(!members.length)))
 			const payload = { components: [container], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }
 			if (existing[page]) await existing[page].edit(payload)
 			else await channel.send(payload)
 		}
-		for (const message of existing.slice(pages)) await message.delete()
+		for (const message of existing.slice(pages.length)) await message.delete()
 	}
 	async function refresh(guild) {
 		const report = await load(guild)
@@ -141,6 +157,18 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 					const guild = interaction.guild
 					if (guild.id !== env.GUILD_ID || interaction.channelId !== CHANNEL_ID) throw new Error('Действие доступно только в канале списка семьи.')
 					const actor = await guild.members.fetch({ user: interaction.user.id, force: true })
+					const copy = /^family_cleanup_copy_([0-2])$/.exec(interaction.customId)
+					if (copy) {
+						const report = await load(guild)
+						const reason = CATEGORIES[Number(copy[1])]
+						const mentions = report.manual.filter(member => report.reasons.get(member.id) === reason)
+							.map(member => `<@${member.id}>`).join(', ')
+						return interaction.editReply({
+							content: `Список категории «${reason}» в файле.`,
+							files: [new AttachmentBuilder(Buffer.from(mentions || 'Список пуст.', 'utf8'), { name: 'participants.txt' })],
+							allowedMentions: { parse: [] }
+						})
+					}
 					const match = /^family_cleanup_open_(kick|roles)_(\d+)$/.exec(interaction.customId)
 					const token = interaction.customId.startsWith(PREFIX + 'apply_') ? interaction.customId.slice((PREFIX + 'apply_').length) : null
 					for (const [key, session] of sessions) if (now() - session.createdAt > 5 * 60 * 1000) sessions.delete(key)
@@ -151,7 +179,7 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 					if (!actor.permissions.has(permission) && !store.roleIds('ADMIN_ROLES').some(id => actor.roles.cache.has(id))) throw new Error('Недостаточно прав для этого действия.')
 					const report = await load(guild)
 					if (match) {
-						const members = report.manual.slice(Number(match[2]) * 25, (Number(match[2]) + 1) * 25)
+						const members = reportPages(report)[Number(match[2])]?.members || []
 						if (!members.length) throw new Error('На этой странице больше нет участников. Дождитесь обновления списка.')
 						const id = randomUUID()
 						sessions.set(id, { action, actorId: actor.id, guildId: guild.id, source: report.source, ids: members.map(member => member.id), createdAt: now() })
