@@ -49,6 +49,13 @@ test('Telegram capture listener parses attack and defence messages and deduplica
 		assert.match(payload[1], /КАПТ ЗАЩИТА/)
 		assert.match(payload[1], /capt_tg_RW5lbXlfTmFtZS1Y_09\.11\.2026-19:00/)
 		assert.match(payload[1], /Создать регу на ЗАЩИТУ/)
+
+		const ownAttack = attack.replace('Номер квадрата: 12', 'Номер квадрата: 14')
+		await telegram.handler({ message: { senderId: 'self', out: true, peerId: { userId: '6204267987' }, text: ownAttack } })
+		await telegram.handler({ message: { senderId: 'self', out: true, peerId: { userId: 'other' }, text: ownAttack.replace('14', '15') } })
+		await telegram.handler({ message: { senderId: 'other', out: false, peerId: { userId: '6204267987' }, text: ownAttack.replace('14', '16') } })
+		assert.equal(channels.length, 3)
+		assert.match(JSON.stringify(channels[2].components.map(component => component.toJSON())), /capt_tg_RW5lbXlfTmFtZS1Y_09\.11\.2026-18:30/)
 	} finally {
 		global.setTimeout = savedTimeout
 		Module._load = originalLoad
