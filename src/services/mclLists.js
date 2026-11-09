@@ -1,4 +1,4 @@
-const { ApplicationCommandType, ContextMenuCommandBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
+const { ApplicationCommandType, ContextMenuCommandBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
 const { problem } = require('../dashboard/auth')
 
 function validateLists(lists, guild) {
@@ -68,12 +68,13 @@ function createMclLists({ client, pool, store }) {
     await pool.query('DELETE FROM mcl_messages WHERE guild_id = $1 AND channel_id = $2', [guild.id, channelId]); continue
    }
    const content = channelLists.map(list => {
-    const members = [...guild.members.cache.values()].filter(member => member.roles.cache.has(list.roleId)).map(member => `<@${member.id}>`)
-    return `**${list.title.replace(/([\\*_~\x60|])/g, '\\$1')}**\n${members.join('\n') || 'Нет участников'}`
+    const members = [...guild.members.cache.values()].filter(member => member.roles.cache.has(list.roleId)).map(member => `- <@${member.id}>`)
+    return `### ${list.title.replace(/([\\*_~\x60|])/g, '\\$1')}\n${members.join('\n') || 'Нет участников'}`
    }).join('\n\n')
    if (content.length > 2000) throw new Error('Списки в канале превышают лимит Discord в 2000 символов.')
-   const payload = { content, allowedMentions: { parse: [] } }
-   if (message) await message.edit(payload); else {
+   const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+   const payload = { components: [container], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }
+   if (message) await message.edit({ ...payload, ...(message.content ? { content: null } : {}) }); else {
     message = await channel.send(payload)
     await pool.query('INSERT INTO mcl_messages (guild_id, channel_id, message_id) VALUES ($1, $2, $3) ON CONFLICT (guild_id, channel_id) DO UPDATE SET message_id = EXCLUDED.message_id', [guild.id, channelId, message.id])
    }

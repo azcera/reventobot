@@ -1,13 +1,13 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { Collection } = require('discord.js')
+const { Collection, MessageFlags } = require('discord.js')
 const { createMclLists, validateLists } = require('../src/services/mclLists')
 
 const id = '00000000-0000-4000-8000-000000000001'
 const list = { id, channelId: 'channel', roleId: 'role', accessRoleId: '', title: 'Игроки', addName: 'Добавить игрока', removeName: 'Убрать игрока' }
 function fixture() {
  const sent = [], edits = []
- const message = { id: 'message', author: { id: 'bot' }, edit: async payload => edits.push(payload), delete: async () => {} }
+ const message = { id: 'message', content: 'Прежнее сообщение', author: { id: 'bot' }, edit: async payload => edits.push(payload), delete: async () => {} }
  const channel = { type: 0, messages: { fetch: async () => message }, send: async payload => { sent.push(payload); return message } }
  const members = new Collection([['1', { id: '1', roles: { cache: new Collection([['role', {}]]) } }]])
  const commands = new Collection()
@@ -29,10 +29,14 @@ test('публикация объединяет списки и повторно
  const other = { ...list, id: '00000000-0000-4000-8000-000000000002', title: 'Вторая группа', addName: 'Добавить второго', removeName: 'Убрать второго' }
  await f.service.save(f.guild, [list, other], 0, { id: 'admin' })
  assert.equal(f.sent.length, 1)
- assert.match(f.sent[0].content, /Игроки\*\*\n<@1>[\s\S]*Вторая группа\*\*\n<@1>/)
+ assert.match(f.sent[0].components[0].toJSON().components[0].content, /### Игроки\n- <@1>[\s\S]*### Вторая группа\n- <@1>/)
+ assert.equal(f.sent[0].flags, MessageFlags.IsComponentsV2)
+ assert.equal(f.sent[0].components[0].toJSON().components.length, 1)
  assert.deepEqual(f.sent[0].allowedMentions, { parse: [] })
  await f.service.sync(f.guild, true)
  assert.equal(f.edits.length, 1)
+ assert.equal(f.edits[0].content, null)
+ assert.equal(f.edits[0].flags, MessageFlags.IsComponentsV2)
  assert.equal(f.client.commands.size, 4)
 })
 test('проверяет названия команд и роли до сохранения', () => {
