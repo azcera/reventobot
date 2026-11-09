@@ -42,6 +42,29 @@ const guild = { members: { cache: new Map() } }
 const admin = { permissions: { has: () => true }, roles: { cache: new Map() } }
 const ids = Array.from({ length: 30 }, (_, i) => String(1000 + i))
 
+test('capture button stops if Discord acknowledgement fails', async () => {
+	const pool = require('../src/services/database')
+	const connect = pool.connect
+	pool.connect = async () => assert.fail('database must not be accessed')
+	try {
+		await manager.handleButton({ isButton: () => true, customId: 'capt_join',
+			deferUpdate: async () => { throw new Error('expired interaction') } })
+	} finally { pool.connect = connect }
+})
+
+test('capture button reports a database connection failure', async () => {
+	const pool = require('../src/services/database')
+	const connect = pool.connect
+	let reply
+	pool.connect = async () => { throw new Error('connection timeout') }
+	try {
+		await manager.handleButton({ isButton: () => true, customId: 'capt_join',
+			deferUpdate: async () => {}, message: { id: 'm' }, user: { id: 'u' },
+			followUp: async payload => { reply = payload } })
+		assert.match(reply.content, /ошибка базы данных/)
+	} finally { pool.connect = connect }
+})
+
 test('approval across menus survives reload and is removed on leave', async () => {
 	row = {
 		message_id: 'm',

@@ -36,10 +36,9 @@ module.exports = client => {
 					const message = event.message
 					if (!message) return
 
-					// Временно принимаем также исходящие сообщения в личном чате с ботом.
+					// Проверяем отправителя по ID без дополнительного запроса.
 					const senderId = message.senderId?.toString()
-					const isOwnBotChatMessage = message.out && message.peerId?.userId?.toString() === MAJESTIC_BOT_ID
-					if (senderId !== MAJESTIC_BOT_ID && !isOwnBotChatMessage) return
+					if (senderId !== MAJESTIC_BOT_ID) return
 
 					const text = message.text || ''
 					const isAttackMessage = ATTACK_RE.test(text)

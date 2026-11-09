@@ -419,7 +419,12 @@ async function handleButton(interaction) {
 		return
 
 	// Сразу подтверждаем, чтобы Discord не слал "не ответило вовремя"
-	await interaction.deferUpdate().catch(() => {})
+	try {
+		await interaction.deferUpdate()
+	} catch (err) {
+		console.error('Не удалось подтвердить кнопку капта:', err)
+		return
+	}
 
 	const messageId = interaction.message.id
 	const userId = interaction.user.id
@@ -436,8 +441,9 @@ async function handleButton(interaction) {
 		return fallback
 	}
 
-	const client = await pool.connect()
+	let client
 	try {
+		client = await pool.connect()
 		await client.query('BEGIN')
 
 		const res = await client.query(
@@ -570,7 +576,7 @@ async function handleButton(interaction) {
 		await interaction.editReply(updatedMessageData)
 		await client.query('COMMIT')
 	} catch (err) {
-		await client.query('ROLLBACK').catch(() => {})
+		if (client) await client.query('ROLLBACK').catch(() => {})
 		console.error('Ошибка при обработке кнопки капта:', err)
 		await interaction
 			.followUp({
@@ -579,7 +585,7 @@ async function handleButton(interaction) {
 			})
 			.catch(() => {})
 	} finally {
-		client.release()
+		client?.release()
 	}
 }
 

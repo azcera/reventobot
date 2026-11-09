@@ -162,7 +162,7 @@ async function handleAutoCaptButton(interaction) {
 	const discordTimestamp = getDiscordTimestamp(parsedDate)
 	const maxMain = 20
 
-	await interaction.deferReply({ ephemeral: true })
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 
 	try {
 		await captureManager.sendCollection(
