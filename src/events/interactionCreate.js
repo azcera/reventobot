@@ -47,7 +47,7 @@ module.exports = client => {
 			return client.familyWars.handle(interaction)
 		}
 
-		if (interaction.customId?.startsWith('mcl_') && (interaction.isButton() || interaction.isUserSelectMenu())) {
+		if (interaction.customId?.startsWith('mcl_') && (interaction.isButton() || interaction.isUserSelectMenu() || interaction.isStringSelectMenu())) {
 			if (!client.mclLists) return interaction.reply({ content: 'Списки временно недоступны.', flags: MessageFlags.Ephemeral })
 			try { await client.mclLists.handle(interaction) }
 			catch (error) { console.error('[Lists] Ошибка обработки:', error); if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: 'Не удалось выполнить действие.', flags: MessageFlags.Ephemeral }) }

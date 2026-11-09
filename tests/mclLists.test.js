@@ -80,7 +80,7 @@ test('кнопки проверяют доступ и меняют роль вы
   assert.equal(response.flags, MessageFlags.Ephemeral)
   assert.equal(response.components[0].toJSON().components[0].type, 5)
   interaction.isButton = () => false
-  f.guild.members.fetch = async target => ({ roles: { add: async role => { changed = [target, role] }, remove: async role => { changed = [target, role, 'remove'] } } })
+  f.guild.members.fetch = async ({ user: target }) => ({ roles: { cache: new Collection([['role', {}]]), add: async role => { changed = [target, role] }, remove: async role => { changed = [target, role, 'remove'] } } })
   await f.service.handle(interaction)
   assert.deepEqual(changed, ['target', 'role'])
   interaction.customId = `mcl_remove_${id}`
@@ -91,6 +91,34 @@ test('кнопки проверяют доступ и меняют роль вы
   await f.service.handle(interaction)
   assert.equal(changed, null)
   assert.match(response.content, /Недостаточно прав/)
+ } finally {
+  if (previousGuildId === undefined) delete process.env.GUILD_ID; else process.env.GUILD_ID = previousGuildId
+ }
+})
+
+test('удаление предлагает только участников списка и показывает все страницы', async () => {
+ const previousGuildId = process.env.GUILD_ID
+ process.env.GUILD_ID = 'guild'
+ try {
+  const f = fixture()
+  await f.service.save(f.guild, [list], 0, { id: 'admin' })
+  const members = new Collection(Array.from({ length: 26 }, (_, i) => [String(i + 1), { id: String(i + 1), displayName: `Игрок ${String(i + 1).padStart(2, '0')}`, roles: { cache: new Collection([['role', {}]]) } }]))
+  members.set('99', { id: '99', displayName: 'Другой', roles: { cache: new Collection() } })
+  f.guild.members.fetch = async () => members
+  let response
+  const interaction = { guild: f.guild, channelId: 'channel', customId: `mcl_remove_${id}`, member: { permissions: { has: () => true }, roles: { cache: new Collection() } }, isButton: () => true, deferReply: async () => {}, deferUpdate: async () => {}, editReply: async value => { response = value } }
+  await f.service.handle(interaction)
+  const menu = response.components[0].toJSON().components[0]
+  assert.equal(menu.options.length, 25)
+  assert.ok(!menu.options.some(option => option.value === '99'))
+  assert.match(response.content, /страница 1\/2/)
+  interaction.customId = `mcl_page_${id}_1`
+  await f.service.handle(interaction)
+  assert.deepEqual(response.components[0].toJSON().components[0].options.map(option => option.value), ['26'])
+  members.clear()
+  await f.service.handle(interaction)
+  assert.match(response.content, /нет участников/)
+  assert.deepEqual(response.components, [])
  } finally {
   if (previousGuildId === undefined) delete process.env.GUILD_ID; else process.env.GUILD_ID = previousGuildId
  }

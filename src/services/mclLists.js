@@ -1,4 +1,4 @@
-const { ApplicationCommandType, ContextMenuCommandBuilder, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
+const { ApplicationCommandType, ContextMenuCommandBuilder, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, StringSelectMenuBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js')
 const { problem } = require('../dashboard/auth')
 
 function validateLists(lists, guild) {
@@ -91,18 +91,38 @@ function createMclLists({ client, pool, store }) {
   }
  }
  return { sync: (guild, messagesOnly = false) => serial(() => sync(guild, messagesOnly)), async handle(interaction) {
-  const match = /^mcl_(add|remove)_([a-f0-9-]{36})$/.exec(interaction.customId)
+  const match = /^mcl_(add|remove|page)_([a-f0-9-]{36})(?:_(\d+))?$/.exec(interaction.customId)
   const list = match && store.mclLists[match[2]]
   if (!list || interaction.guild?.id !== process.env.GUILD_ID || interaction.channelId !== list.channelId) return interaction.reply({ content: 'Список больше недоступен.', flags: MessageFlags.Ephemeral })
   if (!canManage(interaction, list, store)) return interaction.reply({ content: 'Недостаточно прав.', flags: MessageFlags.Ephemeral })
   const add = match[1] === 'add'
+  if (interaction.isButton() && add) {
+   const menu = new UserSelectMenuBuilder().setCustomId(interaction.customId).setPlaceholder('Выберите участника для добавления').setMinValues(1).setMaxValues(1)
+   return interaction.reply({ content: `Добавить в список «${list.title}»:`, components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } })
+  }
   if (interaction.isButton()) {
-   const menu = new UserSelectMenuBuilder().setCustomId(interaction.customId).setPlaceholder(add ? 'Выберите участника для добавления' : 'Выберите участника для удаления').setMinValues(1).setMaxValues(1)
-   return interaction.reply({ content: `${add ? 'Добавить в список' : 'Убрать из списка'} «${list.title}»:`, components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } })
+   if (match[1] === 'page') await interaction.deferUpdate(); else await interaction.deferReply({ flags: MessageFlags.Ephemeral })
+   try {
+    const members = [...(await interaction.guild.members.fetch()).values()].filter(member => member.roles.cache.has(list.roleId))
+     .sort((a, b) => (a.displayName || a.id).localeCompare(b.displayName || b.id) || a.id.localeCompare(b.id))
+    if (!members.length) return interaction.editReply({ content: `В списке «${list.title}» нет участников.`, components: [], allowedMentions: { parse: [] } })
+    const pages = Math.ceil(members.length / 25)
+    const page = Math.min(Number(match[3] || 0), pages - 1)
+    const menu = new StringSelectMenuBuilder().setCustomId(`mcl_remove_${list.id}`).setPlaceholder('Выберите участника для удаления').addOptions(members.slice(page * 25, page * 25 + 25).map(member => ({ label: (member.displayName || member.id).slice(0, 100), value: member.id })))
+    const rows = [new ActionRowBuilder().addComponents(menu)]
+    if (pages > 1) rows.push(new ActionRowBuilder().addComponents(
+     new ButtonBuilder().setCustomId(`mcl_page_${list.id}_${Math.max(page - 1, 0)}`).setLabel('←').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+     new ButtonBuilder().setCustomId(`mcl_page_${list.id}_${Math.min(page + 1, pages - 1)}`).setLabel('→').setStyle(ButtonStyle.Secondary).setDisabled(page === pages - 1)))
+    return interaction.editReply({ content: `Убрать из списка «${list.title}»: ${pages > 1 ? `страница ${page + 1}/${pages}` : ''}`, components: rows, allowedMentions: { parse: [] } })
+   } catch (error) {
+    console.error('[Lists] Ошибка загрузки участников:', error)
+    return interaction.editReply({ content: 'Не удалось загрузить участников списка.', components: [] })
+   }
   }
   await interaction.deferUpdate()
   try {
-   const member = await interaction.guild.members.fetch(interaction.values[0])
+   const member = await interaction.guild.members.fetch({ user: interaction.values[0], force: true })
+   if (!add && !member.roles.cache.has(list.roleId)) return interaction.editReply({ content: 'Участник уже отсутствует в списке.', components: [] })
    if (add) await member.roles.add(list.roleId); else await member.roles.remove(list.roleId)
    await interaction.editReply({ content: add ? 'Роль выдана.' : 'Роль снята.', components: [] })
   } catch (error) {
