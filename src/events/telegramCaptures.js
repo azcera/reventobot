@@ -95,21 +95,21 @@ module.exports = client => {
 						`[Telegram] Обнаружен капт: ${attacker} vs ${defender} (Квадрат ${zoneNum})`
 					)
 
-					const channel = await client.channels.fetch(store.getSetting('CAPT_INFO_CHANNEL_ID'))
+					const channel = await client.channels.fetch(
+						store.getSetting('CAPT_INFO_CHANNEL_ID')
+					)
 					if (!channel)
 						return console.error('[Discord] Канал для каптов не найден!')
 
-					const imagePath = path.join(__dirname, '..', 'images', 'capt.png')
-					const localImage = new AttachmentBuilder(imagePath, {
-						name: 'capt.png'
-					})
 					const captImage = new MediaGalleryBuilder().addItems(
 						new MediaGalleryItemBuilder()
-							.setURL('attachment://capt.png')
+							.setURL('https://i.imgur.com/hD6ep5D.png')
 							.setDescription('CAPT')
 					)
 
-					const enemyFaction = Buffer.from(isAttack ? defender : attacker).toString('base64url').replace(/_/g, '.')
+					const enemyFaction = Buffer.from(isAttack ? defender : attacker)
+						.toString('base64url')
+						.replace(/_/g, '.')
 					const cleanTime = startTime.replace(/\s+/g, '-')
 
 					const actionRow = new ActionRowBuilder().addComponents(
@@ -145,8 +145,7 @@ module.exports = client => {
 
 					await channel.send({
 						flags: [MessageFlags.IsComponentsV2],
-						components: [container],
-						files: [localImage]
+						components: [container]
 					})
 				} catch (err) {
 					console.error('[Telegram Event Error]:', err)
