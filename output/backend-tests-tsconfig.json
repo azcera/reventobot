@@ -1,0 +1,1 @@
+{"extends":"../tsconfig.test.json","include":["../tests/containerMessage.test.ts","../tests/mclLists.test.ts","../tests/eventSchedule.test.ts","../tests/telegramCaptures.test.ts"]}

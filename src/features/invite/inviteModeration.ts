@@ -1,0 +1,295 @@
+import { getError } from '../../utils/errors'
+import { store as dashboard } from '../../dashboard/store'
+import { ContainerBuilder } from '../../services/markdownContainer'
+import {
+	ModalBuilder,
+	TextInputBuilder,
+	TextInputStyle,
+	ActionRowBuilder,
+	ChannelType,
+	StringSelectMenuBuilder,
+	StringSelectMenuOptionBuilder,
+	MessageFlags,
+	TextDisplayBuilder,
+	LabelBuilder,
+	SeparatorBuilder
+} from 'discord.js'
+import {
+	sendEphemeralWithAutoDelete,
+	followUpEphemeralWithAutoDelete,
+	editReplyWithAutoDelete
+} from '../../utils/autoDelete.js'
+import db = require('../../services/database.js')
+import {
+	isApplicationMod,
+	logAction,
+	buildContainer
+} from '../../features/invite/inviteUtils.js'
+
+async function handleModerationButton(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+	if (!isApplicationMod(interaction.member)) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ У вас нет прав для управления заявками!'
+		})
+	}
+
+	const [_, actionType, targetUserId] = interaction.customId.split('_')
+
+	if (actionType === 'reject') {
+		const modal = new ModalBuilder()
+			.setCustomId(`invite_modal_reject_${targetUserId}`)
+			.setTitle('Причина отклонения')
+		const inputLabel = new LabelBuilder()
+			.setLabel('Укажите причину отказа кандидату')
+			.setTextInputComponent(
+				new TextInputBuilder()
+					.setCustomId('reject_reason')
+					.setPlaceholder('Пример: Ошибки в анкете')
+					.setStyle(TextInputStyle.Short)
+					.setRequired(true)
+			)
+		modal.addLabelComponents(inputLabel)
+
+		return interaction.showModal(modal)
+	}
+
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral })
+	const res = await db.query(
+		`SELECT * FROM family_applications WHERE user_id = $1`,
+		[targetUserId.trim()]
+	)
+
+	if (res.rows.length === 0) {
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: `❌ Данные о заявке пользователя <@${targetUserId}> не найдены в базе данных.`
+		})
+	}
+	const appData = res.rows[0]
+
+
+	if (actionType === 'accept') {
+		// 1. СРАЗУ отвечаем на взаимодействие, чтобы Discord не считал его "зависшим" (Unknown interaction)
+		// The action was acknowledged before database access.
+
+		try {
+			const targetMember = await interaction.guild.members
+				.fetch(targetUserId)
+				.catch(() => null)
+			if (targetMember) {
+				// Используем MAIN_ROLE_ID, если он есть, иначе fallback на AUTO_ROLE
+				const roleId = String(
+					dashboard.getSetting('MAIN_ROLE_ID') || dashboard.getSetting('AUTO_ROLE')
+				).trim()
+				await targetMember.roles.add(roleId).catch(console.error)
+			}
+
+			const targetUser = await interaction.client.users
+				.fetch(targetUserId)
+				.catch(() => null)
+			if (targetUser) {
+				const container = new ContainerBuilder()
+					.setAccentColor(0x2ecc71)
+					.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('dm.document.accepted', { server: interaction.guild.name, time: Math.floor(Date.now() / 1000) })))
+
+				await targetUser
+					.send({
+						components: [container.toJSON()],
+						flags: MessageFlags.IsComponentsV2 as const
+					})
+					.catch(() => {})
+			}
+
+			const logContainer = await buildContainer(
+				targetUserId,
+				appData.full_name,
+				appData.age,
+				appData.about_and_expectations,
+				appData.previous_experience,
+				'принятия',
+				interaction.user.id
+			)
+			await logAction(interaction.guild, logContainer)
+
+			// Удаляем из БД
+			await db.query('DELETE FROM family_applications WHERE user_id = $1', [
+				targetUserId
+			])
+
+			const additionalRolesRaw = dashboard.getSetting('FAMILY_ADDITIONAL_ROLES')
+			const additionalRoles = additionalRolesRaw
+				? additionalRolesRaw
+						.split(',')
+						.map(r => r.trim())
+						.filter(Boolean)
+				: []
+
+			// Если доп. ролей нет, просто удаляем канал и завершаем
+			if (additionalRoles.length === 0 || !targetMember) {
+				await followUpEphemeralWithAutoDelete(interaction, {
+					content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален.`
+				})
+				setTimeout(
+					() => interaction.channel?.delete().catch(console.error),
+					2000
+				)
+				return
+			}
+
+			// Если есть доп. роли, показываем меню
+			const selectMenu = new StringSelectMenuBuilder()
+				.setCustomId(`invite_select_additional_${targetUserId}`)
+				.setPlaceholder('Выберите дополнительную роль для выдачи')
+
+			additionalRoles.forEach((roleId, index) => {
+				const role = interaction.guild.roles.cache.get(roleId)
+				selectMenu.addOptions(
+					new StringSelectMenuOptionBuilder()
+						.setLabel(role ? `${index + 1}️⃣ ${role.name}` : `Роль (${roleId})`)
+						.setValue(roleId)
+				)
+			})
+
+			await followUpEphemeralWithAutoDelete(interaction, {
+				content: `✅ Заявка <@${targetUserId}> одобрена! Выберите роль (активно 30 сек):`,
+				components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)]
+			})
+
+			const collector = interaction.channel!.createMessageComponentCollector({
+				filter: i =>
+					i.user.id === interaction.user.id &&
+					i.customId === `invite_select_additional_${targetUserId}`,
+				time: 30000,
+				max: 1
+			})
+
+			collector.on('collect', async menuInteraction => {
+				await menuInteraction.deferUpdate() // Подтверждаем выбор в меню
+				if (!menuInteraction.isStringSelectMenu()) return
+				const chosenRoleId = menuInteraction.values[0]
+				if (targetMember)
+					await targetMember.roles.add(chosenRoleId).catch(console.error)
+
+				await menuInteraction.followUp({
+					content: `✅ Роль <@&${chosenRoleId}> выдана участнику <@${targetUserId}>!`,
+					flags: MessageFlags.Ephemeral as const
+				})
+
+				setTimeout(
+					() => interaction.channel?.delete().catch(console.error),
+					1500
+				)
+			})
+
+			collector.on('end', async collected => {
+				if (collected.size === 0) {
+					// Если роль не выбрали, все равно удаляем канал, так как заявка уже одобрена и удалена из БД
+					setTimeout(
+						() => interaction.channel?.delete().catch(console.error),
+						1500
+					)
+				}
+			})
+		} catch (caught) {
+ const error = getError(caught);
+			console.error('Ошибка при принятии заявки:', error)
+			await followUpEphemeralWithAutoDelete(interaction, {
+				content: '❌ Произошла ошибка при обработке заявки.'
+			})
+		}
+	}
+
+	if (actionType === 'interview') {
+		// The action was acknowledged before database access.
+
+		const voiceChannels = interaction.guild.channels.cache.filter(
+			c => c.type === ChannelType.GuildVoice && c.name.includes('📞')
+		)
+
+		if (voiceChannels.size === 0) {
+			return editReplyWithAutoDelete(interaction, {
+				content: '❌ Нет подходящих голосовых каналов.'
+			})
+		}
+
+		// 1. СРАЗУ делаем кнопку неактивной, используя встроенную логику buildContainer
+		const disabledContainer = await buildContainer(
+			targetUserId,
+			appData.full_name,
+			appData.age,
+			appData.about_and_expectations,
+			appData.previous_experience,
+			'отправления',
+			null,
+			null,
+			true // isInterviewDisabled = true (кнопка станет серой)
+		)
+
+		const mainMessage = interaction.message
+		// Обновляем сообщение новыми компонентами
+		await mainMessage
+			.edit({
+				components: [disabledContainer.toJSON()],
+				flags: MessageFlags.IsComponentsV2 as const
+			})
+			.catch(console.error)
+
+		// 2. Показываем меню выбора канала
+		const selectMenu = new StringSelectMenuBuilder()
+			.setCustomId(`invite_select_voice_${targetUserId}`)
+			.setPlaceholder('Выберите голосовой канал')
+
+		voiceChannels.forEach(c =>
+			selectMenu.addOptions(
+				new StringSelectMenuOptionBuilder().setLabel(c.name).setValue(c.id)
+			)
+		)
+
+		await editReplyWithAutoDelete(interaction, {
+			content: 'Выберите комнату для кандидата (меню активно 1 минуту):',
+			components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)]
+		})
+
+		// 3. Собираем выбор администратора
+		const collector = interaction.channel!.createMessageComponentCollector({
+			filter: i =>
+				i.user.id === interaction.user.id &&
+				i.customId === `invite_select_voice_${targetUserId}`,
+			time: 60000,
+			max: 1
+		})
+
+		collector.on('collect', async () => {
+			await interaction.deleteReply().catch(() => {}) // Удаляем сообщение с меню выбора, чтобы не мешало
+		})
+
+		collector.on('end', async collected => {
+			if (collected.size === 0) {
+				// Время вышло. Возвращаем кнопку "Обзвон" в активное состояние
+				const enabledContainer = await buildContainer(
+					targetUserId,
+					appData.full_name,
+					appData.age,
+					appData.about_and_expectations,
+					appData.previous_experience,
+					'отправления',
+					null,
+					null,
+					false // isInterviewDisabled = false (кнопка снова активна)
+				)
+				await mainMessage
+					.edit({
+						components: [enabledContainer.toJSON()],
+						flags: MessageFlags.IsComponentsV2 as const
+					})
+					.catch(console.error)
+
+				// ИСПРАВЛЕНИЕ: Сообщение видно ТОЛЬКО администратору (Ephemeral)
+				await followUpEphemeralWithAutoDelete(interaction, {
+					content: `⏳ Время выбора комнаты истекло. Кнопка вызова снова активна.`
+				})
+			}
+		})
+		return
+	}
+}
+export { handleModerationButton }

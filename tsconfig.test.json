@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmitOnError": true },
+  "include": ["src/**/*.ts", "public/*.ts", "shared/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "frontend/src/lib/*.ts"],
+  "exclude": ["node_modules", "dist", "tests/browser/dashboard.spec.ts"]
+}

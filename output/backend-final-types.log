@@ -1,0 +1,16 @@
+src/dashboard/messageEditor.ts(65,127): error TS2345: Argument of type 'RawComponent[] | undefined' is not assignable to parameter of type 'RawComponent[]'.
+  Type 'undefined' is not assignable to type 'RawComponent[]'.
+src/services/adminApplicationCommands.ts(9,221): error TS2345: Argument of type 'GuildInteraction' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
+  Type 'StringSelectMenuInteraction<"cached">' is not assignable to type 'ButtonInteraction<"cached">'.
+    Types of property 'componentType' are incompatible.
+      Type 'ComponentType.StringSelect' is not assignable to type 'ComponentType.Button'.
+src/services/adminApplicationCommands.ts(10,210): error TS2345: Argument of type 'GuildInteraction' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
+  Type 'StringSelectMenuInteraction<"cached">' is not assignable to type 'ButtonInteraction<"cached">'.
+    Types of property 'componentType' are incompatible.
+      Type 'ComponentType.StringSelect' is not assignable to type 'ComponentType.Button'.
+src/services/adminApplicationCommands.ts(11,237): error TS2345: Argument of type 'GuildInteraction' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
+  Type 'StringSelectMenuInteraction<"cached">' is not assignable to type 'ButtonInteraction<"cached">'.
+    Types of property 'componentType' are incompatible.
+      Type 'ComponentType.StringSelect' is not assignable to type 'ComponentType.Button'.
+src/services/adminApplicationCommands.ts(39,153): error TS2345: Argument of type 'GuildInteraction' is not assignable to parameter of type 'UserContextMenuCommandInteraction<"cached">'.
+  Type 'ButtonInteraction<"cached">' is missing the following properties from type 'UserContextMenuCommandInteraction<"cached">': commandType, options, targetUser, targetMember, and 7 more.

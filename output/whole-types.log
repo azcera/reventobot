@@ -1,0 +1,18 @@
+index.ts(114,24): error TS2339: Property 'name' does not exist on type 'SendableChannels'.
+  Property 'name' does not exist on type 'DMChannel'.
+index.ts(143,30): error TS2339: Property 'send' does not exist on type 'Channel'.
+  Property 'send' does not exist on type 'CategoryChannel'.
+public/component-markdown.ts(29,257): error TS2322: Type 'string' is not assignable to type '"small" | "large" | undefined'.
+public/markdown.ts(38,13): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{ yml: string; js: string; ts: string; py: string; sh: string; }'.
+  No index signature with a parameter of type 'string' was found on type '{ yml: string; js: string; ts: string; py: string; sh: string; }'.
+src/features/archive/archiveSearch.ts(9,87): error TS2677: A type predicate's type must be assignable to its parameter's type.
+  Type 'ThreadChannel<true>' is not assignable to type 'GuildBasedChannel | null'.
+    Type 'ThreadChannel<true>' is not assignable to type 'PublicThreadChannel<boolean> | PrivateThreadChannel'.
+      Type 'ThreadChannel<true>' is not assignable to type 'PrivateThreadChannel'.
+        Types of property 'createdTimestamp' are incompatible.
+          Type 'number | null' is not assignable to type 'number'.
+            Type 'null' is not assignable to type 'number'.
+src/features/capture/captureManager.ts(512,20): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/features/capture/captureManager.ts(513,24): error TS2345: Argument of type 'JoinedPlayer | undefined' is not assignable to parameter of type 'JoinedPlayer'.
+  Type 'undefined' is not assignable to type 'JoinedPlayer'.

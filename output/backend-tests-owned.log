@@ -1,0 +1,41 @@
+tests/eventSchedule.test.ts(156,111): error TS2345: Argument of type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: ReturnType<typeof buildSchedule>) => Promise<...>; }>; }; send: (payload: ReturnType<typeof bu...' is not assignable to parameter of type 'GuildTextBasedChannel'.
+tests/eventSchedule.test.ts(163,25): error TS2345: Argument of type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: ReturnType<typeof buildSchedule>) => Promise<...>; }>; }; send: (payload: ReturnType<typeof bu...' is not assignable to parameter of type 'GuildTextBasedChannel'.
+tests/eventSchedule.test.ts(171,25): error TS2345: Argument of type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: ReturnType<typeof buildSchedule>) => Promise<...>; }>; }; send: (payload: ReturnType<typeof bu...' is not assignable to parameter of type 'GuildTextBasedChannel'.
+tests/mclLists.test.ts(10,8): error TS7034: Variable 'sent' implicitly has type 'any[]' in some locations where its type cannot be determined.
+tests/mclLists.test.ts(10,19): error TS7034: Variable 'edits' implicitly has type 'any[]' in some locations where its type cannot be determined.
+tests/mclLists.test.ts(11,100): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/mclLists.test.ts(12,83): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/mclLists.test.ts(15,282): error TS7006: Parameter 'data' implicitly has an 'any' type.
+tests/mclLists.test.ts(16,56): error TS7006: Parameter 'section' implicitly has an 'any' type.
+tests/mclLists.test.ts(16,65): error TS7006: Parameter 'values' implicitly has an 'any' type.
+tests/mclLists.test.ts(18,29): error TS7006: Parameter 'sql' implicitly has an 'any' type.
+tests/mclLists.test.ts(18,34): error TS7006: Parameter 'args' implicitly has an 'any' type.
+tests/mclLists.test.ts(21,70): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+tests/mclLists.test.ts(22,68): error TS2322: Type '{ channel_id: any; message_id: any; }' is not assignable to type 'never'.
+tests/mclLists.test.ts(26,25): error TS7005: Variable 'sent' implicitly has an 'any[]' type.
+tests/mclLists.test.ts(26,31): error TS7005: Variable 'edits' implicitly has an 'any[]' type.
+tests/mclLists.test.ts(35,48): error TS7006: Parameter 'button' implicitly has an 'any' type.
+tests/mclLists.test.ts(37,48): error TS7006: Parameter 'button' implicitly has an 'any' type.
+tests/mclLists.test.ts(57,156): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(58,61): error TS7006: Parameter 'role' implicitly has an 'any' type.
+tests/mclLists.test.ts(61,15): error TS18047: 'replied' is possibly 'null'.
+tests/mclLists.test.ts(75,208): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(75,285): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(77,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(80,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(81,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(82,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(84,3): error TS2322: Type '({ user: target }: { user: any; }) => Promise<{ roles: { cache: any; add: (role: any) => Promise<void>; remove: (role: any) => Promise<void>; }; }>' is not assignable to type '() => Promise<any>'.
+tests/mclLists.test.ts(84,42): error TS7031: Binding element 'target' implicitly has an 'any' type.
+tests/mclLists.test.ts(84,117): error TS7006: Parameter 'role' implicitly has an 'any' type.
+tests/mclLists.test.ts(84,169): error TS7006: Parameter 'role' implicitly has an 'any' type.
+tests/mclLists.test.ts(94,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(110,271): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(112,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(114,32): error TS7006: Parameter 'option' implicitly has an 'any' type.
+tests/mclLists.test.ts(115,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(118,20): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(118,78): error TS7006: Parameter 'option' implicitly has an 'any' type.
+tests/mclLists.test.ts(121,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(122,20): error TS18048: 'response' is possibly 'undefined'.
+tests/telegramCaptures.test.ts(136,3): error TS2741: Property '__promisify__' is missing in type '() => number' but required in type 'typeof setTimeout'.

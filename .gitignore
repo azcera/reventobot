@@ -1,4 +1,10 @@
 node_modules/
+dist/
+output/typescript/
+public/markdown.js
+public/component-markdown.js
+public/template-document.js
+public/template-layout.js
 public/dashboard/
 playwright-report/
 test-results/

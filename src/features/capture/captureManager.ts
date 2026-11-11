@@ -1,0 +1,746 @@
+interface JoinedPlayer { userId?: string; joinedAt: number }
+function captureArray(value: unknown): unknown[] {
+    if (typeof value === 'string') { try { value = JSON.parse(value) as unknown } catch { return [] } }
+    return Array.isArray(value) ? value : []
+}
+function readIds(value: unknown): string[] { return captureArray(value).filter((id): id is string => typeof id === 'string') }
+function readMeta(value: unknown): JoinedPlayer[] { return captureArray(value).filter((item): item is JoinedPlayer => typeof item === 'object' && item !== null && 'joinedAt' in item && typeof item.joinedAt === 'number') }
+
+import { getError } from '../../utils/errors'
+import { store as dashboard } from '../../dashboard/store'
+import { ContainerBuilder } from '../../services/markdownContainer'
+import {
+	MessageFlags,
+	ActionRowBuilder,
+	TextDisplayBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	StringSelectMenuBuilder,
+	PermissionFlagsBits,
+	ChannelType
+} from 'discord.js'
+import { createHash } from 'node:crypto'
+require('dotenv').config()
+
+import pool = require('../../services/database.js')
+
+const APPROVAL_PAGE_SIZE = 50
+
+function joinedPlayers(mainList: string[], reserveList: string[], mainMeta: JoinedPlayer[], reserveMeta: JoinedPlayer[]) {
+	return [...mainList, ...reserveList]
+		.map((userId, index) => {
+			const meta =
+				index < mainList.length
+					? mainMeta[index]
+					: reserveMeta[index - mainList.length]
+			return { userId, joinedAt: meta?.joinedAt ?? index }
+		})
+		.sort((a, b) => a.joinedAt - b.joinedAt)
+}
+
+function redistributeApproved(
+	mainList: string[],
+	reserveList: string[],
+	mainMeta: JoinedPlayer[],
+	reserveMeta: JoinedPlayer[],
+	approved: string[],
+	maxMain: number
+) {
+	const selected = new Set(approved)
+	const players = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
+	const main = approved.length
+		? players.filter(player => selected.has(player.userId))
+		: players.slice(0, maxMain)
+	const reserve = approved.length
+		? players.filter(player => !selected.has(player.userId))
+		: players.slice(maxMain)
+	return {
+		mainList: main.map(p => p.userId),
+		reserveList: reserve.map(p => p.userId),
+		mainMeta: main,
+		reserveMeta: reserve
+	}
+}
+
+function approvalGroups(
+	mainList: string[],
+	reserveList: string[],
+	page: number,
+	mainMeta: JoinedPlayer[] = [],
+	reserveMeta: JoinedPlayer[] = [],
+	guild: import('discord.js').Guild | undefined,
+	sortMode: string = 'priority'
+) {
+	const joined = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
+	const ordered = guild && sortMode !== 'time'
+		? sortByRolePriority(joined, guild)
+		: joined.map(player => player.userId)
+	const players = ordered.slice(page * APPROVAL_PAGE_SIZE, (page + 1) * APPROVAL_PAGE_SIZE)
+	const groups = []
+	for (let i = 0; i < players.length; i += 25)
+		groups.push(players.slice(i, i + 25))
+	return groups
+}
+
+function approvalId(group: string[]) {
+	return (
+		'capt_approve_' +
+		createHash('sha256').update(group.join(',')).digest('hex').slice(0, 20)
+	)
+}
+
+// Parse PRIORITY_ROLES from env: comma-separated role IDs, highest priority first
+
+/**
+ * Gets the priority index for a member based on their highest role.
+ * Returns index in PRIORITY_ROLES array, or PRIORITY_ROLES.length if no match.
+ * @param {GuildMember} member
+ * @returns {number}
+ */
+function getRolePriority(member: import('discord.js').GuildMember) {
+	for (let i = 0; i < dashboard.roleIds('PRIORITY_ROLES').length; i++) {
+		if (member.roles.cache.has(dashboard.roleIds('PRIORITY_ROLES')[i])) return i
+	}
+	return dashboard.roleIds('PRIORITY_ROLES').length // lowest priority (after all configured roles)
+}
+
+/**
+ * Sorts a list of user objects by role priority, then by join timestamp.
+ * Each item: { userId, joinedAt }
+ * @param {Array<{userId: string, joinedAt: number}>} list
+ * @param {Guild} guild
+ * @returns {Array<string>} sorted userIds
+ */
+function sortByRolePriority(list: Array<{userId: string, joinedAt: number}>, guild: import('discord.js').Guild) {
+	return [...list]
+		.sort((a, b) => {
+			const memberA = guild.members.cache.get(a.userId)
+			const memberB = guild.members.cache.get(b.userId)
+
+			const priorityA = memberA
+				? getRolePriority(memberA)
+				: dashboard.roleIds('PRIORITY_ROLES').length
+			const priorityB = memberB
+				? getRolePriority(memberB)
+				: dashboard.roleIds('PRIORITY_ROLES').length
+
+			if (priorityA !== priorityB) return priorityA - priorityB
+
+			// Same priority: earlier join timestamp comes first
+			return a.joinedAt - b.joinedAt
+		})
+		.map(item => item.userId)
+}
+
+function buildCaptureMessage(
+	discordTimestamp: string,
+	mainList: string[],
+	reserveList: string[],
+	leftList: string[],
+	target: string,
+	maxMain: number,
+	guild: import('discord.js').Guild | undefined = undefined,
+	mainListMeta: JoinedPlayer[] = [],
+	reserveListMeta: JoinedPlayer[] = [],
+	approvedUsers: string[] = [],
+	approvalPage = 0,
+	sortMode: string = 'priority'
+) {
+	const approved = new Set(approvedUsers)
+	approvalPage = Math.max(
+		0,
+		Math.min(
+			approvalPage,
+			Math.max(
+				0,
+				Math.ceil((mainList.length + reserveList.length) / APPROVAL_PAGE_SIZE) -
+					1
+			)
+		)
+	)
+	const players = joinedPlayers(mainList, reserveList, mainListMeta, reserveListMeta)
+	const timeMode = sortMode === 'time'
+	const currentOrder = !timeMode && guild ? sortByRolePriority(players, guild) : players.map(player => player.userId)
+	const visible = new Set(currentOrder.slice(approvalPage * APPROVAL_PAGE_SIZE, (approvalPage + 1) * APPROVAL_PAGE_SIZE))
+	const confirmed = currentOrder.filter(id => approved.has(id))
+	const waiting = currentOrder.filter(id => !approved.has(id))
+	const list = (ids: string[]) => ids.map((id, index) => ({ id, index })).filter(({ id }) => visible.has(id))
+		.map(({ id, index }) => `${index + 1}. <@${id}>`).join('\n') || 'Пусто'
+	const containerComponent = new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('registration.document', {
+			target: target ?? 'мероприятие', time: discordTimestamp, limit: maxMain,
+			mode: timeMode ? 'по времени записи' : 'по роли и времени записи',
+			page: approvalPage + 1, pages: Math.max(1, Math.ceil(players.length / APPROVAL_PAGE_SIZE)),
+			confirmedCount: confirmed.length, confirmedPlayers: list(confirmed),
+			waitingCount: waiting.length, waitingPlayers: list(waiting),
+			leftCount: leftList.length, leftPlayers: leftList.map(id => `• <@${id}>`).join('\n') || 'Пусто'
+		})))
+		.addActionRowComponents(new ActionRowBuilder<import('discord.js').MessageActionRowComponentBuilder>().addComponents(
+			new ButtonBuilder().setCustomId('capt_sort_toggle')
+				.setLabel(dashboard.text(timeMode ? 'registration.sortPriority' : 'registration.sortTime'))
+				.setStyle(ButtonStyle.Secondary)
+		))
+
+	// Кнопки управления для участников и админов
+	const buttonsRow = new ActionRowBuilder<import('discord.js').MessageActionRowComponentBuilder>().addComponents(
+		new ButtonBuilder()
+			.setCustomId('capt_join')
+			.setLabel(dashboard.text('registration.join'))
+			.setStyle(ButtonStyle.Success),
+		new ButtonBuilder()
+			.setCustomId('capt_leave')
+			.setLabel(dashboard.text('registration.leave'))
+			.setStyle(ButtonStyle.Danger),
+		new ButtonBuilder()
+			.setCustomId('capt_edit_time_trigger') // Название кнопки для перехвата админ права
+			.setLabel(dashboard.text('registration.editTime'))
+			.setStyle(ButtonStyle.Secondary)
+	)
+	const pageCount = Math.ceil(
+		(mainList.length + reserveList.length) / APPROVAL_PAGE_SIZE
+	)
+	if (pageCount > 1)
+		buttonsRow.addComponents(
+			new ButtonBuilder()
+				.setCustomId(`capt_approval_page_${approvalPage - 1}`)
+				.setLabel(dashboard.text('registration.previous'))
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(approvalPage === 0),
+			new ButtonBuilder()
+				.setCustomId(`capt_approval_page_${approvalPage + 1}`)
+				.setLabel(dashboard.text('registration.next'))
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(approvalPage >= pageCount - 1)
+		)
+	const menus = approvalGroups(
+		mainList,
+		reserveList,
+		approvalPage,
+		mainListMeta,
+		reserveListMeta,
+		guild,
+		sortMode
+	).map((group, index) => {
+		const start = approvalPage * APPROVAL_PAGE_SIZE + index * 25 + 1
+		const menu = new StringSelectMenuBuilder()
+			.setCustomId(approvalId(group))
+			.setPlaceholder(
+				`Одобрить участников ${start}–${start + group.length - 1}`
+			)
+			.setMinValues(0)
+			.setMaxValues(group.length)
+			.addOptions(
+				group.map((id, index) => ({
+					label: `${start + index}. ${guild?.members.cache.get(id)?.displayName || id}`.slice(
+						0,
+						100
+					),
+					value: id,
+					default: approved.has(id)
+				}))
+			)
+		return new ActionRowBuilder<import('discord.js').MessageActionRowComponentBuilder>().addComponents(menu)
+	})
+
+	return {
+		flags: MessageFlags.IsComponentsV2 as const,
+		components: [dashboard.decorate('registration', containerComponent), buttonsRow, ...menus]
+	}
+}
+
+/**
+ * Обновляет время в сообщении набора после редактирования
+ * @param {string} messageId - ID сообщения в канале
+ * @param {string} channelId - ID канала, где находится сообщение
+ * @param {string} newTimestamp - Новый Discord timestamp
+ * @param {Client} client - Discord клиент для поиска сообщения
+ */
+async function updateCollectionTime(
+	messageId: string,
+	channelId: string,
+	newTimestamp: string,
+	client: import('discord.js').Client
+) {
+	console.log(
+		`[UpdateTime] Начало обновления: messageId=${messageId}, channelId=${channelId}`
+	)
+
+	if (!messageId || !channelId || !client) {
+		console.error('[UpdateTime] Недостающие параметры:', {
+			messageId,
+			channelId,
+			hasClient: !!client
+		})
+		return
+	}
+
+	const result = await pool.query(
+		'SELECT * FROM active_captures WHERE message_id = $1',
+		[messageId]
+	)
+
+	if (result.rows.length === 0) {
+		console.error('[UpdateTime] Набор не найден в БД')
+		return
+	}
+
+	const captureData = result.rows[0]
+	console.log('[UpdateTime] Данные из БД получены:', captureData.target)
+
+	// ✅ ИСПРАВЛЕНО: Проверяем тип данных перед парсингом
+	// JSONB в PostgreSQL уже возвращается как объект, а не строка
+	
+
+	const mainList = readIds(captureData.main_list)
+	const reserveList = readIds(captureData.reserve_list)
+	const leftList = readIds(captureData.left_list)
+
+	console.log('[UpdateTime] Списки:', {
+		main: mainList.length,
+		reserve: reserveList.length,
+		left: leftList.length
+	})
+
+	// Пересобираем сообщение с новым временем
+	const updatedMessageData = buildCaptureMessage(
+		newTimestamp,
+		mainList,
+		reserveList,
+		leftList,
+		captureData.target,
+		captureData.max_main,
+		client.guilds.cache.first(), // guild for sorting
+		readMeta(captureData.main_list_meta),
+		readMeta(captureData.reserve_list_meta),
+		readIds(captureData.approved_users),
+		captureData.approval_page || 0,
+		captureData.sort_mode
+	)
+
+	// Ищем канал
+	const channel = client.channels.cache.get(channelId)
+	if (!channel) {
+		console.error(
+			`[UpdateTime] Канал ${channelId} не найден в cache, пытаемся fetch...`
+		)
+		try {
+			const fetchedChannel = await client.channels.fetch(channelId)
+			if (!fetchedChannel || !('messages' in fetchedChannel)) {
+				console.error('[UpdateTime] Канал не найден даже после fetch')
+				return
+			}
+			const message = await fetchedChannel.messages.fetch(messageId)
+			await message.edit(updatedMessageData)
+			console.log('[UpdateTime] ✅ Сообщение успешно обновлено (через fetch)')
+			return
+		} catch (caught) {
+ const err = getError(caught);
+			console.error('[UpdateTime] Ошибка при fetch канала:', err.message)
+			return
+		}
+	}
+
+	try {
+		console.log(`[UpdateTime] Канал найден, ищем сообщение ${messageId}...`)
+		if (!('messages' in channel)) return
+		const message = await channel.messages.fetch(messageId)
+		console.log('[UpdateTime] Сообщение найдено, обновляем...')
+		await message.edit(updatedMessageData)
+		console.log('[UpdateTime] ✅ Сообщение успешно обновлено')
+	} catch (caught) {
+ const err = getError(caught);
+		console.error('[UpdateTime] Не удалось обновить сообщение:', err.message)
+	}
+}
+
+async function sendCollection(
+	interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').ModalSubmitInteraction<'cached'>,
+	discordTimestamp: string,
+	target: string = 'капт',
+	maxMain: number = 20,
+	sendReminders = true
+) {
+	const guild = interaction.guild
+	const channel = guild.channels.cache.get(dashboard.getSetting('PLUS_CHANNEL_ID'))
+ if (!channel?.isSendable()) throw new Error('Канал регистрации недоступен')
+
+	const mainList: string[] = []
+	const reserveList: string[] = []
+	const leftList: string[] = []
+	// Track join timestamps: { userId: timestamp }
+	const mainListMeta: JoinedPlayer[] = []
+	const reserveListMeta: JoinedPlayer[] = []
+
+	const messageData = buildCaptureMessage(
+		discordTimestamp,
+		mainList,
+		reserveList,
+		leftList,
+		target,
+		maxMain,
+		guild,
+		mainListMeta,
+		reserveListMeta
+	)
+	const message = await channel.send(messageData)
+	if (sendReminders) {
+		for (let i = 0; i < 3; i++) {
+			await channel.send({
+				content: `<@&${dashboard.getSetting('AUTO_ROLE')}> рега выше`
+			})
+		}
+	}
+
+	try {
+		await pool.query(
+			`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, main_list_meta, reserve_list_meta, target, max_main)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			[
+				message.id,
+				discordTimestamp,
+				JSON.stringify(mainList),
+				JSON.stringify(reserveList),
+				JSON.stringify(leftList),
+				JSON.stringify(mainListMeta),
+				JSON.stringify(reserveListMeta),
+				target,
+				maxMain
+			]
+		)
+	} catch (caught) {
+ const err = getError(caught);
+		console.error('Не удалось сохранить набор в БД:', err)
+	}
+}
+
+async function handleButton(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+	if (!interaction.isButton()) return
+	if (
+		interaction.customId !== 'capt_join' &&
+		interaction.customId !== 'capt_leave'
+	)
+		return
+
+	// Сразу подтверждаем, чтобы Discord не слал "не ответило вовремя"
+	try {
+		await interaction.deferUpdate()
+	} catch (caught) {
+ const err = getError(caught);
+		console.error('Не удалось подтвердить кнопку капта:', err)
+		return
+	}
+
+	const messageId = interaction.message.id
+	const userId = interaction.user.id
+
+	
+
+	let client
+	try {
+		client = await pool.connect()
+		await client.query('BEGIN')
+
+		const res = await client.query(
+			'SELECT * FROM active_captures WHERE message_id = $1 FOR UPDATE',
+			[messageId]
+		)
+		const row = res.rows[0]
+
+		if (!row) {
+			await client.query('ROLLBACK')
+			return interaction
+				.followUp({
+					content: '❌ Данная регистрация устарела или неактивна.',
+					flags: MessageFlags.Ephemeral as const
+				})
+				.catch(() => {})
+		}
+
+		const discordTimestamp = row.discord_timestamp
+		const target = row.target
+		const maxMain = row.max_main || 20
+
+		let mainList = readIds(row.main_list)
+		let reserveList = readIds(row.reserve_list)
+		let leftList = readIds(row.left_list)
+		let mainListMeta = readMeta(row.main_list_meta)
+		let reserveListMeta = readMeta(row.reserve_list_meta)
+		let approvedUsers = readIds(row.approved_users)
+
+		if (interaction.customId === 'capt_join') {
+			if (mainList.includes(userId) || reserveList.includes(userId)) {
+				await client.query('ROLLBACK')
+				return interaction
+					.followUp({
+						content: 'Вы уже записаны на мероприятие!',
+						flags: MessageFlags.Ephemeral as const
+					})
+					.catch(() => {})
+			}
+
+			const leftIndex = leftList.indexOf(userId)
+			if (leftIndex !== -1) leftList.splice(leftIndex, 1)
+
+			const now = Date.now()
+			if (approvedUsers.length === 0 && mainList.length < maxMain) {
+				mainList.push(userId)
+				mainListMeta.push({ userId, joinedAt: now })
+			} else {
+				reserveList.push(userId)
+				reserveListMeta.push({ userId, joinedAt: now })
+			}
+		} else if (interaction.customId === 'capt_leave') {
+			const mainIndex = mainList.indexOf(userId)
+			const reserveIndex = reserveList.indexOf(userId)
+
+			if (mainIndex === -1 && reserveIndex === -1) {
+				await client.query('ROLLBACK')
+				return interaction
+					.followUp({
+						content: 'Вас и так нет в списках.',
+						flags: MessageFlags.Ephemeral as const
+					})
+					.catch(() => {})
+			}
+
+			if (mainIndex !== -1) {
+				mainList.splice(mainIndex, 1)
+				mainListMeta.splice(mainIndex, 1)
+				if (approvedUsers.length === 0 && reserveList.length > 0) {
+					const movingPlayer = reserveList.shift()!
+					const movingMeta = reserveListMeta.shift() || { userId: movingPlayer, joinedAt: Date.now() }
+					mainList.push(movingPlayer)
+					mainListMeta.push(movingMeta)
+				}
+			} else if (reserveIndex !== -1) {
+				reserveList.splice(reserveIndex, 1)
+				reserveListMeta.splice(reserveIndex, 1)
+			}
+
+			if (!leftList.includes(userId)) {
+				leftList.push(userId)
+			}
+			const wasApproved = approvedUsers.includes(userId)
+			approvedUsers = approvedUsers.filter(id => id !== userId)
+			if (wasApproved && approvedUsers.length === 0) {
+				const lists = redistributeApproved(
+					mainList,
+					reserveList,
+					mainListMeta,
+					reserveListMeta,
+					approvedUsers,
+					maxMain
+				)
+				mainList = lists.mainList
+				reserveList = lists.reserveList
+				mainListMeta = lists.mainMeta
+				reserveListMeta = lists.reserveMeta
+			}
+		}
+
+		await client.query(
+			`UPDATE active_captures 
+         SET main_list = $1, reserve_list = $2, left_list = $3, main_list_meta = $4, reserve_list_meta = $5, approved_users = $6
+         WHERE message_id = $7`,
+			[
+				JSON.stringify(mainList),
+				JSON.stringify(reserveList),
+				JSON.stringify(leftList),
+				JSON.stringify(mainListMeta),
+				JSON.stringify(reserveListMeta),
+				JSON.stringify(approvedUsers),
+				messageId
+			]
+		)
+
+		const updatedMessageData = buildCaptureMessage(
+			discordTimestamp,
+			mainList,
+			reserveList,
+			leftList,
+			target,
+			maxMain,
+			interaction.guild,
+			mainListMeta,
+			reserveListMeta,
+			approvedUsers,
+			row.approval_page || 0,
+			row.sort_mode
+		)
+		await interaction.editReply(updatedMessageData)
+		await client.query('COMMIT')
+	} catch (caught) {
+ const err = getError(caught);
+		if (client) await client.query('ROLLBACK').catch(() => {})
+		console.error('Ошибка при обработке кнопки капта:', err)
+		await interaction
+			.followUp({
+				content: '❌ Произошла ошибка базы данных при сохранении.',
+				flags: MessageFlags.Ephemeral as const
+			})
+			.catch(() => {})
+	} finally {
+		client?.release()
+	}
+}
+
+async function handleApproval(interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').StringSelectMenuInteraction<'cached'>) {
+	const adminRoles = (dashboard.getSetting('ADMIN_ROLES') || '')
+		.split(',')
+		.map(id => id.trim())
+		.filter(Boolean)
+	const member = interaction.member
+	if (
+		!member ||
+		(!member.permissions.has(PermissionFlagsBits.Administrator) &&
+			!adminRoles.some(id => member.roles.cache.has(id)))
+	) {
+		return interaction.reply({
+			content: '❌ У вас нет прав для управления набором.',
+			flags: MessageFlags.Ephemeral as const
+		})
+	}
+	await interaction.deferUpdate()
+	let client
+	try {
+		client = await pool.connect()
+		await client.query('BEGIN')
+		const result = await client.query(
+			'SELECT * FROM active_captures WHERE message_id = $1 FOR UPDATE',
+			[interaction.message.id]
+		)
+		const row = result.rows[0]
+		if (!row) {
+			await client.query('ROLLBACK')
+			return interaction.followUp({
+				content: '❌ Данная регистрация устарела или неактивна.',
+				flags: MessageFlags.Ephemeral as const
+			})
+		}
+		
+		let main = readIds(row.main_list)
+		let reserve = readIds(row.reserve_list)
+		let mainMeta = readMeta(row.main_list_meta)
+		let reserveMeta = readMeta(row.reserve_list_meta)
+		let approved = readIds(row.approved_users)
+		let sortMode = row.sort_mode === 'time' ? 'time' : 'priority'
+		let page = Math.max(
+			0,
+			Math.min(
+				row.approval_page || 0,
+				Math.max(
+					0,
+					Math.ceil((main.length + reserve.length) / APPROVAL_PAGE_SIZE) - 1
+				)
+			)
+		)
+		if (interaction.customId === 'capt_sort_toggle') {
+			sortMode = sortMode === 'time' ? 'priority' : 'time'
+		} else if (interaction.isStringSelectMenu()) {
+			const group = approvalGroups(
+				main,
+				reserve,
+				page,
+				mainMeta,
+				reserveMeta,
+				interaction.guild,
+				sortMode
+			).find(items => approvalId(items) === interaction.customId)
+			if (!group || interaction.values.some(id => !group.includes(id))) {
+				await client.query('ROLLBACK')
+				return interaction.followUp({
+					content: 'Список изменился. Обновите сообщение и попробуйте снова.',
+					flags: MessageFlags.Ephemeral as const
+				})
+			}
+			approved = [
+				...approved.filter(id => !group.includes(id)),
+				...interaction.values
+			]
+			if (approved.length > (row.max_main || 20)) {
+				await client.query('ROLLBACK')
+				return interaction.followUp({
+					content: `❌ Можно одобрить не более ${row.max_main || 20} участников.`,
+					flags: MessageFlags.Ephemeral as const
+				})
+			}
+			const lists = redistributeApproved(
+				main,
+				reserve,
+				mainMeta,
+				reserveMeta,
+				approved,
+				row.max_main || 20
+			)
+			main = lists.mainList
+			reserve = lists.reserveList
+			mainMeta = lists.mainMeta
+			reserveMeta = lists.reserveMeta
+		} else {
+			const requestedPage = Number(
+				interaction.customId.slice('capt_approval_page_'.length)
+			)
+			if (
+				!Number.isInteger(requestedPage) ||
+				requestedPage < 0 ||
+				requestedPage >=
+					Math.ceil((main.length + reserve.length) / APPROVAL_PAGE_SIZE)
+			) {
+				await client.query('ROLLBACK')
+				return
+			}
+			page = requestedPage
+		}
+		await client.query(
+			'UPDATE active_captures SET approved_users = $1, approval_page = $2, main_list = $3, reserve_list = $4, main_list_meta = $5, reserve_list_meta = $6, sort_mode = $8 WHERE message_id = $7',
+			[
+				JSON.stringify(approved),
+				page,
+				JSON.stringify(main),
+				JSON.stringify(reserve),
+				JSON.stringify(mainMeta),
+				JSON.stringify(reserveMeta),
+				interaction.message.id,
+				sortMode
+			]
+		)
+		await interaction.editReply(
+			buildCaptureMessage(
+				row.discord_timestamp,
+				main,
+				reserve,
+				readIds(row.left_list),
+				row.target,
+				row.max_main || 20,
+				interaction.guild,
+				mainMeta,
+				reserveMeta,
+				approved,
+				page,
+				sortMode
+			)
+		)
+		await client.query('COMMIT')
+	} catch (caught) {
+ const err = getError(caught);
+		if (client) await client.query('ROLLBACK').catch(() => {})
+		console.error('Ошибка одобрения участников:', err)
+		await interaction
+			.followUp({
+				content: '❌ Не удалось сохранить одобрение.',
+				flags: MessageFlags.Ephemeral as const
+			})
+			.catch(() => {})
+	} finally {
+		if (client) client.release()
+	}
+}
+
+export {
+	buildCaptureMessage,
+	redistributeApproved,
+	updateCollectionTime,
+	sendCollection,
+	handleButton,
+	handleApproval
+}

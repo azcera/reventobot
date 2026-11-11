@@ -1,0 +1,252 @@
+src/dashboard/store.ts(9,29): error TS2732: Cannot find module './templates.json'. Consider using '--resolveJsonModule' to import module with '.json' extension.
+tests/adminApplicationCommands.test.ts(44,58): error TS2345: Argument of type 'APIModalInteractionResponseCallbackData' is not assignable to parameter of type 'JsonComponent'.
+  Type 'APIModalInteractionResponseCallbackData' is missing the following properties from type 'JsonComponent': name, type, content, url
+tests/adminApplicationCommands.test.ts(49,73): error TS7006: Parameter 'event' implicitly has an 'any' type.
+tests/adminApplicationCommands.test.ts(69,61): error TS2551: Property 'component' does not exist on type 'JsonComponent'. Did you mean 'components'?
+tests/adminApplicationCommands.test.ts(70,41): error TS2551: Property 'component' does not exist on type 'JsonComponent'. Did you mean 'components'?
+tests/adminApplicationCommands.test.ts(85,36): error TS2322: Type 'null' is not assignable to type '{ id: string; commands: { create: (data: JsonComponent) => Promise<number>; }; members: { me: { permissions: { has: () => boolean; }; }; }; channels: { fetch: () => Promise<never>; cache: any; }; }'.
+tests/adminApplicationCommands.test.ts(131,15): error TS2339: Property 'channels' does not exist on type '{ user: { id: string; }; commands: any; on: (event: string, callback: (event: unknown) => Promise<unknown>) => void; }'.
+tests/adminApplicationCommands.test.ts(146,8): error TS2722: Cannot invoke an object which is possibly 'undefined'.
+tests/adminApplicationCommands.test.ts(164,18): error TS2339: Property 'fetch' does not exist on type '{ me: { permissions: { has: () => boolean; }; }; }'.
+tests/adminApplicationCommands.test.ts(286,8): error TS2339: Property 'followUp' does not exist on type '{ commandName: string | null; guild: { id: string; commands: { create: (data: JsonComponent) => Promise<number>; }; members: { me: { permissions: { has: () => boolean; }; }; }; channels: { ...; }; }; ... 22 more ...; editReply: (payload: Payload) => Promise<...>; }'.
+tests/adminApplicationCommands.test.ts(286,25): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/captureApproval.test.ts(238,4): error TS2741: Property 'components' is missing in type 'Reply' but required in type 'CapturePayload'.
+tests/captureApproval.test.ts(345,40): error TS2741: Property 'components' is missing in type 'Reply' but required in type 'CapturePayload'.
+tests/captureApproval.test.ts(364,36): error TS2741: Property 'components' is missing in type 'Reply' but required in type 'CapturePayload'.
+tests/captureApproval.test.ts(418,20): error TS2532: Object is possibly 'undefined'.
+tests/captureApproval.test.ts(419,18): error TS2532: Object is possibly 'undefined'.
+tests/captureApproval.test.ts(436,88): error TS2339: Property 'toJSON' does not exist on type 'Reply'.
+tests/captureApproval.test.ts(451,15): error TS2532: Object is possibly 'undefined'.
+tests/componentMarkdown.test.ts(21,39): error TS2339: Property 'accessory' does not exist on type 'APIComponentInContainer'.
+  Property 'accessory' does not exist on type 'APIFileComponent'.
+tests/componentMarkdown.test.ts(22,39): error TS2339: Property 'accessory' does not exist on type 'APIComponentInContainer'.
+  Property 'accessory' does not exist on type 'APIFileComponent'.
+tests/componentMarkdown.test.ts(28,53): error TS2345: Argument of type '({ type: string; spacing: string; divider: boolean; value?: undefined; btnLabel?: undefined; btnLink?: undefined; } | { type: string; value: string; spacing?: undefined; divider?: undefined; btnLabel?: undefined; btnLink?: undefined; } | { ...; })[]' is not assignable to parameter of type 'ComponentItem[]'.
+  Type '{ type: string; spacing: string; divider: boolean; value?: undefined; btnLabel?: undefined; btnLink?: undefined; } | { type: string; value: string; spacing?: undefined; divider?: undefined; btnLabel?: undefined; btnLink?: undefined; } | { ...; }' is not assignable to type 'ComponentItem'.
+    Type '{ type: string; spacing: string; divider: boolean; value?: undefined; btnLabel?: undefined; btnLink?: undefined; }' is not assignable to type 'ComponentItem'.
+      Type '{ type: string; spacing: string; divider: boolean; value?: undefined; btnLabel?: undefined; btnLink?: undefined; }' is not assignable to type '{ type: "separator"; value?: string | undefined; spacing?: "small" | "large" | undefined; divider?: boolean | undefined; large?: boolean | undefined; id?: string | undefined; }'.
+        Types of property 'type' are incompatible.
+          Type 'string' is not assignable to type '"separator"'.
+tests/componentMarkdown.test.ts(33,32): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'string'.
+  Type 'number' is not assignable to type 'string'.
+tests/componentMarkdown.test.ts(34,81): error TS2339: Property 'spacing' does not exist on type 'APIComponentInContainer'.
+  Property 'spacing' does not exist on type 'APIFileComponent'.
+tests/componentMarkdown.test.ts(79,48): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: EditableField, index: number, obj: EditableField[]) => value is EditableField, thisArg?: any): EditableField | undefined', gave the following error.
+    Argument of type '(field: TemplateField) => boolean | undefined' is not assignable to parameter of type '(value: EditableField, index: number, obj: EditableField[]) => value is EditableField'.
+      Types of parameters 'field' and 'value' are incompatible.
+        Type 'EditableField' is missing the following properties from type 'TemplateField': key, group
+  Overload 2 of 2, '(predicate: (value: EditableField, index: number, obj: EditableField[]) => unknown, thisArg?: any): EditableField | undefined', gave the following error.
+    Argument of type '(field: TemplateField) => boolean | undefined' is not assignable to parameter of type '(value: EditableField, index: number, obj: EditableField[]) => unknown'.
+      Types of parameters 'field' and 'value' are incompatible.
+        Type 'EditableField' is missing the following properties from type 'TemplateField': key, group
+tests/componentMarkdown.test.ts(81,44): error TS18048: 'field' is possibly 'undefined'.
+tests/componentMarkdown.test.ts(82,19): error TS2532: Object is possibly 'undefined'.
+tests/componentMarkdown.test.ts(83,12): error TS2532: Object is possibly 'undefined'.
+tests/dashboard.test.ts(70,29): error TS2740: Type '{}' is missing the following properties from type 'Client<boolean>': actions, presence, _eval, _validateOptions, and 52 more.
+tests/dashboard.test.ts(72,19): error TS2322: Type '(path: string, fn: (req: object, res: { json(value: { configured: boolean; }): void; }) => void) => void' is not assignable to type '((name: string) => any) & IRouterMatcher<Express, any>'.
+  Type '(path: string, fn: (req: object, res: { json(value: { configured: boolean; }): void; }) => void) => void' is not assignable to type '(name: string) => any'.
+    Target signature provides too few arguments. Expected 2 or more, but got 1.
+tests/dashboard.test.ts(146,64): error TS2532: Object is possibly 'undefined'.
+tests/dashboard.test.ts(152,188): error TS2345: Argument of type '{ [x: string]: string | undefined; }' is not assignable to parameter of type 'Record<string, string | null>'.
+  'string' index signatures are incompatible.
+    Type 'string | undefined' is not assignable to type 'string | null'.
+      Type 'undefined' is not assignable to type 'string | null'.
+tests/dashboard.test.ts(172,3): error TS2740: Type '{ query(): never; }' is missing the following properties from type 'Pool': totalCount, idleCount, waitingCount, expiredCount, and 20 more.
+tests/dashboardChanges.test.ts(44,15): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+tests/dashboardCommands.test.ts(32,50): error TS2345: Argument of type '{ member: { permissions: { has: () => boolean; }; }; delete: () => Promise<void>; channel: { readonly payload: CommandPayload; send(payload: CommandPayload): Promise<...>; messages: { ...; }; }; }' is not assignable to parameter of type 'Message<true>'.
+  Type '{ member: { permissions: { has: () => boolean; }; }; delete: () => Promise<void>; channel: { readonly payload: CommandPayload; send(payload: CommandPayload): Promise<...>; messages: { ...; }; }; }' is missing the following properties from type 'Message<true>': _cacheType, _patch, activity, applicationId, and 66 more.
+tests/dashboardCommands.test.ts(38,22): error TS2345: Argument of type '{ member: { permissions: { has: () => boolean; }; }; delete: () => Promise<void>; channel: { readonly payload: CommandPayload; send(payload: CommandPayload): Promise<...>; messages: { ...; }; }; }' is not assignable to parameter of type 'Message<true>'.
+  Type '{ member: { permissions: { has: () => boolean; }; }; delete: () => Promise<void>; channel: { readonly payload: CommandPayload; send(payload: CommandPayload): Promise<...>; messages: { ...; }; }; }' is missing the following properties from type 'Message<true>': _cacheType, _patch, activity, applicationId, and 66 more.
+tests/dashboardCommands.test.ts(56,59): error TS2532: Object is possibly 'undefined'.
+tests/dashboardCommands.test.ts(57,16): error TS2554: Expected 7-12 arguments, but got 6.
+tests/dashboardCommands.test.ts(58,17): error TS2554: Expected 7-12 arguments, but got 6.
+tests/dashboardPermanent.test.ts(126,15): error TS2532: Object is possibly 'undefined'.
+tests/dashboardPermanent.test.ts(134,110): error TS2339: Property 'link' does not exist on type 'never'.
+tests/dashboardPermanent.test.ts(159,46): error TS2345: Argument of type '(field: TemplateField) => boolean' is not assignable to parameter of type '(value: { value: string; label: string; type: string; channelTypes?: number[] | undefined; default?: string | boolean | undefined; key: string; }, index: number, array: { value: string; label: string; type: string; channelTypes?: number[] | undefined; default?: string | ... 1 more ... | undefined; key: string; }[]) ...'.
+  Types of parameters 'field' and 'value' are incompatible.
+    Property 'group' is missing in type '{ value: string; label: string; type: string; channelTypes?: number[]; default?: boolean | string; key: string; }' but required in type 'TemplateField'.
+tests/dashboardPublishing.test.ts(44,89): error TS2339: Property 'custom_id' does not exist on type 'RawComponent'.
+tests/dashboardPublishing.test.ts(79,78): error TS2339: Property 'custom_id' does not exist on type 'RawComponent'.
+tests/dashboardPublishing.test.ts(142,22): error TS2339: Property 'updated' does not exist on type '{ kind: string; ok: boolean; error: string; } | { error?: string | undefined; kind: string; ok: boolean; updated: number; failures: ({ channelId: string; error: string; messageId?: undefined; } | { ...; } | { ...; })[]; } | { ...; }'.
+  Property 'updated' does not exist on type '{ kind: string; ok: boolean; error: string; }'.
+tests/dashboardPublishing.test.ts(143,22): error TS2339: Property 'failures' does not exist on type '{ kind: string; ok: boolean; error: string; } | { error?: string | undefined; kind: string; ok: boolean; updated: number; failures: ({ channelId: string; error: string; messageId?: undefined; } | { ...; } | { ...; })[]; } | { ...; }'.
+  Property 'failures' does not exist on type '{ kind: string; ok: boolean; error: string; }'.
+tests/dashboardPublishing.test.ts(149,22): error TS2339: Property 'updated' does not exist on type '{ kind: string; ok: boolean; error: string; } | { error?: string | undefined; kind: string; ok: boolean; updated: number; failures: ({ channelId: string; error: string; messageId?: undefined; } | { ...; } | { ...; })[]; } | { ...; }'.
+  Property 'updated' does not exist on type '{ kind: string; ok: boolean; error: string; }'.
+tests/dashboardSessions.test.ts(48,15): error TS2532: Object is possibly 'undefined'.
+tests/dashboardSessions.test.ts(52,38): error TS2322: Type '(args_0: string, args_1?: readonly unknown[] | undefined) => Promise<any>' is not assignable to type '{ <T extends Submittable>(queryStream: T): T; <R extends any[] = any[], I = any[]>(queryConfig: QueryArrayConfig<I>, values?: QueryConfigValues<I> | undefined): Promise<...>; <R extends QueryResultRow = any, I = any[]>(queryConfig: QueryConfig<...>): Promise<...>; <R extends QueryResultRow = any, I = any[]>(queryTex...'.
+  Types of parameters 'args_0' and 'queryConfig' are incompatible.
+    Type 'QueryArrayConfig<any>' is not assignable to type 'string'.
+tests/dashboardSessions.test.ts(55,15): error TS2532: Object is possibly 'undefined'.
+tests/discordMembers.test.ts(15,35): error TS2345: Argument of type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is not assignable to parameter of type 'Guild'.
+  Type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is missing the following properties from type 'Guild': _sortedRoles, _sortedChannels, afkChannel, afkChannelId, and 117 more.
+tests/discordMembers.test.ts(16,36): error TS2345: Argument of type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is not assignable to parameter of type 'Guild'.
+  Type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is missing the following properties from type 'Guild': _sortedRoles, _sortedChannels, afkChannel, afkChannelId, and 117 more.
+tests/discordMembers.test.ts(23,41): error TS2345: Argument of type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is not assignable to parameter of type 'Guild'.
+  Type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is missing the following properties from type 'Guild': _sortedRoles, _sortedChannels, afkChannel, afkChannelId, and 117 more.
+tests/discordMembers.test.ts(26,34): error TS2345: Argument of type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is not assignable to parameter of type 'Guild'.
+  Type '{ members: { cache: Map<string, {}>; fetch: (options: { time: number; }) => Promise<Map<string, {}>>; }; }' is missing the following properties from type 'Guild': _sortedRoles, _sortedChannels, afkChannel, afkChannelId, and 117 more.
+tests/discordMembers.test.ts(36,64): error TS2345: Argument of type '{ members: { fetch: () => Promise<Map<string, unknown>>; }; }' is not assignable to parameter of type 'Guild'.
+  Type '{ members: { fetch: () => Promise<Map<string, unknown>>; }; }' is missing the following properties from type 'Guild': _sortedRoles, _sortedChannels, afkChannel, afkChannelId, and 117 more.
+tests/discordMembers.test.ts(36,91): error TS2345: Argument of type '{ members: { fetch: () => Promise<Map<string, unknown>>; }; }' is not assignable to parameter of type 'Guild'.
+  Type '{ members: { fetch: () => Promise<Map<string, unknown>>; }; }' is missing the following properties from type 'Guild': _sortedRoles, _sortedChannels, afkChannel, afkChannelId, and 117 more.
+tests/discordMembers.test.ts(41,40): error TS2345: Argument of type '{ members: { fetch: () => Promise<Map<string, unknown>>; }; }' is not assignable to parameter of type 'Guild'.
+  Type '{ members: { fetch: () => Promise<Map<string, unknown>>; }; }' is missing the following properties from type 'Guild': _sortedRoles, _sortedChannels, afkChannel, afkChannelId, and 117 more.
+tests/discordMembers.test.ts(44,72): error TS2322: Type 'Promise<Map<string, {}>>' is not assignable to type 'Promise<GuildMember> | Promise<Collection<string, GuildMember>>'.
+  Type 'Promise<Map<string, {}>>' is not assignable to type 'Promise<GuildMember>'.
+    Type 'Map<string, {}>' is missing the following properties from type 'GuildMember': _roles, avatar, avatarDecorationData, banner, and 47 more.
+tests/eventSchedule.test.ts(156,111): error TS2345: Argument of type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: ReturnType<typeof buildSchedule>) => Promise<...>; }>; }; send: (payload: ReturnType<typeof bu...' is not assignable to parameter of type 'GuildTextBasedChannel'.
+  Type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: { ...; }) => Promise<...>; }>; }; send: (payload: { ...; }) => Promise<...>; }' is missing the following properties from type 'VoiceChannel': speakable, type, sendSoundboardSound, bitrate, and 62 more.
+tests/eventSchedule.test.ts(163,25): error TS2345: Argument of type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: ReturnType<typeof buildSchedule>) => Promise<...>; }>; }; send: (payload: ReturnType<typeof bu...' is not assignable to parameter of type 'GuildTextBasedChannel'.
+  Type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: { ...; }) => Promise<...>; }>; }; send: (payload: { ...; }) => Promise<...>; }' is missing the following properties from type 'VoiceChannel': speakable, type, sendSoundboardSound, bitrate, and 62 more.
+tests/eventSchedule.test.ts(171,25): error TS2345: Argument of type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: ReturnType<typeof buildSchedule>) => Promise<...>; }>; }; send: (payload: ReturnType<typeof bu...' is not assignable to parameter of type 'GuildTextBasedChannel'.
+  Type '{ id: string; guild: { emojis: { cache: Collection<string, { name: string; toString: () => "<:chest:100000000000000001>"; }>; }; }; messages: { fetch: (id: string) => Promise<{ attachments: Collection<...>; edit: (payload: { ...; }) => Promise<...>; }>; }; send: (payload: { ...; }) => Promise<...>; }' is missing the following properties from type 'VoiceChannel': speakable, type, sendSoundboardSound, bitrate, and 62 more.
+tests/familyWars.test.ts(213,33): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(213,42): error TS7006: Parameter 'next' implicitly has an 'any' type.
+tests/familyWars.test.ts(217,31): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(217,40): error TS7006: Parameter 'next' implicitly has an 'any' type.
+tests/familyWars.test.ts(255,31): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(255,40): error TS7006: Parameter 'next' implicitly has an 'any' type.
+tests/familyWars.test.ts(257,45): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(257,54): error TS7006: Parameter 'next' implicitly has an 'any' type.
+tests/familyWars.test.ts(266,31): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(266,40): error TS7006: Parameter 'next' implicitly has an 'any' type.
+tests/familyWars.test.ts(273,39): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(273,48): error TS7006: Parameter 'next' implicitly has an 'any' type.
+tests/familyWars.test.ts(470,27): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(470,36): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/familyWars.test.ts(482,25): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(482,34): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/familyWars.test.ts(509,31): error TS2550: Property 'findLast' does not exist on type 'TestPayload[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+tests/familyWars.test.ts(509,40): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/groupSchedule.test.ts(34,39): error TS2345: Argument of type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
+  Type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is missing the following properties from type 'ButtonInteraction<"cached">': componentType, component, inGuild, inCachedGuild, and 56 more.
+tests/groupSchedule.test.ts(48,34): error TS2345: Argument of type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is not assignable to parameter of type 'ModalSubmitInteraction<"cached">'.
+  Type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is missing the following properties from type 'ModalSubmitInteraction<"cached">': type, components, deferred, ephemeral, and 54 more.
+tests/groupSchedule.test.ts(66,39): error TS2345: Argument of type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
+  Type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is missing the following properties from type 'ButtonInteraction<"cached">': componentType, component, inGuild, inCachedGuild, and 56 more.
+tests/groupSchedule.test.ts(68,32): error TS2345: Argument of type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is not assignable to parameter of type 'ModalSubmitInteraction<"cached">'.
+  Type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is missing the following properties from type 'ModalSubmitInteraction<"cached">': type, components, deferred, ephemeral, and 54 more.
+tests/groupSchedule.test.ts(77,32): error TS2345: Argument of type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is not assignable to parameter of type 'ModalSubmitInteraction<"cached">'.
+  Type '{ customId: string; member: {}; fields: { getTextInputValue: (key: string) => string; }; client: { eventSchedule: { canCreateGroup: () => boolean; resolveSelection: (id: string) => { label: string; timestamp: number; } | null; }; channels: { ...; }; }; reply: (payload: ReplyPayload) => Promise<...>; showModal: (moda...' is missing the following properties from type 'ModalSubmitInteraction<"cached">': type, components, deferred, ephemeral, and 54 more.
+tests/inviteVoiceSelect.test.ts(74,31): error TS2345: Argument of type '{ deferred: boolean; customId: string; user: { id: string; }; guild: { channels: { cache: Collection<string, { id: string; type: ChannelType; name: string; }>; }; }; message: { ...; }; channel: { ...; }; deferReply: () => Promise<...>; editReply: () => Promise<...>; deleteReply: () => Promise<...>; }' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
+  Type '{ deferred: boolean; customId: string; user: { id: string; }; guild: { channels: { cache: Collection<string, { id: string; type: ChannelType; name: string; }>; }; }; message: { ...; }; channel: { ...; }; deferReply: () => Promise<...>; editReply: () => Promise<...>; deleteReply: () => Promise<...>; }' is missing the following properties from type 'ButtonInteraction<"cached">': componentType, component, inGuild, inCachedGuild, and 52 more.
+tests/inviteVoiceSelect.test.ts(80,36): error TS2345: Argument of type '{ customId: string; values: string[]; user: { id: string; }; guild: { name: string; }; channel: { send: () => Promise<void>; }; client: { users: { fetch: () => Promise<null>; }; }; deferred: boolean; response: string | undefined; deferReply: (this: { ...; }) => Promise<...>; editReply: (options: { ...; }) => Promise...' is not assignable to parameter of type 'StringSelectMenuInteraction<"cached">'.
+  Type '{ customId: string; values: string[]; user: { id: string; }; guild: { name: string; }; channel: { send: () => Promise<void>; }; client: { users: { fetch: () => Promise<null>; }; }; deferred: boolean; response: string | undefined; deferReply: (this: { ...; }) => Promise<...>; editReply: (options: { ...; }) => Promise...' is missing the following properties from type 'StringSelectMenuInteraction<"cached">': component, componentType, inGuild, inCachedGuild, and 53 more.
+tests/inviteVoiceSelect.test.ts(97,27): error TS2345: Argument of type '{ customId: string; values: string[]; user: { id: string; }; guild: { name: string; }; channel: { send: () => Promise<void>; }; client: { users: { fetch: () => Promise<null>; }; }; deferred: boolean; response: string | undefined; deferReply: (this: { ...; }) => Promise<...>; editReply: (options: { ...; }) => Promise...' is not assignable to parameter of type 'StringSelectMenuInteraction<"cached">'.
+  Type '{ customId: string; values: string[]; user: { id: string; }; guild: { name: string; }; channel: { send: () => Promise<void>; }; client: { users: { fetch: () => Promise<null>; }; }; deferred: boolean; response: string | undefined; deferReply: (this: { ...; }) => Promise<...>; editReply: (options: { ...; }) => Promise...' is missing the following properties from type 'StringSelectMenuInteraction<"cached">': component, componentType, inGuild, inCachedGuild, and 53 more.
+tests/inviteVoiceSelect.test.ts(111,27): error TS2345: Argument of type '{ customId: string; values: string[]; user: { id: string; }; guild: { name: string; }; channel: { send: () => Promise<void>; }; client: { users: { fetch: () => Promise<null>; }; }; deferred: boolean; response: string | undefined; deferReply: (this: { ...; }) => Promise<...>; editReply: (options: { ...; }) => Promise...' is not assignable to parameter of type 'StringSelectMenuInteraction<"cached">'.
+  Type '{ customId: string; values: string[]; user: { id: string; }; guild: { name: string; }; channel: { send: () => Promise<void>; }; client: { users: { fetch: () => Promise<null>; }; }; deferred: boolean; response: string | undefined; deferReply: (this: { ...; }) => Promise<...>; editReply: (options: { ...; }) => Promise...' is missing the following properties from type 'StringSelectMenuInteraction<"cached">': component, componentType, inGuild, inCachedGuild, and 53 more.
+tests/majesticNicknameScheduler.test.ts(13,54): error TS2740: Type '{ guilds: { fetch: (id: string) => Promise<{ id: string; }>; }; }' is missing the following properties from type 'Client<boolean>': actions, presence, _eval, _validateOptions, and 51 more.
+tests/majesticNicknameScheduler.test.ts(13,62): error TS2739: Type '{ autoNicknames: (guild: { id: string; }) => Promise<object | null>; wait: () => Promise<void>; stop: () => Promise<void>; }' is missing the following properties from type '{ state(guild: Guild): Promise<{ busy: boolean; rankRoles: Readonly<Record<string, string>>; configured: boolean; decisions: Record<string, MemberDecision>; preview: SyncPreview | null; run: SyncRun | null; familyMembership?: { ...; } | undefined; }>; ... 6 more ...; wait(guild: Guild): Promise<...>; }': state, membershipSnapshot, preview, resolve, apply
+tests/majesticNicknameScheduler.test.ts(13,68): error TS2740: Type '{ ready: boolean; getSetting: () => boolean; }' is missing the following properties from type '{ readonly ready: boolean; readonly revision: number; getSetting: <K extends string>(key: K) => SettingFor<K>; readonly bindings: Record<string, Binding>; ... 11 more ...; history(): Promise<...>; }': revision, bindings, mclLists, roleIds, and 10 more.
+tests/majesticNicknameScheduler.test.ts(14,3): error TS2741: Property '__promisify__' is missing in type '(callback: () => Promise<void>, delay: number) => number' but required in type 'typeof setTimeout'.
+tests/majesticNicknameScheduler.test.ts(14,145): error TS2739: Type '{ error(): void; }' is missing the following properties from type 'Pick<Console, "warn" | "error" | "log">': warn, log
+tests/majesticNicknameScheduler.test.ts(61,51): error TS2740: Type '{ guilds: { fetch: (id: string) => Promise<{ id: string; }>; }; }' is missing the following properties from type 'Client<boolean>': actions, presence, _eval, _validateOptions, and 51 more.
+tests/majesticNicknameScheduler.test.ts(61,69): error TS2739: Type '{ autoNicknames: (guild: { id: string; }) => Promise<object | null>; wait: () => Promise<void>; stop: () => Promise<void>; }' is missing the following properties from type '{ state(guild: Guild): Promise<{ busy: boolean; rankRoles: Readonly<Record<string, string>>; configured: boolean; decisions: Record<string, MemberDecision>; preview: SyncPreview | null; run: SyncRun | null; familyMembership?: { ...; } | undefined; }>; ... 6 more ...; wait(guild: Guild): Promise<...>; }': state, membershipSnapshot, preview, resolve, apply
+tests/majesticNicknameScheduler.test.ts(61,83): error TS2740: Type '{ ready: boolean; getSetting: () => boolean; }' is missing the following properties from type '{ readonly ready: boolean; readonly revision: number; getSetting: <K extends string>(key: K) => SettingFor<K>; readonly bindings: Record<string, Binding>; ... 11 more ...; history(): Promise<...>; }': revision, bindings, mclLists, roleIds, and 10 more.
+tests/majesticNicknameScheduler.test.ts(62,4): error TS2741: Property '__promisify__' is missing in type '(callback: () => Promise<void>, delay: number) => number' but required in type 'typeof setTimeout'.
+tests/majesticNicknameScheduler.test.ts(62,150): error TS2739: Type '{ error: (...args: unknown[]) => number; }' is missing the following properties from type 'Pick<Console, "warn" | "error" | "log">': warn, log
+tests/majesticPreview.test.ts(5,9): error TS2339: Property 'readConfig' does not exist on type 'typeof import("C:/Users/user/Desktop/reventobot/scripts/check-majestic")'.
+tests/majesticPreview.test.ts(5,21): error TS2339: Property 'fetchMembers' does not exist on type 'typeof import("C:/Users/user/Desktop/reventobot/scripts/check-majestic")'.
+tests/majesticPreview.test.ts(9,104): error TS2741: Property 'bot' is missing in type '{ id: string; nickname: string; roleIds: string[]; }' but required in type 'PreviewMember'.
+tests/majesticPreview.test.ts(55,48): error TS2741: Property 'bot' is missing in type '{ id: string; nickname: string; roleIds: string[]; }' but required in type 'PreviewMember'.
+tests/majesticPreview.test.ts(71,44): error TS2741: Property 'bot' is missing in type '{ id: string; nickname: string; roleIds: string[]; }' but required in type 'PreviewMember'.
+tests/majesticPreview.test.ts(71,54): error TS2741: Property 'bot' is missing in type '{ id: string; nickname: string; roleIds: string[]; }' but required in type 'PreviewMember'.
+tests/majesticPreview.test.ts(86,33): error TS2741: Property 'bot' is missing in type '{ id: string; nickname: string; roleIds: string[]; }' but required in type 'PreviewMember'.
+tests/majesticPreview.test.ts(97,49): error TS2345: Argument of type 'string | null | undefined' is not assignable to parameter of type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+tests/markdownRules.test.ts(52,66): error TS2532: Object is possibly 'undefined'.
+tests/mclLists.test.ts(10,8): error TS7034: Variable 'sent' implicitly has type 'any[]' in some locations where its type cannot be determined.
+tests/mclLists.test.ts(10,19): error TS7034: Variable 'edits' implicitly has type 'any[]' in some locations where its type cannot be determined.
+tests/mclLists.test.ts(11,100): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/mclLists.test.ts(12,83): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+tests/mclLists.test.ts(15,282): error TS7006: Parameter 'data' implicitly has an 'any' type.
+tests/mclLists.test.ts(16,56): error TS7006: Parameter 'section' implicitly has an 'any' type.
+tests/mclLists.test.ts(16,65): error TS7006: Parameter 'values' implicitly has an 'any' type.
+tests/mclLists.test.ts(18,29): error TS7006: Parameter 'sql' implicitly has an 'any' type.
+tests/mclLists.test.ts(18,34): error TS7006: Parameter 'args' implicitly has an 'any' type.
+tests/mclLists.test.ts(21,70): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+tests/mclLists.test.ts(22,68): error TS2322: Type '{ channel_id: any; message_id: any; }' is not assignable to type 'never'.
+tests/mclLists.test.ts(26,25): error TS7005: Variable 'sent' implicitly has an 'any[]' type.
+tests/mclLists.test.ts(26,31): error TS7005: Variable 'edits' implicitly has an 'any[]' type.
+tests/mclLists.test.ts(35,48): error TS7006: Parameter 'button' implicitly has an 'any' type.
+tests/mclLists.test.ts(37,48): error TS7006: Parameter 'button' implicitly has an 'any' type.
+tests/mclLists.test.ts(57,156): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(58,61): error TS7006: Parameter 'role' implicitly has an 'any' type.
+tests/mclLists.test.ts(61,15): error TS18047: 'replied' is possibly 'null'.
+tests/mclLists.test.ts(75,208): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(75,285): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(77,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(80,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(81,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(82,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(84,3): error TS2322: Type '({ user: target }: { user: any; }) => Promise<{ roles: { cache: any; add: (role: any) => Promise<void>; remove: (role: any) => Promise<void>; }; }>' is not assignable to type '() => Promise<any>'.
+  Target signature provides too few arguments. Expected 1 or more, but got 0.
+tests/mclLists.test.ts(84,42): error TS7031: Binding element 'target' implicitly has an 'any' type.
+tests/mclLists.test.ts(84,117): error TS7006: Parameter 'role' implicitly has an 'any' type.
+tests/mclLists.test.ts(84,169): error TS7006: Parameter 'role' implicitly has an 'any' type.
+tests/mclLists.test.ts(94,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(110,271): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/mclLists.test.ts(112,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(114,32): error TS7006: Parameter 'option' implicitly has an 'any' type.
+tests/mclLists.test.ts(115,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(118,20): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(118,78): error TS7006: Parameter 'option' implicitly has an 'any' type.
+tests/mclLists.test.ts(121,16): error TS18048: 'response' is possibly 'undefined'.
+tests/mclLists.test.ts(122,20): error TS18048: 'response' is possibly 'undefined'.
+tests/rolePrefixes.test.ts(17,15): error TS2554: Expected 3 arguments, but got 2.
+tests/rolePrefixes.test.ts(39,28): error TS2741: Property 'rankId' is missing in type '{ id: number; login: string; rankName: string; }' but required in type 'FamilyCharacter'.
+tests/telegramCaptures.test.ts(136,3): error TS2741: Property '__promisify__' is missing in type '() => number' but required in type 'typeof setTimeout'.
+tests/telegramErrorReporter.test.ts(14,63): error TS2322: Type '(url: string, options: RequestOptions) => Promise<{ ok: true; json: () => Promise<{ ok: boolean; }>; }>' is not assignable to type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Types of parameters 'url' and 'input' are incompatible.
+    Type 'URL | RequestInfo' is not assignable to type 'string'.
+      Type 'URL' is not assignable to type 'string'.
+tests/telegramErrorReporter.test.ts(34,63): error TS2322: Type '(_url: string, options: RequestOptions) => Promise<{ ok: true; json: () => Promise<{ ok: boolean; }>; }>' is not assignable to type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Types of parameters '_url' and 'input' are incompatible.
+    Type 'URL | RequestInfo' is not assignable to type 'string'.
+      Type 'URL' is not assignable to type 'string'.
+tests/telegramErrorReporter.test.ts(53,63): error TS2322: Type '() => Promise<{ ok: false; status: number; json?: undefined; } | { ok: true; json: () => Promise<{ ok: boolean; error_code: number; }>; status?: undefined; }>' is not assignable to type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Type 'Promise<{ ok: false; status: number; json?: undefined; } | { ok: true; json: () => Promise<{ ok: boolean; error_code: number; }>; status?: undefined; }>' is not assignable to type 'Promise<Response>'.
+    Type '{ ok: false; status: number; json?: undefined; } | { ok: true; json: () => Promise<{ ok: boolean; error_code: number; }>; status?: undefined; }' is not assignable to type 'Response'.
+      Type '{ ok: false; status: number; json?: undefined; }' is missing the following properties from type 'Response': headers, redirected, statusText, type, and 9 more.
+tests/templateDocument.test.ts(14,42): error TS2345: Argument of type '{ key: string; value: string | undefined; group: string; label: string; type: string; components?: boolean | undefined; maxLength?: number | undefined; variables?: string[] | undefined; default?: string | undefined; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Type '{ key: string; value: string | undefined; group: string; label: string; type: string; components?: boolean; maxLength?: number; variables?: string[]; default?: string; }' is not assignable to type 'TemplateField'.
+    Types of property 'value' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+tests/templateDocument.test.ts(15,54): error TS2345: Argument of type '{ key: string; value: string | undefined; group: string; label: string; type: string; components?: boolean | undefined; maxLength?: number | undefined; variables?: string[] | undefined; default?: string | undefined; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Type '{ key: string; value: string | undefined; group: string; label: string; type: string; components?: boolean; maxLength?: number; variables?: string[]; default?: string; }' is not assignable to type 'TemplateField'.
+    Types of property 'value' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+tests/templateDocument.test.ts(15,71): error TS2345: Argument of type '{ key: string; value: string | undefined; group: string; label: string; type: string; components?: boolean | undefined; maxLength?: number | undefined; variables?: string[] | undefined; default?: string | undefined; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Type '{ key: string; value: string | undefined; group: string; label: string; type: string; components?: boolean; maxLength?: number; variables?: string[]; default?: string; }' is not assignable to type 'TemplateField'.
+    Types of property 'value' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+tests/templateDocument.test.ts(21,36): error TS2345: Argument of type '{ key: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(22,42): error TS2345: Argument of type '{ key: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(27,36): error TS2345: Argument of type '{ key: string; label: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; label: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(29,257): error TS2345: Argument of type '{ key: string; label: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; label: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(31,104): error TS2345: Argument of type '{ key: string; label: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; label: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(36,53): error TS2345: Argument of type '{ key: string; label: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; label: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(36,66): error TS2345: Argument of type '{ key: string; label: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; label: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(41,34): error TS2345: Argument of type '{ key: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; value: string; }' but required in type 'TemplateField'.
+tests/templateDocument.test.ts(42,51): error TS2345: Argument of type '{ key: string; value: string; }[]' is not assignable to parameter of type 'TemplateField[]'.
+  Property 'type' is missing in type '{ key: string; value: string; }' but required in type 'TemplateField'.
+tests/templateLayout.test.ts(25,36): error TS2532: Object is possibly 'undefined'.
+tests/templateLayout.test.ts(74,48): error TS2345: Argument of type '(field: TemplateField, index: number) => { key: string; group: string; default: string; variables: never[]; label: string; type: string; value: string; components?: boolean; maxLength?: number; }' is not assignable to parameter of type '(value: EditableField, index: number, array: EditableField[]) => { key: string; group: string; default: string; variables: never[]; label: string; type: string; value: string; components?: boolean | undefined; maxLength?: number | undefined; }'.
+  Types of parameters 'field' and 'value' are incompatible.
+    Type 'EditableField' is missing the following properties from type 'TemplateField': key, group
+tests/webBuilder.test.ts(9,8): error TS2741: Property 'syncResults' is missing in type '{ revision: number; bindings: Record<string, T.Binding>; templates: { value: string; components?: boolean; key: string; group: string; label: string; type: string; default?: string; maxLength?: number; variables?: string[]; }[]; settings: { ...; }[]; }' but required in type 'Config'.

@@ -5,10 +5,14 @@ Telegram-интеграция).
 
 ## 🚀 Быстрый старт
 
-1. `npm install`
+1. `npm ci`
 2. Заполните `.env`
 3. `npm run build`
 4. `npm start`
+
+Сервер и дашборд написаны на TypeScript со строгой проверкой типов. `npm run typecheck` проверяет исходники, тесты и конфигурации. Сервер компилируется в `dist/`, общие браузерные модули — в `dist/browser/`; `npm start` запускает `dist/index.js`. После обновления исходников нужна повторная сборка. Тесты компилируются командой `npm run build:test`; `npm test` делает это автоматически.
+
+Браузерные тесты используют Chromium (`npx playwright install chromium`). Можно использовать установленный Chrome: в PowerShell `$env:PLAYWRIGHT_CHANNEL='chrome'`, затем `npm run test:dashboard`.
 
 ## Дашборд
 
@@ -46,8 +50,8 @@ OAuth access token не сохраняется. Права администра�
 `GET /api/schedule` возвращает `project`, `timezone`, `generatedAt`, `events`
 и отсортированный список `upcoming` с датами ближайших событий (`timestamp`
 в миллисекундах Unix). API использует обычную авторизацию дашборда.
-Основные времена берутся из `src/features/capture/groupOptions.js`, специальные
-интервалы — из `src/config/eventSchedule.js`. При изменении игровых расписаний
+Основные времена берутся из `src/features/capture/groupOptions.ts`, специальные
+интервалы — из `src/config/eventSchedule.ts`. При изменении игровых расписаний
 обновите эти данные и перезапустите бота.
 
 ## Предпросмотр синхронизации Majestic
@@ -55,9 +59,9 @@ OAuth access token не сохраняется. Права администра�
 Скопируйте `.env.majestic.example` в `.env.majestic.local` и заполните
 `MAJESTIC_SESSION_ID` значением `sessionId` из Cookie запроса состава семьи.
 Оно используется и для Cookie, и для заголовка `x-session`. Файл исключён
-из Git. `node scripts/check-majestic.js` проверяет получение полного состава.
+из Git. `node dist/scripts/check-majestic.js` проверяет получение полного состава.
 
-`node scripts/preview-majestic.js` читает состав Majestic и участников Discord
+`node dist/scripts/preview-majestic.js` читает состав Majestic и участников Discord
 (использует `TOKEN` и `GUILD_ID` из `.env`, требуется Server Members Intent).
 Бот при этом не запускает свои обычные обработчики. Ники и роли не изменяются.
 Отчёт `.majestic-preview.json` исключён из Git; статусы: `change` — план изменения,
@@ -70,7 +74,7 @@ OAuth access token не сохраняется. Права администра�
 32 символов, несколько участников с одним static или несколько Tier-ролей
 отмечаются как конфликт. Отсутствие персонажа в составе не снимает роли.
 
-Список игровых рангов и ID ролей задан в `src/features/majestic/syncPreview.js`.
+Список игровых рангов и ID ролей задан в `src/features/majestic/syncPreview.ts`.
 Обычно из этого списка остаётся одна роль. Исключение: игровой ранг Dep, High
 или Recruit сочетается с одной уже выданной Tier 1/2/3. Админская роль выбирается
 по игровому рангу; другие ранговые роли снимаются. Несколько Tier-ролей остаются
@@ -264,7 +268,7 @@ Discord-аккаунта. Сортировка по времени записи 
    Используйте существующий `CLIENT_ID` приложения бота. Если OAuth2 Client Secret
    уже хранится как `CLIENT_SECRET`, код использует его без дублирования.
 3. Укажите `DATABASE_URL` или существующую `SUPABASE_URL`; нужны права создания таблиц.
-4. Запустите `node index.js` и войдите через Discord. Доступ имеют владелец и
+4. Запустите `npm start` и войдите через Discord. Доступ имеют владелец и
    участники с правом **Administrator** на сервере `GUILD_ID`. `Manage Server`
    и модераторские роли бота сами по себе доступ не дают.
 5. Чтобы сузить круг администраторов, задайте `DASHBOARD_ALLOWED_USER_IDS`:
@@ -315,7 +319,7 @@ OAuth2 Client Secret — отдельный секрет, это не токен
 Для включения этой интеграции нужен существующий `TG_NOTIFICATION_BOT_TOKEN`;
 канал личных уведомлений не включается в массовую рассылку.
 
-Проверка без внешних подключений: `node --test tests/*.test.js`.
+Проверка без внешних подключений: `npm test`.
 Реальные OAuth2, права Discord и PostgreSQL проверяйте с настроенным окружением.
 
 ## Редактирование контейнера по ссылке
@@ -400,7 +404,7 @@ embed и подписи `[Изображение]`, `[Видео]`, `[Аудио
 результата возможна повторная доставка: Telegram Bot API не даёт гарантии exactly-once.
 Новые Discord-сообщения во время остановки приложения не загружаются задним числом.
 
-Проверка без внешних подключений: `node --test tests/telegramBroadcast.test.js`.
+Проверка без внешних подключений: `npm run build:test && node --test dist/tests/telegramBroadcast.test.js`.
 
 ## 📁 Структура проекта
 
@@ -413,5 +417,5 @@ embed и подписи `[Изображение]`, `[Видео]`, `[Аудио
 ## 🧩 Как добавить новую фичу
 
 1. Создайте папку в `src/features/your-feature/`.
-2. Добавьте обработчики событий в `src/events/interactionCreate.js`.
+2. Добавьте обработчики событий в `src/events/interactionCreate.ts`.
 3. Если нужна новая команда, добавьте её в `src/commands/`.
