@@ -33,6 +33,8 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 	PLUS_CHANNEL_ID: { label: 'Канал регистрации на капт', type: 'channel', channelTypes: [0] },
 	CAPT_INFO_CHANNEL_ID: { label: 'Канал объявлений каптов из Telegram', type: 'channel', channelTypes: [0] },
 	ADMIN_ROLES: { label: 'Роли модераторов бота (не дают доступ в дашборд)', type: 'roles' },
+	ACCESS_GROUP_ROLES: { label: 'Создание групп: расписание и /group', type: 'roles' },
+	ACCESS_MOVE_ALL_ROLES: { label: 'Перемещение участников: /move-all', type: 'roles' },
 	ROLE_PREFIXES: { label: 'Префиксы ролей в никах (приоритет сверху вниз)', type: 'rolePrefixes' },
 	MAIN_ROLE_ID: { label: 'Роль после принятия заявки', type: 'role' },
 	FAMILY_ADDITIONAL_ROLES: { label: 'Дополнительные роли после принятия', type: 'roles' },

@@ -1,5 +1,7 @@
 import { getError } from '../../utils/errors'
 import { replyWithAutoDelete } from '../../utils/autoDelete'
+import { store } from '../../dashboard/store'
+import { PermissionFlagsBits } from 'discord.js'
 
 export = {
 	name: 'schedule',
@@ -7,7 +9,7 @@ export = {
 	async execute(message: import('discord.js').Message<true>) {
 		const schedule = message.client.eventSchedule
 		if (!schedule) return replyWithAutoDelete(message, { content: '❌ Расписание ещё не готово. Повторите позже.' })
-		if (!message.member || !schedule.canCreateGroup(message.member)) return replyWithAutoDelete(message, { content: '❌ Недостаточно прав.' })
+		if (!message.member || (!message.member.permissions.has(PermissionFlagsBits.Administrator) && !store.roleIds('ADMIN_ROLES').some(id => message.member!.roles.cache.has(id)))) return replyWithAutoDelete(message, { content: '❌ Недостаточно прав.' })
 		try {
 			await schedule.publish(message.channel)
 			await message.delete().catch(() => {})

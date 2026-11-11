@@ -12,4 +12,6 @@ output/dashboard-review/
 output/dashboard-unit-tests.log
 .env
 .env.majestic.local
+.majestic-session
+.majestic-session.tmp
 .majestic-preview.json

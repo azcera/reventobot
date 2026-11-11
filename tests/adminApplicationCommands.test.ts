@@ -92,6 +92,22 @@ test('commands deny ordinary members and DMs but permit configured ADMIN_ROLES',
 	assert.equal(f.modals.length, 1)
 })
 
+test('additional roles grant only their assigned command', async () => {
+	const f = fixture()
+	f.store.roleIds = (key?: string) => key === 'ACCESS_GROUP_ROLES' ? ['group-role'] : key === 'ACCESS_MOVE_ALL_ROLES' ? ['move-role'] : ['admin-role']
+	await f.register()
+	for (const [role, allowed, denied] of [['group-role', 'group', 'move-all'], ['move-role', 'move-all', 'group']]) {
+		const event = f.interaction(allowed)
+		event.member.permissions.has = () => false
+		event.member.roles.cache.set(role, { id: role })
+		const before = f.replies.length
+		await f.client.commands.get(allowed)!.execute(event)
+		await f.client.commands.get(denied)!.execute(event)
+		assert.match(f.replies.at(-1)!.content, /только администраторам/)
+		assert.equal(f.replies.length, before + (allowed === 'move-all' ? 2 : 1))
+	}
+})
+
 test('permission is rechecked on form submission and voice selection after command invocation', async () => {
 	const f = fixture()
 	await f.register()

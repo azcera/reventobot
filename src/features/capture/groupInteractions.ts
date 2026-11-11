@@ -128,7 +128,7 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 async function scheduledGroupEvent(interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').ModalSubmitInteraction<'cached'>, selection: string) {
 	const schedule = interaction.client.eventSchedule
 	if (!schedule?.canCreateGroup(interaction.member)) {
-		await sendEphemeralWithAutoDelete(interaction, { content: '❌ Создавать групп могут только администраторы и роли ADMIN_ROLES.' })
+		await sendEphemeralWithAutoDelete(interaction, { content: '❌ У вас нет прав для создания группы.' })
 		return null
 	}
 	const event = schedule.resolveSelection(selection)

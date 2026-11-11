@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { PermissionFlagsBits } from 'discord.js'
 import { readConfig, fetchMembers } from './majesticClient'
+import { loadSavedMajesticSession } from './telegramMajesticSession'
 import { loadDiscordMembers } from './discordMembers'
 import { buildPreview, rankRoles, tierRoles, parseNickname } from '../features/majestic/syncPreview'
 
@@ -23,6 +24,7 @@ const describe = (row: Partial<T.PreviewRow>) => JSON.stringify([row.status, row
 
 function createMajesticSync({ pool, store, env = process.env, readFamily, now = Date.now, logger = console, sleep = delay }: SyncOptions) {
 	loadEnvironment({ path: path.join(ROOT_PATH, '.env.majestic.local'), quiet: true })
+	if (env === process.env) loadSavedMajesticSession()
 	const entries = new Map<string, Promise<SyncEntry>>()
 	function safeText(value: unknown) {
 		let text = String(value ?? '')

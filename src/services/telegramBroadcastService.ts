@@ -1,5 +1,5 @@
 import { getError, type OperationError } from '../utils/errors'
-interface TelegramUpdate { update_id: number; message?: { chat: { id: number; type: string }; text?: string } }
+interface TelegramUpdate { update_id: number; message?: { chat: { id: number; type: string }; text?: string; date?: number } }
 interface TelegramResults { sendMessage: unknown; getUpdates: TelegramUpdate[]; getWebhookInfo: { url?: string } }
 interface BroadcastError extends OperationError { retryAfter?: number }
 function broadcastError(value: unknown): BroadcastError { const error: BroadcastError = getError(value); if (value && typeof value === 'object' && 'retryAfter' in value && typeof value.retryAfter === 'number') error.retryAfter = value.retryAfter; return error }
@@ -11,6 +11,7 @@ import type * as Pg from 'pg'
 import { createHash } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { discordNotificationContent } from '../utils/discordNotificationContent'
+import { createTelegramMajesticSession } from './telegramMajesticSession'
 
 function getChannels(env: T.Env) {
 	return new Set((env.DISCORD_NOTIFICATION_CHANNEL_IDS || '').split(',')
@@ -114,6 +115,7 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 		const message = update.message
 		if (message?.chat.type !== 'private') return
 		const command = message.text?.trim().split(/\s/)[0].split('@')[0]
+		if (await majesticSession.handleMessage(String(message.chat.id), message.text, message.date)) return
 		if (command !== '/start' && command !== '/stop') return
 		const chatId = String(message.chat.id)
 		await pool.query(`INSERT INTO telegram_broadcast_subscribers (chat_id, active) VALUES ($1, $2)
@@ -131,6 +133,8 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 			console.error('[Telegram broadcast] Ответ на команду:', error.code || 'network error')
 		}
 	}
+
+	const majesticSession = createTelegramMajesticSession({ send: (chatId, text) => api('sendMessage', { chat_id: chatId, text }).then(() => {}) })
 
 	async function poll() {
 		let { rows: [state] } = await pool.query('SELECT update_offset FROM telegram_broadcast_state WHERE id = 1')
@@ -212,11 +216,13 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 			await init()
 			const webhook = await api('getWebhookInfo', {})
 			if (webhook.url) throw new Error('У Telegram-бота активен webhook; polling не запущен')
+			majesticSession.start()
 			tasks = [poll(), worker()].map(task => task.catch(error => {
 				if (!signal.aborted) console.error('[Telegram broadcast] Обработчик остановлен:', error.code || 'network/database error')
 			}))
 		},
 		async stop() {
+			majesticSession.stop()
 			controller.abort()
 			await Promise.allSettled(tasks)
 		}

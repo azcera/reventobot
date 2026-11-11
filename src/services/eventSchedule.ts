@@ -49,7 +49,7 @@ function canCreateGroup(member: D.GuildMember, store: T.Store) {
 		!!member &&
 		(member.permissions.has(PermissionFlagsBits.Administrator) ||
 			member.roles.cache.some(role =>
-				store.roleIds('ADMIN_ROLES').includes(role.id)
+				store.roleIds('ADMIN_ROLES').includes(role.id) || store.roleIds('ACCESS_GROUP_ROLES').includes(role.id)
 			))
 	)
 }

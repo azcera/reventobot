@@ -8,16 +8,16 @@ function MoveActions({ index, length, onMove, onRemove }: { index: number; lengt
 	return <div className="flex shrink-0 gap-1"><IconButton icon={ArrowUp} label="Повысить приоритет" disabled={index === 0} onClick={() => onMove(-1)} /><IconButton icon={ArrowDown} label="Понизить приоритет" disabled={index === length - 1} onClick={() => onMove(1)} /><IconButton icon={Trash2} label="Удалить из настройки" onClick={onRemove} /></div>
 }
 
-function OrderedChoices({ field, value, onChange, resources }: { field: SettingField; value: SettingValue; onChange(value: string): void; resources: Resources }) {
+function OrderedChoices({ field, value, onChange, resources, hiddenRoles = [] }: { field: SettingField; value: SettingValue; onChange(value: string): void; resources: Resources; hiddenRoles?: string[] }) {
 	const multiple = ['roles', 'channels'].includes(field.type)
-	const items = field.type.startsWith('role') ? resources.roles : resources.channels.filter(channel => field.channelTypes?.includes(channel.type))
+	const items = field.type.startsWith('role') ? resources.roles.filter(role => !hiddenRoles.includes(role.id)) : resources.channels.filter(channel => field.channelTypes?.includes(channel.type))
 	const selected = String(value ?? '').split(',').map(id => id.trim()).filter(Boolean)
 	const prefix = field.type.startsWith('role') ? '@ ' : '# '
 	return <div className="grid gap-3"><Field label={field.label}><select value={multiple ? '' : String(value ?? '')} onChange={event => {
 		if (!multiple) return onChange(event.target.value)
 		if (event.target.value && !selected.includes(event.target.value)) onChange([...selected, event.target.value].join(','))
 	}}><option value="">{multiple ? 'Добавить…' : 'Не выбран'}</option>{!multiple && value && !items.some(item => item.id === value) && <option value={String(value)}>Недоступен: {String(value)}</option>}{items.filter(item => !multiple || !selected.includes(item.id)).map(item => <option key={item.id} value={item.id}>{prefix}{item.name}</option>)}</select></Field>
-		{multiple && selected.map((id, index) => <div className="ordered-row" key={id}><span className="min-w-0 flex-1 break-words text-sm"><span className="mr-2 text-muted">{index + 1}.</span>{prefix}{items.find(item => item.id === id)?.name || 'Недоступен · ' + id}</span><MoveActions index={index} length={selected.length} onMove={direction => { const next = [...selected]; [next[index], next[index + direction]] = [next[index + direction], next[index]]; onChange(next.join(',')) }} onRemove={() => onChange(selected.filter(value => value !== id).join(','))} /></div>)}
+		{multiple && selected.map((id, index) => !hiddenRoles.includes(id) && <div className="ordered-row" key={id}><span className="min-w-0 flex-1 break-words text-sm"><span className="mr-2 text-muted">{index + 1}.</span>{prefix}{items.find(item => item.id === id)?.name || 'Недоступен · ' + id}</span><MoveActions index={index} length={selected.length} onMove={direction => { const next = [...selected]; [next[index], next[index + direction]] = [next[index + direction], next[index]]; onChange(next.join(',')) }} onRemove={() => onChange(selected.filter(value => value !== id).join(','))} /></div>)}
 	</div>
 }
 
@@ -28,12 +28,12 @@ function RolePrefixes({ field, value, onChange, resources, onSync }: { field: Se
 	</div>
 }
 
-export function Settings({ config, setConfig, resources, draft, setDraft, api, run, notify }: PageServices & { config: Config; setConfig: Setter<Config | null>; resources: Resources; draft: SettingsDraft; setDraft: Setter<SettingsDraft> }) {
+export function Settings({ config, setConfig, resources, draft, setDraft, api, run, notify, access = false }: PageServices & { config: Config; setConfig: Setter<Config | null>; resources: Resources; draft: SettingsDraft; setDraft: Setter<SettingsDraft>; access?: boolean }) {
 	const modal = useModal()
 	const set = (key: string, value: SettingValue) => setDraft(previous => ({ ...previous, [key]: value }))
 	function save(event: React.FormEvent) {
 		event.preventDefault()
-		const values = Object.fromEntries(config.settings.filter(field => JSON.stringify(field.value) !== JSON.stringify(draft[field.key])).map(field => [field.key, draft[field.key]]))
+		const values = Object.fromEntries(config.settings.filter(field => field.key.startsWith('ACCESS_') === access && JSON.stringify(field.value) !== JSON.stringify(draft[field.key])).map(field => [field.key, draft[field.key]]))
 		if (!Object.keys(values).length) return notify('Нет изменений для сохранения.')
 		run(async () => { setConfig(await api('settings', { revision: config.revision, values })); notify('Настройки сохранены и применены.') })
 	}
@@ -48,16 +48,17 @@ export function Settings({ config, setConfig, resources, draft, setDraft, api, r
 			} catch (error) { throw new Error('Префиксы сохранены, но обновление участников не завершено: ' + errorMessage(error)) }
 		})
 	}
-	const categories: [string, SettingField[]][] = [
+	const fieldsForPage = config.settings.filter(field => field.key.startsWith('ACCESS_') === access)
+	const categories: [string, SettingField[]][] = access ? [['Дополнительные роли доступа', fieldsForPage]] : [
 		['Каналы', config.settings.filter(field => ['channel', 'channels'].includes(field.type))],
-		['Роли и приоритеты', config.settings.filter(field => ['role', 'roles'].includes(field.type))],
+		['Роли и приоритеты', fieldsForPage.filter(field => ['role', 'roles'].includes(field.type))],
 		['Префиксы участников', config.settings.filter(field => field.type === 'rolePrefixes')],
 		['Поведение бота', config.settings.filter(field => !['channel', 'channels', 'role', 'roles', 'rolePrefixes'].includes(field.type))]
 	]
-	return <form className="grid gap-6" onSubmit={save} noValidate>{categories.filter(([, fields]) => fields.length).map(([title, fields]) => <Panel key={title} title={title}><div className={`grid gap-6 p-5 sm:p-6 ${title === 'Каналы' ? 'lg:grid-cols-2' : ''}`}>
+	return <form className="grid gap-6" onSubmit={save} noValidate>{access && <div className="callout">Администраторы сервера и роли модераторов бота всегда сохраняют доступ. Здесь указаны только дополнительные роли.</div>}{categories.filter(([, fields]) => fields.length).map(([title, fields]) => <Panel key={title} title={title}><div className={`grid gap-6 p-5 sm:p-6 ${title === 'Каналы' ? 'lg:grid-cols-2' : ''}`}>
 		{fields.map(field => field.type === 'rolePrefixes' ? <RolePrefixes key={field.key} field={field} value={Array.isArray(draft[field.key]) ? draft[field.key] as RolePrefix[] : []} onChange={value => set(field.key, value)} resources={resources} onSync={() => syncPrefixes(field)} />
 			: field.type === 'boolean' ? <label key={field.key} className="toggle-row"><span className="text-sm">{field.label}</span><input type="checkbox" role="switch" checked={Boolean(draft[field.key])} onChange={event => set(field.key, event.target.checked)} /><span className="toggle-track" aria-hidden="true" /></label>
 				: field.type === 'color' ? <Field key={field.key} label={field.label}><input type="color" value={String(draft[field.key] ?? '')} onChange={event => set(field.key, event.target.value)} /></Field>
-					: <OrderedChoices key={field.key} field={field} value={draft[field.key]} onChange={value => set(field.key, value)} resources={resources} />)}
+					: <OrderedChoices key={field.key} field={field} value={draft[field.key]} onChange={value => set(field.key, value)} resources={resources} hiddenRoles={access ? String(config.settings.find(item => item.key === 'ADMIN_ROLES')?.value ?? '').split(',').map(id => id.trim()).filter(Boolean) : []} />)}
 	</div></Panel>)}<div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-muted">Настройки применяются без перезапуска бота</p><Button type="submit" variant="primary" icon={Save}>Сохранить настройки</Button></div></form>
 }

@@ -11,9 +11,9 @@ const definitions: [string, string, (interaction: D.ChatInputCommandInteraction<
 	['move-all', 'Переместить всех участников в один голосовой канал', (interaction: D.ChatInputCommandInteraction<'cached'>) => (require('../features/moveAll/moveAllInteractions') as typeof import('../features/moveAll/moveAllInteractions')).showMoveAllSelect(interaction)]
 ]
 
-async function authorize(interaction: T.GuildInteraction, store: T.Store) {
+async function authorize(interaction: T.GuildInteraction, store: T.Store, accessKey?: string) {
 	if (interaction.guild && (interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
-		interaction.member.roles.cache.some(role => store.roleIds('ADMIN_ROLES').includes(role.id)))) return true
+		interaction.member.roles.cache.some(role => store.roleIds('ADMIN_ROLES').includes(role.id) || (accessKey && store.roleIds(accessKey).includes(role.id))))) return true
 	await interaction.reply({ content: '❌ Действие доступно только администраторам и ролям ADMIN_ROLES.', flags: MessageFlags.Ephemeral })
 	return false
 }
@@ -24,7 +24,7 @@ async function registerAdminApplicationCommands(client: D.Client, guild: D.Guild
 		client.commands.set(name, {
 			data,
 			async execute(interaction: T.GuildInteraction) {
-				if (await authorize(interaction, store)) return execute(interaction as D.ChatInputCommandInteraction<'cached'>)
+				if (await authorize(interaction, store, name === 'group' ? 'ACCESS_GROUP_ROLES' : name === 'move-all' ? 'ACCESS_MOVE_ALL_ROLES' : undefined)) return execute(interaction as D.ChatInputCommandInteraction<'cached'>)
 			}
 		})
 		// Create upserts by name without replacing unrelated application commands.

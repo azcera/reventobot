@@ -111,7 +111,8 @@ export = (client: import('discord.js').Client) => {
 		if ((interaction.isButton() && MOVED_BUTTON_IDS.has(customId)) ||
 			(interaction.isStringSelectMenu() && customId === 'move_all_channel') ||
 			(interaction.isModalSubmit() && ['modal_capt', 'modal_group_other'].includes(customId))) {
-			if (!await authorize(interaction, dashboard)) return
+			const accessKey = customId === 'group' || customId === 'modal_group_other' ? 'ACCESS_GROUP_ROLES' : customId === 'move-all' || customId === 'move_all_channel' ? 'ACCESS_MOVE_ALL_ROLES' : undefined
+			if (!await authorize(interaction, dashboard, accessKey)) return
 		}
 
 		// selects

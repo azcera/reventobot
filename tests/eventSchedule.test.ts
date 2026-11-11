@@ -109,6 +109,13 @@ test('administrator and configured roles are accepted, regular members denied', 
 	assert.equal(canCreateGroup(member(false, ['member']), store), false)
 })
 
+test('additional group role can create scheduled groups', () => {
+	const store = { roleIds: (key: string) => key === 'ACCESS_GROUP_ROLES' ? ['group-role'] : [] }
+	const member = (id: string) => ({ permissions: { has: () => false }, roles: { cache: new Collection([[id, { id }]]) } })
+	assert.equal(canCreateGroup(member('group-role'), store), true)
+	assert.equal(canCreateGroup(member('other-role'), store), false)
+})
+
 test('local schedule includes all recurring slots, special windows and Moscow rollover', () => {
 	const snapshot = getSchedule(now)
 	assert.equal(snapshot.timezone, 'Europe/Moscow')
