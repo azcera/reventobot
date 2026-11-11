@@ -35,7 +35,7 @@ outputType = "console"
 
 [deployment]
 build = ["sh", "-c", "npm ci && npm run build"]
-run = ["node", "index.js"]
+run = ["npm", "start"]
 deploymentTarget = "cloudrun"
 
 [userenv]
