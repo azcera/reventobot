@@ -27,7 +27,7 @@ function fixture(count = 3) {
 	const channel = { isTextBased: () => true, messages: { fetch: async () => new Collection() }, send: async (payload: TestPayload) => { sent.push(payload) } }
 	const sync = { membershipSnapshot: async () => snapshot }
 	const pool = { query: async () => ({ rows: [...pending].map(user_id => ({ user_id })) }) }
-	const store = { ready: true, roleIds: () => [], audit: async (...args: unknown[]) => { audits.push(args) } }
+	const store = { ready: true, autoKick: true, getSetting: () => store.autoKick, roleIds: () => [], audit: async (...args: unknown[]) => { audits.push(args) } }
 	const env = { GUILD_ID: 'guild', MAJESTIC_SESSION_ID: 'test', MAJESTIC_SERVER: 'RU8', MAJESTIC_CHARACTER_ID: '1' }
 	let clock = 0
 	const service = createFamilyMembership({ client: { user: { id: 'bot' }, guilds: { fetch: async () => guild } }, pool, sync, store, env,
@@ -76,6 +76,19 @@ test('automatically kicks former linked members and publishes only manual candid
 	assert.ok(!payload.components[0].content.includes(ids[1]))
 	assert.ok(payload.components[0].content.includes(ids[2]))
 	assert.ok(f.audits.some(entry => entry[1] === 'family.kick.result'))
+})
+
+test('disabled automatic kick leaves linked outsiders available for manual action', async () => {
+	const f = fixture(1)
+	const id = [...f.members.keys()][0]
+	f.snapshot.bindings[id] = '99'
+	f.store.autoKick = false
+	await f.service.refresh(f.guild)
+	assert.deepEqual(f.kicks, [])
+	assert.ok(f.sent[0].components[0].toJSON().components[0].content.includes(id))
+	f.store.autoKick = true
+	await f.service.refresh(f.guild)
+	assert.deepEqual(f.kicks, [id])
 })
 
 test('publishes separate categories with the new title and copy buttons', async () => {

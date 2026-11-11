@@ -44,6 +44,7 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 	DISCORD_NOTIFICATION_CHANNEL_IDS: { label: 'Каналы массовой Telegram-рассылки', type: 'channels', channelTypes: [0, 5] },
 	TELEGRAM_BROADCAST_ENABLED: { label: 'Доставка массовой Telegram-рассылки', type: 'boolean', default: true },
 	MAJESTIC_AUTO_NICKNAMES: { label: 'Автосинхронизация ников и рангов Majestic каждые 10 минут', type: 'boolean', default: true },
+	MAJESTIC_AUTO_KICK: { label: 'Автоматически исключать участников, отсутствующих в семье Majestic', type: 'boolean', default: true },
 	DASHBOARD_ALLOW_MENTIONS: { label: 'Разрешить @everyone, @here и пользователей при ручной публикации (роли разрешены всегда)', type: 'boolean', default: false }
 }
 
@@ -57,7 +58,7 @@ function createStore() {
 	let revision = 0
 	let pool: Pool
 	let ready = false
-	type SettingFor<K extends string> = K extends 'ROLE_PREFIXES' ? RolePrefix[] : K extends 'TELEGRAM_BROADCAST_ENABLED' | 'MAJESTIC_AUTO_NICKNAMES' | 'DASHBOARD_ALLOW_MENTIONS' ? boolean : string
+	type SettingFor<K extends string> = K extends 'ROLE_PREFIXES' ? RolePrefix[] : K extends 'TELEGRAM_BROADCAST_ENABLED' | 'MAJESTIC_AUTO_NICKNAMES' | 'MAJESTIC_AUTO_KICK' | 'DASHBOARD_ALLOW_MENTIONS' ? boolean : string
 	function getSetting<K extends string>(key: K): SettingFor<K> {
 		if (key === 'ROLE_PREFIXES') return structuredClone(state.settings[key] ?? defaultRolePrefixes(String(getSetting('ADMIN_ROLES')).split(',').map(id => id.trim()).filter(Boolean))) as SettingFor<K>
 		const value = Object.hasOwn(state.settings, key) ? state.settings[key]

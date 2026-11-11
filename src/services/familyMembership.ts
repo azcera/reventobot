@@ -19,7 +19,7 @@ const PREFIX = 'family_cleanup_'
 const CATEGORIES = ['Не в составе семьи', 'Ник не по форме', 'Без ролей']
 const isMembershipMessage = (message: D.Message) => message.components.some(component => JSON.stringify(component.toJSON()).includes(PREFIX))
 
-function classify(snapshot: T.MembershipSnapshot, applications: Set<string>) {
+function classify(snapshot: T.MembershipSnapshot, applications: Set<string>, autoKick = true) {
 	const manual: D.GuildMember[] = [], automatic: D.GuildMember[] = []
 	const reasons = new Map<string, string>()
 	for (const member of snapshot.members.values()) {
@@ -33,7 +33,7 @@ function classify(snapshot: T.MembershipSnapshot, applications: Set<string>) {
 		if (applications.has(member.id)) continue
 		const malformed = !parseNickname(member.nickname)
 		if (!malformed && snapshot.statics.has(snapshot.linked.get(member.id) || '')) continue
-		if (snapshot.bindings[member.id] && !snapshot.statics.has(snapshot.bindings[member.id])) automatic.push(member)
+		if (autoKick && snapshot.bindings[member.id] && !snapshot.statics.has(snapshot.bindings[member.id])) automatic.push(member)
 		else {
 			manual.push(member)
 			reasons.set(member.id, malformed ? 'Ник не по форме' : 'Не в составе семьи')
@@ -65,7 +65,7 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 	}
 	async function load(guild: D.Guild) {
 		const snapshot = await sync.membershipSnapshot(guild)
-		return { ...classify(snapshot, await applications()), source: snapshot.source }
+		return { ...classify(snapshot, await applications(), store.getSetting('MAJESTIC_AUTO_KICK')), source: snapshot.source }
 	}
 	async function freshMember(guild: D.Guild, id: string) {
 		const member = await guild.members.fetch({ user: id, force: true })
@@ -131,6 +131,7 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 		const report = await load(guild)
 		let failed = 0
 		for (const member of report.automatic) {
+			if (!store.getSetting('MAJESTIC_AUTO_KICK')) break
 			if (!await change(guild, member.id, 'kick', { id: 'family-auto', name: 'Проверка состава семьи' })) failed++
 		}
 		await publish(guild, report, failed)
