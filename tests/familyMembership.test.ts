@@ -89,7 +89,7 @@ test('publishes separate categories with the new title and copy buttons', async 
 		const payload = f.sent[page].components[0].toJSON()
 		const text = payload.components[0].content
 		assert.ok(text.includes('## Несинхронизированно с игрой — 2'))
-		assert.ok(text.includes(`### ${reason}\n- <@${id}>`))
+		assert.ok(text.includes(`### ${reason}\n- [${f.members.get(id)!.displayName}](https://discord.com/users/${id}) · ${id}`))
 		assert.doesNotMatch(text, /FRIEND|Бывшие участники/)
 		assert.deepEqual(payload.components[1].components.map(button => button.label),
 			['Выбрать для кика', 'Выбрать для снятия ролей', 'Скопировать список'])
@@ -115,6 +115,7 @@ test('selection rechecks family membership, FRIEND, active applications and perm
 	for (const protect of [
 		(f: ReturnType<typeof fixture>, id: string) => { f.snapshot.linked.set(id, '100'); f.members.get(id)!.nickname = 'User | 100' },
 		(f: ReturnType<typeof fixture>, id: string) => { f.pending.add(id) },
+		(f: ReturnType<typeof fixture>, id: string) => { f.members.get(id)!.roles.cache.set('1445808131832676560', { id: '1445808131832676560' }) },
 		(f: ReturnType<typeof fixture>, id: string) => { f.members.get(id)!.roles.cache.set(FRIEND_ROLE_ID, { id: FRIEND_ROLE_ID }) },
 		(f: ReturnType<typeof fixture>) => { f.actor.permissions.has = () => false },
 		(f: ReturnType<typeof fixture>) => { f.guild.members.me.permissions.has = () => false }
@@ -188,7 +189,7 @@ test('groups mixed reasons before pagination and selects the same members shown 
 	for (let page = 0; page < 4; page++) {
 		const text = f.sent[page].components[0].toJSON().components[0].content
 		const expected = groups[page]
-		assert.deepEqual([...text.matchAll(/<@(\d+)>/g)].map(match => match[1]), expected)
+		assert.deepEqual([...text.matchAll(/discord\.com\/users\/(\d+)/g)].map(match => match[1]), expected)
 		assert.equal((text.match(/### Не в составе семьи/g) || []).length, page < 2 ? 1 : 0)
 		assert.equal((text.match(/### Ник не по форме/g) || []).length, page >= 2 ? 1 : 0)
 		for (const action of ['kick', 'roles']) {
@@ -322,4 +323,13 @@ test('copies large categories in private code blocks and handles empty categorie
 	const empty = f.interaction('family_cleanup_copy_1')
 	await f.service.handle(empty)
 	assert.equal(empty.replies[0].content, '```\nСписок пуст.\n```')
+})
+
+
+test('excluded role is absent from reports', async () => {
+	const f = fixture(2), ids = [...f.members.keys()]
+	f.members.get(ids[0])!.roles.cache.set('1445808131832676560', { id: '1445808131832676560', editable: true, managed: false })
+	await f.service.refresh(f.guild)
+	assert.doesNotMatch(JSON.stringify(f.sent), new RegExp(ids[0]))
+	assert.match(JSON.stringify(f.sent), new RegExp(ids[1]))
 })

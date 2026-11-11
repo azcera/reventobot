@@ -633,3 +633,15 @@ test('testcapt info previews latest finished announcement with historical time, 
 	assert.equal(f.saved.size, 0)
 	assert.equal(f.sent.length, 0)
 })
+
+
+test('announcement text and button use saved templates with live capture values', async () => {
+	const store = createStore(); await store.init(require('./helpers/dashboardFixture').memoryPool())
+	await store.save('templates', { 'announcement.title': '# {title} {icon}', 'announcement.details': 'Враг: {enemy} / {time} / {zone} / {count}', 'announcement.button': '{icon} Регистрация {target}' }, store.revision, 'admin')
+	const war = normalizeWar(rawWar(), rulesFromEnv({}))
+	const result = plain(announcement(war, null, start, [], {}, '', store.text.bind(store)))
+	assert.match(result, /Враг:/)
+	assert.match(result, /Enemy/)
+	assert.match(result, /Регистрация/)
+	assert.match(result, /capt_api_/)
+})

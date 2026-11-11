@@ -3,6 +3,7 @@ import type * as D from 'discord.js'
 import type * as T from '../types'
 import type * as E from 'express'
 import type * as Pg from 'pg'
+import { randomUUID } from 'node:crypto'
 import { PermissionsBitField } from 'discord.js'
 import { createAuth, problem } from './auth'
 import { store, catalog, settingDefinitions, templateDefinition } from './store'
@@ -53,7 +54,7 @@ function validateTemplates(values: Record<string, string | null>) {
 		if (match && !fields.has('rules.heading.' + match[1])) throw problem(400, 'Сначала добавьте раздел для нового правила.')
 	}
 	for (const group of ['Правила', 'Приглашение', 'Навигация']) {
-		const length = [...fields.values()].filter(field => field.group === group && field.type === 'text' && (!['Приглашение', 'Навигация'].includes(group) || field.key === (group === 'Приглашение' ? 'invite.document' : 'navigation.document') || ['invite.3', 'invite.4'].includes(field.key)) && (group !== 'Правила' || !fields.has('rules.document') || field.key === 'rules.document'))
+		const length = [...fields.values()].filter(field => field.group === group && field.type === 'text' && (!['Приглашение', 'Навигация'].includes(group) || field.key === (group === 'Приглашение' ? 'invite.document' : 'navigation.document') || ['invite.3', 'invite.4'].includes(field.key)) && (group !== 'Правила' || (Object.keys(values).some(key => /^rules\.(heading|rule)\./.test(key)) ? /^rules\.(heading|rule)\./.test(field.key) : !fields.has('rules.document') || field.key === 'rules.document')))
 			.reduce((sum, field) => sum + field.value.length, 0)
 		const limit = group === 'Приглашение' ? 2700 : 3800
 		if (length > limit) throw problem(400, `Слишком много текста в разделе «${group}». Оставьте не более ${limit} символов.`)
@@ -192,6 +193,16 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
  respondError(res, error) }
 		finally { prefixSyncs.delete(req.guild.id) }
 	})
+	app.post('/api/templates/create', async (req: E.Request, res: E.Response) => {
+		try {
+			const { name, revision } = req.body
+			if (typeof name !== 'string' || !name.trim() || name.trim().length > 80 || !Number.isSafeInteger(revision)) throw problem(400, 'Укажите название шаблона (до 80 символов) и обновите данные.')
+			if (store.snapshot().templates.some(field => field.group === name.trim())) throw problem(400, 'Раздел с таким названием уже существует.')
+			const kind = 'custom-' + randomUUID()
+			await store.save('bindings', { [kind]: { link: '', markdown: true, fields: [{ key: 'permanent.' + kind + '.document', path: 'markdown', group: name.trim(), label: 'Текст сообщения', type: 'text', components: true, maxLength: 16000, default: '# Новое сообщение', variables: [] }] } }, revision, req.dashboardUser)
+			res.json(store.snapshot())
+		} catch (caught) { respondError(res, getError(caught)) }
+	})
 	app.post('/api/permanent-message/publish', async (req: E.Request, res: E.Response) => {
 		try {
 			const { kind, channelId, revision } = req.body
@@ -214,11 +225,12 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 	app.post('/api/permanent-message', async (req: E.Request, res: E.Response) => {
 		try {
 			const { kind, link, revision } = req.body
-			if (!Object.hasOwn(permanent.definitions, kind) || !Number.isSafeInteger(revision)) throw problem(400, 'Проверьте вид сообщения и обновите данные.')
-			const binding = link ? permanent.bindingFor(kind, await fetchOwnedMessage(link, req.guild)) : null
-			if (binding) await permanent.fetchMessage(client, req.guild, link)
-			const id = binding && parseMessageLink(link).messageId
-			if (id && Object.entries(store.bindings).some(([other, value]) => other !== kind && parseMessageLink(value.link).messageId === id)) throw problem(400, 'Сообщение уже привязано к другому разделу.')
+			if (!permanent.definition(kind) || !Number.isSafeInteger(revision)) throw problem(400, 'Проверьте вид сообщения и обновите данные.')
+			const previous = store.bindings[kind]
+			const binding = link ? permanent.bindingFor(kind, await fetchOwnedMessage(link, req.guild)) : kind.startsWith('custom-') && previous ? { ...previous, link: '', fields: previous.fields.map(field => ({ ...field, default: store.text(field.key) })) } : null
+			if (binding?.link) await permanent.fetchMessage(client, req.guild, link)
+			const id = binding?.link && parseMessageLink(link).messageId
+			if (id && Object.entries(store.bindings).some(([other, value]) => other !== kind && value.link && parseMessageLink(value.link).messageId === id)) throw problem(400, 'Сообщение уже привязано к другому разделу.')
 			await store.save('bindings', { [kind]: binding }, revision, req.dashboardUser)
 			res.json(store.snapshot())
 		} catch (caughtError) {
@@ -227,7 +239,7 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 	})
 	app.post('/api/permanent-message/sync', async (req: E.Request, res: E.Response) => {
 		try {
-			if (!Object.hasOwn(permanent.definitions, req.body.kind) || !store.bindings[req.body.kind]) throw problem(400, 'Сначала привяжите сообщение.')
+			if (!permanent.definition(req.body.kind) || !store.bindings[req.body.kind]?.link) throw problem(400, 'Сначала привяжите сообщение.')
 			await store.audit(req.dashboardUser, 'message.sync.request', req.body.kind)
 			const syncResults = await permanent.syncMessages([], client, req.guild, req.body.kind, req.dashboardUser)
 			await store.audit(req.dashboardUser, 'message.sync', req.body.kind, { syncResults })

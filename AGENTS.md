@@ -36,11 +36,11 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | Роли и префиксы ников | `src/services/rolePrefixSync.ts`, `src/utils/adminPrefix.ts`, `src/utils/parseDisplayName.ts` |
 | HTTP API дашборда | `src/dashboard/routes.ts`; часть API контейнеров подключена в `index.ts` |
 | Вход, права, сессии | `src/dashboard/auth.ts`, `src/dashboard/sessions.ts` |
-| Настройки и каталог шаблонов | `src/dashboard/store.ts`, `src/dashboard/templates.tson` |
+| Настройки и каталог шаблонов | `src/dashboard/store.ts`, `src/dashboard/templates.json` |
 | Редактирование и публикация сообщений | `src/dashboard/messageEditor.ts`, `src/dashboard/permanentMessages.ts`, `src/dashboard/navigationMessages.ts`, `src/services/containerMessageService.ts` |
 | База и схема | `src/services/database.ts`; SQL также ищи в сервисе соответствующей функции |
 | Оболочка и навигация UI | `frontend/src/App.tsx`, `frontend/src/main.tsx` |
-| Страницы UI | `frontend/src/pages/{Builder,Templates,Settings,Majestic}.tsx` |
+| Страницы UI | `frontend/src/pages/{Templates,Settings,Majestic}.tsx` |
 | Редактор, предпросмотр, общие элементы | `frontend/src/components/`, `frontend/src/lib/` |
 | Стили и подсказки UI | `frontend/src/styles.css`, `frontend/src/guides.tsx`, `public/theme.css` |
 | Общий Markdown и документы шаблонов | `public/markdown.ts`, `public/component-markdown.ts`, `public/template-document.ts`, `public/template-layout.ts`, `src/services/markdownContainer.ts` |

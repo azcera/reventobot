@@ -1,6 +1,6 @@
 import type { Config, Resources, Drafts, Setter, PageServices } from '../types'
 import React, { useState } from 'react'
-import { ArrowUpRight, Link, Pencil, RefreshCw, RotateCcw, Save, Send, Unlink } from 'lucide-react'
+import { ArrowUpRight, Link, Pencil, Plus, RefreshCw, RotateCcw, Save, Send, Unlink } from 'lucide-react'
 import { Button, Field, IconButton, Panel, useModal } from '../components/ui'
 import { EditorWorkspace, MarkdownEditor } from '../components/Editor'
 import { TemplatePreview } from '../components/DiscordPreview'
@@ -13,9 +13,14 @@ function BindingEditor({ kind, config, resources, onPublish, onBind, onSync }: {
 	return <div className="mt-5 grid gap-5">
 		<p className="text-sm text-muted">В том же канале бот обновит привязанное сообщение. При смене канала прежняя копия останется без дальнейшей синхронизации.</p>
 		<form className="grid gap-3" noValidate onSubmit={event => { event.preventDefault(); onPublish(channel) }}><Field label="Канал публикации"><select value={channel} onChange={event => setChannel(event.target.value)} required><option value="">Выбери канал</option>{channels.map(item => <option key={item.id} value={item.id}># {item.name}</option>)}</select></Field><Button type="submit" icon={Send}>Опубликовать / обновить</Button></form>
-		<div className="border-t border-line pt-5"><form className="grid gap-3" noValidate onSubmit={event => { event.preventDefault(); onBind(link.trim()) }}><Field label="Ссылка на существующее сообщение" hint="Укажи сообщение этого бота на настроенном сервере."><input type="url" value={link} onChange={event => setLink(event.target.value)} placeholder="https://discord.com/channels/…/…/…" required /></Field><div className="flex flex-wrap gap-2"><Button type="submit" icon={Link}>Привязать</Button>{config.bindings?.[kind] && <IconButton icon={Unlink} label="Удалить привязку" onClick={() => onBind('', true)} />}</div></form></div>
-		{config.bindings?.[kind] && <div className="flex flex-wrap gap-2"><a className="button button-secondary" href={config.bindings[kind].link} target="_blank" rel="noopener noreferrer"><ArrowUpRight aria-hidden="true" />Открыть в Discord</a><Button icon={RefreshCw} onClick={onSync}>Повторить обновление</Button></div>}
+		<div className="border-t border-line pt-5"><form className="grid gap-3" noValidate onSubmit={event => { event.preventDefault(); onBind(link.trim()) }}><Field label="Ссылка на существующее сообщение" hint="Укажи сообщение этого бота на настроенном сервере."><input type="url" value={link} onChange={event => setLink(event.target.value)} placeholder="https://discord.com/channels/…/…/…" required /></Field><div className="flex flex-wrap gap-2"><Button type="submit" icon={Link}>Привязать</Button>{config.bindings?.[kind]?.link && <IconButton icon={Unlink} label="Удалить привязку" onClick={() => onBind('', true)} />}</div></form></div>
+		{config.bindings?.[kind]?.link && <div className="flex flex-wrap gap-2"><a className="button button-secondary" href={config.bindings[kind].link} target="_blank" rel="noopener noreferrer"><ArrowUpRight aria-hidden="true" />Открыть в Discord</a><Button icon={RefreshCw} onClick={onSync}>Повторить обновление</Button></div>}
 	</div>
+}
+
+function NewTemplate({ create }: { create(name: string): void }) {
+	const [name, setName] = useState('')
+	return <form className="mt-5 grid gap-4" onSubmit={event => { event.preventDefault(); create(name) }}><Field label="Название шаблона"><input value={name} onChange={event => setName(event.target.value)} maxLength={80} required /></Field><Button type="submit" icon={Plus}>Создать шаблон</Button></form>
 }
 
 export function Templates({ config, setConfig, resources, drafts, setDrafts, api, run, notify }: PageServices & { config: Config; setConfig: Setter<Config | null>; resources: Resources; drafts: Drafts; setDrafts: Setter<Drafts> }) {
@@ -26,8 +31,8 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 	const group = groups.includes(selectedGroup) ? selectedGroup : groups[0]
 	const fields = editorFields(config, group)
 	const values = { ...fieldValues(fields), ...drafts[group] }
-	const kind = Object.keys(permanentGroups).find(key => permanentGroups[key] === group)
-	const binding = kind ? config.bindings?.[kind] : undefined
+	const kind = Object.keys(permanentGroups).find(key => permanentGroups[key] === group) || Object.keys(config.bindings).find(key => key.startsWith('custom-') && config.bindings[key].fields?.[0]?.group === group)
+	const binding = kind && config.bindings?.[kind]?.link ? config.bindings[kind] : undefined
 	const bindingChannel = resources.channels.find(channel => channel.id === binding?.link.split('/')[5])
 	function clearDraft(target: string) { setDrafts(previous => { const next = { ...previous }; delete next[target]; return next }); setGeneration(n => n + 1) }
 	function result(next: Config, message: string) { setConfig(next); const notice = syncNotice(next, message); notify(notice.message, notice.error) }
@@ -61,7 +66,7 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 	}
 	const footer = <div className="editor-footer"><span className="text-xs text-muted" aria-live="polite">{dirtyGroup(config, drafts, group) ? 'Есть несохранённые изменения' : 'Сохранённая версия'}</span><div className="flex gap-2"><IconButton icon={RotateCcw} label="Восстановить исходный шаблон" onClick={reset} /><Button variant="primary" icon={Save} onClick={save}>Сохранить шаблон</Button></div></div>
 	return <div className="grid gap-6">
-		<div className="flex flex-wrap items-center justify-between gap-4"><Field label="Раздел шаблона" className="w-full sm:w-72"><select value={group} onChange={event => setSelectedGroup(event.target.value)}>{groups.map(name => <option key={name}>{name}</option>)}</select></Field><span className="eyebrow">СООБЩЕНИЯ / ШАБЛОНЫ</span></div>
+		<div className="flex flex-wrap items-center justify-between gap-4"><Field label="Раздел шаблона" className="w-full sm:w-72"><select value={group} onChange={event => setSelectedGroup(event.target.value)}>{groups.map(name => <option key={name}>{name}</option>)}</select></Field><Button icon={Plus} onClick={() => modal({ title: 'Новый шаблон', content: ({ close }) => <NewTemplate create={name => { if (!name.trim()) return; close(); run(async () => { const next = await api('templates/create', { name, revision: config.revision }); setConfig(next); setSelectedGroup(name.trim()); notify('Шаблон создан. Напиши сообщение и выбери канал публикации.'); }) }} /> })}>Новый шаблон</Button></div>
 		{kind && <div className="binding-strip"><div className="binding-icon"><Link aria-hidden="true" /></div><div className="min-w-0 flex-1"><h2 className="text-sm font-medium">Постоянное сообщение</h2><p className="mt-1 text-xs text-muted">{binding ? 'Обновляется в Discord при сохранении шаблона' : 'Выбери канал или привяжи существующую публикацию'}</p></div>{binding && <span className="badge hidden sm:inline-flex"># {bindingChannel?.name || 'Канал привязан'}</span>}<IconButton icon={Pencil} label="Настроить постоянное сообщение" onClick={openBinding} /></div>}
 		<EditorWorkspace resetKey={group + generation} footer={footer} renderPreview={() => {
 			for (const field of fields) if (field.type === 'text' && field.components !== false) window.componentMarkdown.parse(replaceExamples(values[field.key]))

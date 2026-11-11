@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import type { Config, Decision, MajesticState, SettingValue } from '../../frontend/src/types'
 const { createStore } = require('../../dist/src/dashboard/store.js') as { createStore(): { snapshot(): Config } }
 
-interface RequestBody extends Decision { values: Record<string, SettingValue | null>; discordId: string; ids?: string[]; link?: string }
+interface RequestBody extends Decision { values: Record<string, SettingValue | null>; discordId: string; ids?: string[]; link?: string; name?: string; kind?: string }
 interface RecordedCall { path: string; body: RequestBody; headers: Record<string, string> }
 interface ResponseContext { route: Route; path: string; body: RequestBody; config: Config; majestic: MajesticState }
 interface SetupOptions { respond?(context: ResponseContext): Promise<boolean | void> }
@@ -30,6 +30,11 @@ async function setup(page: Page, options: SetupOptions = {}) {
 		else if (path === 'resources') data = resources
 		else if (path === 'overview') data = { ready: true, database: true, ping: 42, uptime: 3600, history: [] }
 		else if (path === 'history') data = [{ id: 1, action: 'templates', target: 'invite.document', actor: 'admin', created_at: new Date().toISOString(), details: { actorName: 'Администратор', fields: { 'invite.document': { label: 'Приглашение', before: 'Было', after: 'Стало' } } } }]
+		else if (path === 'templates/create') {
+			const kind = 'custom-11111111-1111-4111-8111-111111111111'
+			const field = { key: 'permanent.' + kind + '.document', group: body.name!, label: 'Текст сообщения', type: 'text', components: true, default: '# Новое сообщение', value: '# Новое сообщение' }
+			config.templates.push(field); config.bindings[kind] = { link: '', fields: [field] }; config.revision++; data = config
+		}
 		else if (path === 'templates') { for (const [key, value] of Object.entries(body.values)) { const field = config.templates.find(field => field.key === key); if (field) field.value = value == null ? field.default ?? '' : String(value) } config.revision++; data = config }
 		else if (path === 'settings') { for (const [key, value] of Object.entries(body.values)) config.settings.find(field => field.key === key)!.value = value ?? ''; config.revision++; data = config }
 		else if (path === 'container-message') data = { success: true, source: imported, items: [{ type: 'text', value: '## Загруженный контейнер' }] }
@@ -38,7 +43,7 @@ async function setup(page: Page, options: SetupOptions = {}) {
 		else if (path === 'majestic') data = majestic
 		else if (path === 'majestic/resolve') { majestic.decisions[body.discordId] = body; majestic.preview.invalidated = true; data = majestic }
 		else if (path.startsWith('majestic/')) data = majestic
-		else if (path.startsWith('permanent-message')) { config.revision++; config.bindings.invite = { link: messageLink }; data = config }
+		else if (path.startsWith('permanent-message')) { config.revision++; config.bindings[body.kind || 'invite'] = { ...config.bindings[body.kind || 'invite'], link: messageLink }; data = config }
 		else if (path === 'role-prefixes/sync') data = { updated: 1, unchanged: 0, skipped: 0, failed: 0 }
 		await route.fulfill({ json: data })
 	})
@@ -105,7 +110,7 @@ test('drafts, formatting history and mentions survive ordinary navigation', asyn
 	await page.getByLabel('Раздел шаблона').selectOption('Заявка')
 	await page.getByLabel('Раздел шаблона').selectOption('Памятка рекрута')
 	await expect(editor).toHaveValue('Привет <@&666666666666666666> ')
-	await navigate(page, 'Конструктор v2', isMobile)
+	await navigate(page, 'Настройки', isMobile)
 	await navigate(page, 'Шаблоны', isMobile)
 	await expect(editor).toHaveValue('Привет <@&666666666666666666> ')
 	expect(errors).toEqual([])
@@ -113,29 +118,30 @@ test('drafts, formatting history and mentions survive ordinary navigation', asyn
 
 test('errors, guides and discard confirmations are accessible modal dialogs', async ({ page }) => {
 	const { errors } = await setup(page, { respond: async ({ route, path }) => {
-		if (path === 'send-container') { await route.fulfill({ status: 403, json: { error: 'Боту не хватает прав для отправки.' } }); return true }
+		if (path === 'templates') { await route.fulfill({ status: 403, json: { error: 'Боту не хватает прав для отправки.' } }); return true }
 	} })
-	await page.goto('/#builder')
-	await page.getByLabel('Канал публикации', { exact: true }).fill(channelId)
-	await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).fill('Проверка')
-	await page.getByRole('button', { name: 'Опубликовать', exact: true }).click()
+	await page.goto('/#templates')
+	await page.getByLabel('Раздел шаблона').selectOption('Памятка рекрута')
+	await page.getByRole('textbox', { name: 'Текст сообщения (Markdown)', exact: true }).fill('Проверка')
+	await page.getByRole('button', { name: 'Сохранить шаблон', exact: true }).click()
 	await expect(page.getByRole('dialog')).toContainText('Боту не хватает прав')
 	await page.keyboard.press('Escape')
 	await expect(page.getByRole('dialog')).toHaveCount(0)
 	await page.getByRole('button', { name: 'Руководство по разделу' }).click()
-	await expect(page.getByRole('dialog')).toContainText('Как создать или обновить сообщение')
+	await expect(page.getByRole('dialog')).toContainText('Как работать с шаблонами')
 	await page.screenshot({ path: `output/dashboard-review/${test.info().project.name}-guide.png`, fullPage: true })
 	await page.keyboard.press('Escape')
 	await page.getByRole('button', { name: 'Обновить данные', exact: true }).click()
 	await expect(page.getByRole('dialog')).toContainText('Несохранённые правки')
 	await page.getByRole('button', { name: 'Отмена', exact: true }).click()
-	await expect(page.getByRole('textbox', { name: 'Текст сообщения', exact: true })).toHaveValue('Проверка')
+	await expect(page.getByRole('textbox', { name: 'Текст сообщения (Markdown)', exact: true })).toHaveValue('Проверка')
 	expect(errors).toEqual([])
 })
 
 test('modal keeps its close tooltip inside and locks background scrolling', async ({ page, isMobile }) => {
 	await setup(page)
-	await page.goto('/#builder')
+	await page.goto('/#templates')
+	await page.getByLabel('Раздел шаблона').selectOption('Памятка рекрута')
 	await page.evaluate(() => { document.body.style.minHeight = '300vh'; window.scrollTo(0, 200) })
 	await page.getByRole('button', { name: 'Руководство по разделу' }).click()
 	const dialog = page.getByRole('dialog')
@@ -170,21 +176,25 @@ test('modal keeps its close tooltip inside and locks background scrolling', asyn
 	expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollY)
 })
 
-test('builder import edits the original with its revision and copies through a separate endpoint', async ({ page }) => {
+test('new template is created on the templates page and publishes with a persistent binding', async ({ page }) => {
 	const { calls, errors } = await setup(page)
-	await page.goto('/#builder')
-	await page.locator('summary').filter({ hasText: 'Загрузить контейнер по ссылке' }).click()
-	await page.getByLabel('Ссылка на сообщение', { exact: true }).fill(messageLink)
-	await page.getByRole('button', { name: 'Загрузить', exact: true }).click()
+	await page.goto('/#templates')
+	await expect(page.getByRole('navigation').getByRole('link', { name: 'Конструктор v2' })).toHaveCount(0)
+	await page.getByRole('button', { name: 'Новый шаблон', exact: true }).click()
+	await page.getByLabel('Название шаблона').fill('Моё сообщение')
+	await page.getByRole('button', { name: 'Создать шаблон', exact: true }).click()
+	await expect(page.getByLabel('Раздел шаблона')).toHaveValue('Моё сообщение')
 	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
-	await expect(editor).toHaveValue('## Загруженный контейнер')
-	await editor.fill('## Изменение')
-	await page.getByRole('button', { name: 'Сохранить оригинал', exact: true }).click()
-	await expect(page.getByRole('status').filter({ hasText: 'Изменения сохранены' })).toBeVisible()
-	expect(calls.find(call => call.path === 'edit-container')!.body).toMatchObject({ link: messageLink, revision: 'revision-1', items: [{ type: 'text', value: '## Изменение' }] })
-	await page.getByRole('button', { name: 'Отправить копию', exact: true }).click()
-	await expect.poll(() => calls.filter(call => call.path === 'send-container').length).toBe(1)
-	expect(calls.find(call => call.path === 'send-container')!.body.link).toBeUndefined()
+	await editor.fill('## Мой текст')
+	await page.getByRole('button', { name: 'Сохранить шаблон', exact: true }).click()
+	await expect(page.getByRole('status').filter({ hasText: 'Шаблон сохранён' })).toBeVisible()
+	await page.getByRole('button', { name: 'Настроить постоянное сообщение', exact: true }).click()
+	await page.getByLabel('Канал публикации', { exact: true }).selectOption(channelId)
+	await page.getByRole('button', { name: 'Опубликовать / обновить', exact: true }).click()
+	await page.getByRole('button', { name: 'Опубликовать', exact: true }).click()
+	await expect(page.getByRole('status').filter({ hasText: 'Сообщение опубликовано' })).toBeVisible()
+	expect(calls.find(call => call.path === 'templates/create')!.headers['x-csrf-token']).toBe('test-csrf')
+	expect(calls.find(call => call.path === 'permanent-message/publish')!.body).toMatchObject({ channelId, kind: 'custom-11111111-1111-4111-8111-111111111111' })
 	expect(errors).toEqual([])
 })
 
@@ -271,8 +281,9 @@ test('application and direct-message previews keep their states separate and pre
 
 test('invalid component syntax opens an error and keeps the editable draft intact', async ({ page }) => {
 	const { errors } = await setup(page)
-	await page.goto('/#builder')
-	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	await page.goto('/#templates')
+	await page.getByLabel('Раздел шаблона').selectOption('Памятка рекрута')
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения (Markdown)', exact: true })
 	await editor.fill('<img src="javascript:alert(1)" />')
 	await page.getByRole('tab', { name: 'Предпросмотр', exact: true }).click()
 	await expect(page.getByRole('dialog')).toContainText('Не удалось открыть предпросмотр')
@@ -286,8 +297,9 @@ test('invalid component syntax opens an error and keeps the editable draft intac
 test('long documents resize when the editor becomes visible; undo restores a multiline selection', async ({ page, isMobile }) => {
 	const { errors } = await setup(page)
 	await page.goto('/')
-	await navigate(page, 'Конструктор v2', isMobile)
-	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	await navigate(page, 'Шаблоны', isMobile)
+	await page.getByLabel('Раздел шаблона').selectOption('Памятка рекрута')
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения (Markdown)', exact: true })
 	const text = Array.from({ length: 25 }, (_, index) => 'Строка ' + (index + 1)).join('\n')
 	await editor.fill(text)
 	expect(await editor.evaluate(input => input.clientHeight >= input.scrollHeight)).toBe(true)
@@ -299,7 +311,8 @@ test('long documents resize when the editor becomes visible; undo restores a mul
 	const selection = await editor.evaluate(input => [(input as HTMLTextAreaElement).selectionStart, (input as HTMLTextAreaElement).selectionEnd])
 	expect(selection).toEqual([0, text.length])
 	await navigate(page, 'Настройки', isMobile)
-	await navigate(page, 'Конструктор v2', isMobile)
+	await navigate(page, 'Шаблоны', isMobile)
+	await page.getByLabel('Раздел шаблона').selectOption('Памятка рекрута')
 	expect(await editor.evaluate(input => input.clientHeight >= input.scrollHeight)).toBe(true)
 	expect(errors).toEqual([])
 })
@@ -364,13 +377,15 @@ test('history uses readable operation and server names in both views', async ({ 
 
 test('Discord components retain their layout and fit a narrow screen', async ({ page, isMobile }) => {
 	const { errors } = await setup(page)
-	await page.goto('/#builder')
+	await page.goto('/#templates')
+	await page.getByLabel('Раздел шаблона').selectOption('Памятка рекрута')
 	const source = '## Стань частью Revento\nПривет, <@&666666666666666666>!\n**Жирный** и __подчёркнутый__ текст.\n\n---\n\n> Ознакомься с правилами семьи.\n\n- Первый пункт\n- Второй пункт\n\n***\n\n<section buttonLabel="Открыть правила" buttonLink="https://example.com">## Правила\nВсё, что нужно знать перед вступлением.</section>\n\n---\n\n||Скрытая подсказка||';
-	await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).fill(source)
+	await page.getByRole('textbox', { name: 'Текст сообщения (Markdown)', exact: true }).fill(source)
 	await page.getByRole('tab', { name: 'Предпросмотр', exact: true }).click()
 	const preview = page.locator('.discord-preview:visible')
 	await expect(preview).toContainText('@Модератор')
 	await expect(preview.locator('.discord-section')).toContainText('Открыть правила')
+	await expect(preview.locator('.discord-button-secondary')).toHaveCSS('background-color', 'rgb(78, 80, 88)')
 	await expect(preview.locator('.discord-divider-large')).toHaveCount(1)
 	await page.screenshot({ path: `output/dashboard-review/${test.info().project.name}-discord-components.png`, fullPage: true })
 	if (!isMobile) {

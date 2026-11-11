@@ -15,6 +15,7 @@ import {
 	escapeMarkdown
 } from 'discord.js'
 import { ContainerBuilder } from './markdownContainer'
+import { templateText, type TemplateText } from '../dashboard/templateText'
 import events = require('../config/eventSchedule')
 
 const UPDATE_INTERVAL = 15 * 60000
@@ -93,7 +94,7 @@ function getSchedule(now = Date.now()) {
 	}
 }
 
-function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolean, now = Date.now(), emojis?: D.Collection<string, D.GuildEmoji>, banner = ''): D.MessageCreateOptions & D.MessageEditOptions {
+function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolean, now = Date.now(), emojis?: D.Collection<string, D.GuildEmoji>, banner = '', render: TemplateText = templateText): D.MessageCreateOptions & D.MessageEditOptions {
 	const eventEmoji = (label: string) =>
 		emojis
 			?.find(
@@ -108,20 +109,20 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 	if (banner) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(banner))
 	container
 		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent('## Расписание Majestic RP')
+			new TextDisplayBuilder().setContent(render('schedule.title'))
 		)
 	if (nearest) {
 		container.addSectionComponents(
 			new SectionBuilder()
 				.addTextDisplayComponents(
 					new TextDisplayBuilder().setContent(
-						`### ${eventEmoji(nearest.label)} Ближайшее — ${escapeMarkdown(nearest.label)}\n**${nearest.time} МСК** · <t:${Math.floor(nearest.timestamp / 1000)}:R>`
+						render('schedule.nearest', { emoji: eventEmoji(nearest.label), event: escapeMarkdown(nearest.label), time: nearest.time, relative: `<t:${Math.floor(nearest.timestamp / 1000)}:R>` })
 					)
 				)
 				.setButtonAccessory(
 					new ButtonBuilder()
 						.setCustomId(`schedule_group_${selectionId(nearest)}`)
-						.setLabel('Создать групп')
+						.setLabel(render('schedule.button'))
 						.setStyle(ButtonStyle.Primary)
 						.setDisabled(stale)
 				)
@@ -131,7 +132,7 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 		.slice(1, 4)
 		.map(
 			event =>
-				`### ${eventEmoji(event.label)} ${event.time} — ${escapeMarkdown(event.label)}${event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : ''}`
+				render('schedule.next', { emoji: eventEmoji(event.label), time: event.time, event: escapeMarkdown(event.label), tomorrow: event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : '' })
 		)
 	const special = events
 		.filter(
@@ -155,7 +156,7 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 					minutes < end
 				status = `\nКапты ${active ? 'активны' : 'не активны'}`
 			}
-			return `### ${eventEmoji(event.label)} ${escapeMarkdown(event.label)} — ${escapeMarkdown(event.time)}${event.days?.length ? ` · ${event.days.join(', ')}` : ''}${event.note ? `\n${escapeMarkdown(event.note)}` : ''}${status}`
+			return render('schedule.special', { emoji: eventEmoji(event.label), event: escapeMarkdown(event.label), time: escapeMarkdown(event.time), days: event.days?.length ? ` · ${event.days.join(', ')}` : '', note: event.note ? `\n${escapeMarkdown(event.note)}` : '', status })
 		})
 	if (rows.length)
 		container
@@ -175,7 +176,7 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 			)
 	container.addTextDisplayComponents(
 		new TextDisplayBuilder().setContent(
-			`-# Время МСК · обновлено <t:${Math.floor(updatedAt / 1000)}:R>${stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : ''}`
+			render('schedule.footer', { relative: `<t:${Math.floor(updatedAt / 1000)}:R>`, warning: stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : '' })
 		)
 	)
 	return {
@@ -202,7 +203,7 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 			false,
 			snapshot.generatedAt,
 			channel.guild?.emojis.cache,
-			store.text('schedule.banner')
+			store.text('schedule.banner'), store.text.bind(store)
 		)
 		if (messageId) {
 			try {

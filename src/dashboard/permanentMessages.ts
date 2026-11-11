@@ -19,6 +19,14 @@ const definitions: Record<string, { group: string; command?: string }> = {
 	promotion: { group: 'Система повышения' },
 	recruit: { group: 'Памятка рекрута' }
 }
+function definition(kind: string) {
+	if (Object.hasOwn(definitions, kind)) return definitions[kind]
+	if (/^custom-[a-f0-9-]{36}$/.test(kind)) {
+		const field = store.bindings[kind]?.fields[0]
+		if (field) return { group: field.group, command: undefined }
+	}
+	return undefined
+}
 const publications = new Set()
 
 // Attachments stay on the original message; Markdown uses their Discord URLs.
@@ -28,7 +36,7 @@ function parsePermanentMessage(message: T.MessageShape) {
 }
 
 async function publish(kind: string, channelId: string, revision: number, client: D.Client, guild: D.Guild, actor: T.Actor | undefined) {
-	if (!Object.hasOwn(definitions, kind)) throw problem(400, 'Неизвестный вид сообщения.')
+	if (!definition(kind)) throw problem(400, 'Неизвестный вид сообщения.')
 	if (revision !== store.revision) throw problem(409, 'Настройки изменились. Обновите данные.')
 	if (publications.has(kind)) throw problem(409, 'Шаблон уже публикуется.')
 	publications.add(kind)
@@ -36,13 +44,13 @@ async function publish(kind: string, channelId: string, revision: number, client
 		const channel = await guild.channels.fetch(channelId)
 		if (!channel || ![0, 5].includes(channel.type) || !channel.isTextBased() || !channel.permissionsFor(client.user!)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])) throw problem(400, 'Выберите доступный текстовый канал сервера.')
 		const binding = store.bindings[kind]
-		if (binding && parseMessageLink(binding.link).channelId === channelId) {
+		if (binding?.link && parseMessageLink(binding.link).channelId === channelId) {
 			await updateMessage(kind, binding, client, guild, actor)
 			return
 		}
 		let payload: T.MutableMessagePayload
-		if (definitions[kind].command) payload = await (require('../commands/admin/' + definitions[kind].command) as { buildPayload(): Promise<T.MutableMessagePayload> }).buildPayload()
-		else if (binding) {
+		if (definition(kind)!.command) payload = await (require('../commands/admin/' + definition(kind)!.command) as { buildPayload(): Promise<T.MutableMessagePayload> }).buildPayload()
+		else if (binding?.link) {
 			const source = await fetchMessage(client, guild, binding.link)
 			payload = binding.markdown ? buildEditPayload({ items: markdown.parse(store.text(binding.fields[0].key)) })
 				: applyFields(source, Object.fromEntries(binding.fields.map(field => [field.path, store.text(field.key)])), { expandMarkdown: false })
@@ -59,7 +67,7 @@ async function publish(kind: string, channelId: string, revision: number, client
 			}
 			resolve(payload.components as T.RawComponent[])
 			delete payload.attachments
-		} else payload = buildEditPayload({ items: markdown.parse(store.text(kind + '.document', {}, templateDefinition(kind + '.document')!.default)) })
+		} else payload = buildEditPayload({ items: markdown.parse(binding ? store.text(binding.fields[0].key) : store.text(kind + '.document', {}, templateDefinition(kind + '.document')!.default)) })
 		payload.flags = MessageFlags.IsComponentsV2
 		payload.allowedMentions = { parse: [], repliedUser: false }
 		const sent = await channel.send(payload as D.MessageCreateOptions)
@@ -85,18 +93,18 @@ async function fetchMessage(client: D.Client, guild: D.Guild, link: string) {
 }
 
 function bindingFor(kind: string, message: T.MessageShape & { id?: string; url: string }) {
-	const definition = definitions[kind]
-	if (!definition) throw problem(400, 'Неизвестный вид сообщения.')
-	if (!definition.command) {
+	const entry = definition(kind)!
+	if (!entry) throw problem(400, 'Неизвестный вид сообщения.')
+	if (!entry.command) {
 		try {
 			const parsed = parsePermanentMessage(message)
-			return { link: message.url, markdown: true, fields: [{ key: `permanent.${kind}.${message.id}.0`, path: 'markdown', group: definition.group, label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, default: markdown.stringify(parsed.items), variables: [] }] }
+			return { link: message.url, markdown: true, fields: [{ key: `permanent.${kind}.${message.id}.0`, path: 'markdown', group: entry.group, label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, default: markdown.stringify(parsed.items), variables: [] }] }
 		} catch (caughtError) {
  const error = getError(caughtError)
  if (error.status !== 422) throw error }
 	}
-	const fields = definition.command ? [] : snapshot(message).fields.map((field, index) => ({
-		...field, components: false, key: `permanent.${kind}.${message.id}.${index}`, group: definition.group,
+	const fields = entry.command ? [] : snapshot(message).fields.map((field, index) => ({
+		...field, components: false, key: `permanent.${kind}.${message.id}.${index}`, group: entry.group,
 		default: field.value, variables: [], type: field.label === 'Подпись кнопки' ? 'button' : field.type
 	}))
 	return { link: message.url, fields }
@@ -118,9 +126,9 @@ async function updateMessage(kind: string, binding: T.Binding, client: D.Client,
 		const message = await fetchMessage(client, guild, binding.link)
 		let payload: T.MutableMessagePayload
 
-		if (definitions[kind].command) {
-			const built = await (require('../commands/admin/' + definitions[kind].command) as { buildPayload(): Promise<T.MutableMessagePayload> }).buildPayload()
-			payload = { components: built.components.map(component => componentJSON(component)), allowedMentions: { parse: ['roles'], repliedUser: false } }
+		if (definition(kind)!.command) {
+			const built = await (require('../commands/admin/' + definition(kind)!.command) as { buildPayload(): Promise<T.MutableMessagePayload> }).buildPayload()
+			payload = { components: built.components.map(component => componentJSON(component)), ...(kind === 'rules' ? { attachments: [] } : {}), allowedMentions: { parse: ['roles'], repliedUser: false } }
 			const files = new Set<NonNullable<D.MessageCreateOptions['files']>[number]>()
 			const resolveMedia = (components: T.RawComponent[]): void => {
 				for (const component of components) {
@@ -159,7 +167,7 @@ async function updateMessage(kind: string, binding: T.Binding, client: D.Client,
 async function syncMessages(keys: string[], client: D.Client, guild: D.Guild, selectedKind: string | undefined, actor: T.Actor | undefined) {
 	const results = []
 	for (const [kind, binding] of Object.entries(store.bindings)) {
-		if (!definitions[kind] || (selectedKind ? kind !== selectedKind : !keys.some((key: string) => templateDefinition(key)?.group === definitions[kind].group))) continue
+		if (!binding.link || !definition(kind) || (selectedKind ? kind !== selectedKind : !keys.some((key: string) => templateDefinition(key)?.group === definition(kind)!.group))) continue
 		try { const logResult = await updateMessage(kind, binding, client, guild, actor); results.push({ kind, ok: true, ...logResult }) }
 		catch (caughtError) {
  const error = getError(caughtError)
@@ -186,4 +194,4 @@ async function upgradeLegacyBindings(client: D.Client, guild: D.Guild) {
 	}
 }
 
-export { definitions, bindingFor, fetchMessage, rememberSent, syncMessages, publish, upgradeLegacyBindings }
+export { definition, definitions, bindingFor, fetchMessage, rememberSent, syncMessages, publish, upgradeLegacyBindings }

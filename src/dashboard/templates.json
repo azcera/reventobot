@@ -949,5 +949,153 @@
     "type": "button",
     "variables": [],
     "maxLength": 80
+  },
+  "schedule.title": {
+    "group": "Расписание",
+    "label": "Заголовок",
+    "default": "## Расписание Majestic RP",
+    "type": "text",
+    "components": true,
+    "variables": [],
+    "maxLength": 4000
+  },
+  "schedule.nearest": {
+    "group": "Расписание",
+    "label": "Ближайшее событие",
+    "default": "### {emoji} Ближайшее — {event}\n**{time} МСК** · {relative}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "emoji",
+      "event",
+      "time",
+      "relative"
+    ],
+    "maxLength": 4000
+  },
+  "schedule.next": {
+    "group": "Расписание",
+    "label": "Следующие события",
+    "default": "### {emoji} {time} — {event}{tomorrow}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "emoji",
+      "time",
+      "event",
+      "tomorrow"
+    ],
+    "maxLength": 4000
+  },
+  "schedule.special": {
+    "group": "Расписание",
+    "label": "Особые события",
+    "default": "### {emoji} {event} — {time}{days}{note}{status}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "emoji",
+      "event",
+      "time",
+      "days",
+      "note",
+      "status"
+    ],
+    "maxLength": 4000
+  },
+  "schedule.footer": {
+    "group": "Расписание",
+    "label": "Время обновления",
+    "default": "-# Время МСК · обновлено {relative}{warning}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "relative",
+      "warning"
+    ],
+    "maxLength": 4000
+  },
+  "schedule.button": {
+    "group": "Расписание",
+    "label": "Кнопка создания группы",
+    "default": "Создать групп",
+    "type": "button",
+    "components": false,
+    "variables": [],
+    "maxLength": 80
+  },
+  "announcement.title": {
+    "group": "Объявление капта",
+    "label": "Заголовок",
+    "default": "# {icon} КАПТ {title} {icon}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "icon",
+      "title"
+    ],
+    "maxLength": 4000
+  },
+  "announcement.details": {
+    "group": "Объявление капта",
+    "label": "Описание капта",
+    "default": "> ### 🆚 Против: {enemy}\n> ### ⏰ Начало: {time}\n> ### 🗺️ Квадрат: {zone}\n> ### 👥 Кол-во врагов: {count}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "enemy",
+      "time",
+      "zone",
+      "count"
+    ],
+    "maxLength": 4000
+  },
+  "announcement.game": {
+    "group": "Объявление капта",
+    "label": "Данные из игры",
+    "default": "> ### 🌍 Карта: {map}\n> ### {resultIcon} Результат: {result}\n> ### 📋 Статус: {status}{registration}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "map",
+      "resultIcon",
+      "result",
+      "status",
+      "registration"
+    ],
+    "maxLength": 4000
+  },
+  "announcement.mvp": {
+    "group": "Объявление капта",
+    "label": "Итоги капта",
+    "default": "### 💥 MVP по урону: {damage}\n### 🎯 MVP по киллам: {kills}",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "damage",
+      "kills"
+    ],
+    "maxLength": 4000
+  },
+  "announcement.button": {
+    "group": "Объявление капта",
+    "label": "Кнопка регистрации",
+    "default": "{icon} Создать регу на {target} {icon}",
+    "type": "button",
+    "components": false,
+    "variables": [
+      "icon",
+      "target"
+    ],
+    "maxLength": 80
+  },
+  "announcement.mention": {
+    "group": "Объявление капта",
+    "label": "Уведомление участников",
+    "default": "> ### ||@everyone||",
+    "type": "text",
+    "components": false,
+    "variables": [],
+    "maxLength": 200
   }
 }

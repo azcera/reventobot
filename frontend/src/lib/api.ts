@@ -19,7 +19,7 @@ const row = (value: unknown): boolean => record(value) && text(value.discordId) 
 const majestic = (value: unknown): boolean => record(value) && boolean(value.busy) && boolean(value.configured) && record(value.decisions) && record(value.rankRoles) && (value.preview === null || record(value.preview) && text(value.preview.id) && number(value.preview.generatedAt) && number(value.preview.familyTotal) && array(value.preview.rows, row) && record(value.preview.summary)) && (value.run === null || record(value.run) && text(value.run.kind) && text(value.run.status) && number(value.run.completed) && number(value.run.total) && Array.isArray(value.run.results))
 
 function validResponse(path: string, value: unknown): boolean {
-  if (['config', 'templates', 'settings', 'permanent-message', 'permanent-message/publish', 'permanent-message/sync', 'navigation/sync'].includes(path)) return config(value)
+  if (['config', 'templates', 'templates/create', 'settings', 'permanent-message', 'permanent-message/publish', 'permanent-message/sync', 'navigation/sync'].includes(path)) return config(value)
   if (path === 'resources') return record(value) && array(value.roles, resource) && array(value.channels, channel => resource(channel) && record(channel) && number(channel.type))
   if (path === 'session') return record(value) && text(value.csrf) && resource(value.guild) && resource(value.user)
   if (path === 'history') return array(value, history)

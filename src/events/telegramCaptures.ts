@@ -107,9 +107,7 @@ export = (client: import('discord.js').Client) => {
 						new ButtonBuilder()
 							.setCustomId(`capt_tg_${enemyFaction}_${cleanTime}`)
 							.setLabel(
-								isAttack
-									? '⚔️ Создать регу на АТАКУ ⚔️'
-									: '🛡️ Создать регу на ЗАЩИТУ 🛡️'
+								store.text('announcement.button', { icon: isAttack ? '⚔️' : '🛡️', target: isAttack ? 'АТАКУ' : 'ЗАЩИТУ' })
 							)
 							.setStyle(isAttack ? ButtonStyle.Success : ButtonStyle.Primary)
 					)
@@ -121,17 +119,13 @@ export = (client: import('discord.js').Client) => {
 					container
 						.addTextDisplayComponents(
 							new TextDisplayBuilder().setContent(
-								isAttack ? '# ⚔️ КАПТ АТАКА ⚔️ ' : '# 🛡️ КАПТ ЗАЩИТА 🛡️'
+								store.text('announcement.title', { icon: isAttack ? '⚔️' : '🛡️', title: isAttack ? 'АТАКА' : 'ЗАЩИТА' })
 							)
 						)
 						.addSeparatorComponents(new SeparatorBuilder())
 						.addTextDisplayComponents(
 							new TextDisplayBuilder().setContent(
-								`> ### 🆚 Против: \`${isAttack ? defender : attacker}\`\n` +
-									`> ### ⏰ Начало: \`${startTime}\`\n` +
-									`> ### 🗺️ Квадрат: \`${zoneName} (${zoneNum})\`\n` +
-									`> ### 👥 Кол-во врагов: \`${count}\`\n` +
-									`> ### ||@everyone||`
+								store.text('announcement.details', { enemy: '`' + (isAttack ? defender : attacker) + '`', time: '`' + startTime + '`', zone: '`' + zoneName + ' (' + zoneNum + ')`', count: '`' + count + '`' }) + '\n' + store.text('announcement.mention')
 							)
 						)
 						.addActionRowComponents(actionRow)

@@ -73,7 +73,7 @@ function createStore() {
 			return container.clearAccentColor()
 		},
 		text(key: string, variables: Record<string, unknown> = {}, fallback?: string) {
-			const generated = key.includes('.document') ? layout.documents(legacyFields().map(field => ({ ...field, value: state.templates[field.key] ?? field.value }))).find(field => field.key === key)?.value : undefined
+			const generated = key.includes('.document') ? layout.documents([...legacyFields().map(field => ({ ...field, value: state.templates[field.key] ?? field.value })), ...Object.entries(state.templates).filter(([key]) => !catalog[key] && /^rules\.(heading|rule)\./.test(key)).map(([key, value]) => ({ ...templateDefinition(key)!, key, value }))]).find(field => field.key === key)?.value : undefined
 			let source = (/^(archives|unanswered)\./.test(key) ? undefined : state.templates[key]) ?? generated ?? catalog[key]?.default ?? fallback
 			if ((key.includes('.document') || key.startsWith('permanent.')) && typeof source === 'string' && source.includes('<separator')) {
 				const markdown: typeof import('../../public/component-markdown') = (require('../../public/component-markdown') as typeof import('../../public/component-markdown'))

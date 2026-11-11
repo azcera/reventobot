@@ -33,7 +33,7 @@ export interface Overview { ready: boolean; ping: number; database: boolean; upt
 export interface ApiRoutes {
   config: Config; resources: Resources; session: Session; overview: Overview; history: HistoryEntry[];
   'mcl-lists': { lists: MclList[]; revision: number }; majestic: MajesticState;
-  templates: Config; settings: Config; 'permanent-message': Config; 'permanent-message/publish': Config; 'permanent-message/sync': Config; 'navigation/sync': Config;
+  templates: Config; 'templates/create': Config; settings: Config; 'permanent-message': Config; 'permanent-message/publish': Config; 'permanent-message/sync': Config; 'navigation/sync': Config;
   'role-prefixes/sync': { updated: number; unchanged: number; skipped: number; failed: number };
   'send-container': { success: boolean; error?: string; logError?: string }; 'edit-container': ApiRoutes['send-container'] & { source: SourceMessage };
   logout: { success: boolean }

@@ -82,3 +82,14 @@ test('existing recruit and promotion bindings upgrade to Markdown sections and s
 	assert.match(document.value, /<section buttonLabel="Открыть" buttonLink="https:\/\/example.com">Инструкция<\/section>/)
 	assert.equal(f.message.components[0].components[0].content, '# Памятка', 'opening the editor does not publish changes')
 })
+
+
+test('rules legacy image is part of the editable document and cannot return after explicit removal', async () => {
+	const local = createStore(), pool = memoryPool()
+	await local.init(pool)
+	await local.save('templates', { 'rules.1': 'https://example.com/rules.png', 'rules.heading.1': '## Мои правила' }, local.revision, 'admin')
+	assert.match(local.text('rules.document'), /<img src="https:\/\/example.com\/rules.png" \/>/)
+	await local.save('templates', { 'rules.document': '## Без изображения' }, local.revision, 'admin')
+	const restarted = createStore(); await restarted.init(pool)
+	assert.equal(restarted.text('rules.document'), '## Без изображения')
+})

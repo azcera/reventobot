@@ -1,4 +1,5 @@
 import type { BindingMember, Decisions, Registration, War, WarPlayer, QueueRow } from './familyWarTypes'
+import { templateText, type TemplateText } from '../../dashboard/templateText'
 import type { Store } from '../../types'
 import { ContainerBuilder } from '../../services/markdownContainer'
 import {
@@ -28,7 +29,8 @@ function announcement(
 	now = Date.now(),
 	members: Iterable<BindingMember> = [],
 	decisions: Decisions = {},
-	banner = ''
+	banner = '',
+	render: TemplateText = templateText
 ) {
 	const closed = registrationClosed(war, now)
 	const battle = battleSummary(war)
@@ -53,28 +55,18 @@ function announcement(
 		.setCustomId(`capt_api_${suffix(war)}`)
 		.setDisabled(closed)
 		.setLabel(
-			`${icon} Создать регу на ${war.attack ? 'АТАКУ' : 'ЗАЩИТУ'} ${icon}`
+			render('announcement.button', { icon, target: war.attack ? 'АТАКУ' : 'ЗАЩИТУ' })
 		)
 	const container = new ContainerBuilder()
 		.setAccentColor(war.attack ? 0x57f287 : 0x5865f2)
 	if (banner) container.addTextDisplayComponents(textBlock(banner))
 	container
-		.addTextDisplayComponents(textBlock(`# ${icon} КАПТ ${title} ${icon}`))
+		.addTextDisplayComponents(textBlock(render('announcement.title', { icon, title })))
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(
 			textBlock(
-				[
-					`> ### 🆚 Против: ${code(war.enemy)}`,
-					`> ### ⏰ Начало: ${code(startTime)}`,
-					`> ### 🗺️ Квадрат: ${code(war.zone ?? 'Неопределён')}`,
-					`> ### 👥 Кол-во врагов: ${code(Array.isArray(enemies) ? enemies.length : 'Неопределено')}`,
-					`> ### 🌍 Карта: ${code(war.map)}`,
-					`> ### ${battle.result === 'Победа' ? '🏆' : battle.result === 'Поражение' ? '❌' : '❔'} Результат: ${code(battle.result)}`,
-					`> ### 📋 Статус: ${code(war.status || 'не указан')}${war.neutral ? ' · Нейтральная территория' : ''}`,
-					...(registrationUrl
-						? [`[Открыть регистрацию](${registrationUrl})`]
-						: [])
-				].join('\n')
+				[render('announcement.details', { enemy: code(war.enemy), time: code(startTime), zone: code(war.zone ?? 'Неопределён'), count: code(Array.isArray(enemies) ? enemies.length : 'Неопределено') }),
+				render('announcement.game', { map: code(war.map), resultIcon: battle.result === 'Победа' ? '🏆' : battle.result === 'Поражение' ? '❌' : '❔', result: code(battle.result), status: code(war.status || 'не указан') + (war.neutral ? ' · Нейтральная территория' : ''), registration: registrationUrl ? '\n[Открыть регистрацию](' + registrationUrl + ')' : '' })].join('\n')
 			)
 		)
 		.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(button))
@@ -93,7 +85,7 @@ function announcement(
 			.addSeparatorComponents(new SeparatorBuilder())
 			.addTextDisplayComponents(
 				textBlock(
-					`### 💥 MVP по урону: ${label(battle.damageMvp, 'damage')}\n### 🎯 MVP по киллам: ${label(battle.killsMvp, 'kills')}`
+					render('announcement.mvp', { damage: label(battle.damageMvp, 'damage'), kills: label(battle.killsMvp, 'kills') })
 				)
 			)
 	}

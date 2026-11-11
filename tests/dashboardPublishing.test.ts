@@ -152,3 +152,40 @@ test('navigation partial failures are reported, saved edits survive and retry re
 	assert.equal(result.updated, 2)
 	assert.equal(f.thread.archived, true)
 })
+
+
+test('custom template persists before publication and synchronizes saved edits after restart', async t => {
+	const f = await createFixture(); t.after(() => f.close()); await f.login()
+	let response = await f.request('/api/templates/create', { body: { name: 'Мой шаблон', revision: store.revision } })
+	assert.equal(response.status, 200, await response.clone().text())
+	let config = await response.json()
+	const kind = Object.keys(config.bindings).find(key => key.startsWith('custom-'))!
+	let field = config.templates.find((field: TemplateField) => field.group === 'Мой шаблон')
+	assert.ok(field); assert.equal(config.bindings[kind].link, '')
+	response = await f.request('/api/templates', { body: { revision: config.revision, values: { [field.key]: '# Мой текст\n<img src="https://example.com/banner.png" />' } } })
+	assert.equal(response.status, 200, await response.clone().text())
+	const restart = createStore(); await restart.init(f.pool)
+	assert.match(restart.text(field.key), /Мой текст/)
+	let sends = 0
+	f.channel.send = async (payload: MutableMessagePayload) => {
+		sends++; f.message.components = payload.components.map(componentJSON); f.message.attachments.clear(); return f.message
+	}
+	response = await f.request('/api/permanent-message/publish', { body: { kind, channelId: f.channelId, revision: store.revision } })
+	assert.equal(response.status, 200, await response.clone().text())
+	config = await response.json()
+	field = config.templates.find((field: TemplateField) => field.group === 'Мой шаблон')
+	assert.equal(config.bindings[kind].link, f.message.url)
+	assert.match(JSON.stringify(f.message.components), /banner.png/)
+	response = await f.request('/api/templates', { body: { revision: store.revision, values: { [field.key]: '# Без картинки' } } })
+	assert.equal(response.status, 200, await response.clone().text())
+	assert.equal((await response.json()).syncResults[0].ok, true)
+	assert.match(JSON.stringify(f.message.components), /Без картинки/)
+	assert.doesNotMatch(JSON.stringify(f.message.components), /banner.png/)
+	assert.equal(sends, 1)
+	response = await f.request('/api/permanent-message', { body: { kind, link: '', revision: store.revision } })
+	assert.equal(response.status, 200, await response.clone().text())
+	assert.equal(store.bindings[kind].link, '')
+	assert.equal(store.text(field.key), '# Без картинки')
+	assert.equal((await f.request('/api/templates/create', { body: { name: 'Мой шаблон', revision: store.revision } })).status, 400)
+	assert.equal((await f.request('/api/templates/create', { body: { name: 'Другой', revision: -1 } })).status, 409)
+})

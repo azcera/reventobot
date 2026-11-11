@@ -9,10 +9,11 @@ import type * as Pg from 'pg'
 import { randomUUID } from 'node:crypto'
 import { parseNickname } from '../features/majestic/syncPreview'
 import { ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-	StringSelectMenuBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js'
+	StringSelectMenuBuilder, MessageFlags, PermissionFlagsBits, escapeMarkdown } from 'discord.js'
 
 const CHANNEL_ID = '1569055629098745896'
 const FRIEND_ROLE_ID = '1499398714765348896'
+const EXCLUDED_ROLE_ID = '1445808131832676560'
 const INTERVAL_MS = 10 * 60 * 1000
 const PREFIX = 'family_cleanup_'
 const CATEGORIES = ['Не в составе семьи', 'Ник не по форме', 'Без ролей']
@@ -23,7 +24,7 @@ function classify(snapshot: T.MembershipSnapshot, applications: Set<string>) {
 	const reasons = new Map<string, string>()
 	for (const member of snapshot.members.values()) {
 		if (member.user.bot || member.id === member.guild?.ownerId ||
-			member.roles.cache.has(FRIEND_ROLE_ID)) continue
+			(member.roles.cache.has(FRIEND_ROLE_ID) || member.roles.cache.has(EXCLUDED_ROLE_ID))) continue
 		if (!member.roles.cache.some(role => role.id !== member.guild.id)) {
 			manual.push(member)
 			reasons.set(member.id, 'Без ролей')
@@ -68,7 +69,7 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 	}
 	async function freshMember(guild: D.Guild, id: string) {
 		const member = await guild.members.fetch({ user: id, force: true })
-		if (member.user.bot || member.id === guild.ownerId || member.roles.cache.has(FRIEND_ROLE_ID)) return null
+		if (member.user.bot || member.id === guild.ownerId || (member.roles.cache.has(FRIEND_ROLE_ID) || member.roles.cache.has(EXCLUDED_ROLE_ID))) return null
 		if ((await applications()).has(id)) return null
 		return member
 	}
@@ -112,7 +113,7 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 			const text = `## Несинхронизированно с игрой — ${report.manual.length}\n` +
 				`Страница ${page + 1}/${pages.length}. Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
 				(failed ? `⚠️ Не удалось автоматически кикнуть: ${failed}. Проверьте права и журнал бота.\n` : '') +
-				(members.length ? `### ${reason}\n${members.map((member: D.GuildMember) => `- <@${member.id}>`).join('\n')}` : 'Список пуст.')
+				(members.length ? `### ${reason}\n${members.map((member: D.GuildMember) => `- [${escapeMarkdown(member.displayName || member.user.globalName || member.user.username || member.id).replace(/@/g, '＠')}](https://discord.com/users/${member.id}) · ${member.id}`).join('\n')}` : 'Список пуст.')
 			const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
 			container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
 				...['kick', 'roles'].map(action => new ButtonBuilder().setCustomId(`${PREFIX}open_${action}_${page}`)
