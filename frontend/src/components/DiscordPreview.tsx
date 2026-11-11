@@ -19,9 +19,8 @@ export function Markdown({ source }: { source: string }) {
 
 function DiscordImage({ src }: { src: string }) {
 	const [failed, setFailed] = useState(false)
-	const url = src.startsWith('attachment://') ? '/template-images/' + src.slice(13) : src
-	return failed ? <div className="discord-image-error"><ImageOff aria-hidden="true" /><span>Изображение недоступно</span></div>
-		: <img className="discord-image" src={url} alt="Изображение сообщения" loading="lazy" onError={() => setFailed(true)} />
+	return failed || src.startsWith('attachment://') ? <div className="discord-image-error"><ImageOff aria-hidden="true" /><span>Изображение недоступно</span></div>
+		: <img className="discord-image" src={src} alt="Изображение сообщения" loading="lazy" onError={() => setFailed(true)} />
 }
 
 export function DiscordButton({ children, link = false, variant = 'primary' }: { children: React.ReactNode; link?: boolean; variant?: string }) {

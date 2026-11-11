@@ -84,12 +84,13 @@ test('rules and invite sync reuse command builders, images and working buttons',
 	}
 })
 
-test('rules sync restores missing banner and explicit images replace the automatic banner', async t => {
+test('rules sync uses only images specified in the document', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()
 	await f.request('/api/permanent-message', { body: { kind: 'rules', link: f.message.url, revision: store.revision } })
 	const command: typeof import("../src/commands/admin/rules") = require('../src/commands/admin/rules')
+	f.message.attachments.set('rules', { name: 'rules.png', url: 'https://cdn.example.com/rules.png' })
 	for (const [source, expected] of [
-		['## Новые правила', 'attachment://rules.png'],
+		['## Новые правила', ''],
 		['<img src="attachment://rules.png" />\n\n## Правила с баннером', 'attachment://rules.png'],
 		['<img src="https://example.com/custom.png" />\n\n## Свой баннер', 'https://example.com/custom.png']
 	]) {
@@ -97,20 +98,10 @@ test('rules sync restores missing banner and explicit images replace the automat
 		assert.equal(response.status, 200)
 		assert.equal((await response.json()).syncResults[0].ok, true)
 		const media = (components: RawComponent[]): string[] => components.flatMap(component => [...(component.items || []).map(item => item.media.url), ...media(component.components || [])])
-		assert.deepEqual(media(f.message.components), [expected])
-		assert.deepEqual(media((await command.buildPayload()).components.map((component: { toJSON(): RawComponent }) => component.toJSON())), [expected])
-		if (expected.startsWith('attachment://')) {
-			assert.deepEqual(f.message.lastPayload.files.map((file: { name: string }) => file.name), ['rules.png'])
-			assert.ok(require('node:fs').existsSync(f.message.lastPayload.files[0].attachment))
-		} else assert.equal(f.message.lastPayload.files, undefined)
+		assert.deepEqual(media(f.message.components), expected ? [expected === 'attachment://rules.png' ? 'https://cdn.example.com/rules.png' : expected] : [])
+		assert.deepEqual(media((await command.buildPayload()).components.map((component: { toJSON(): RawComponent }) => component.toJSON())), expected ? [expected] : [])
+		assert.equal(f.message.lastPayload.files, undefined)
 	}
-	// Once restored, the next edit must reuse the existing attachment.
-	f.message.attachments.set('rules', { name: 'rules.png', url: 'https://cdn.example.com/rules.png' })
-	await store.save('templates', { 'rules.document': '## Ещё правка' }, store.revision, 'admin')
-	const response = await f.request('/api/permanent-message/sync', { body: { kind: 'rules' } })
-	assert.equal((await response.json()).syncResults[0].ok, true)
-	assert.equal(f.message.lastPayload.files, undefined)
-	assert.equal(f.message.components[0].components[0].items[0].media.url, 'https://cdn.example.com/rules.png')
 })
 
 test('binding rejects wrong guild, author, duplicate, stale revision and dynamic messages', async t => {
@@ -135,15 +126,15 @@ test('new singleton command publications are remembered only in the configured g
 	f.message.guildId = f.guild.id; await rememberSent('invite', f.message); const remembered = store.bindings; assert.equal(remembered.invite.link, f.message.url)
 })
 
-test('rules preview includes the automatic banner only when Markdown has no image', async () => {
+test('rules preview includes only images in the document', async () => {
 	const { previewFields } = await import('../frontend/src/lib/templates.js')
 	const parser: typeof import("../public/component-markdown") = require('../public/component-markdown')
 	const config = { revision: 0, settings: [], bindings: {}, syncResults: [], templates: [{ key: 'rules.1', value: 'attachment://rules.png', type: 'text', group: 'Правила', label: 'Баннер' }] }
 	for (const value of ['## Правила', '<img src="attachment://rules.png" />\n\n## Правила']) {
 		const fields = previewFields(config, 'Правила', [{ key: 'rules.document', group: 'Правила', label: 'Правила', type: 'text', value }], {}, parser)
 		const images = fields.flatMap(field => parser.parse(field.value)).filter((item: { type: string }) => item.type === 'image')
-		assert.equal(images.length, 1)
-		assert.equal(images[0].value, 'attachment://rules.png')
+		assert.equal(images.length, value.includes('<img') ? 1 : 0)
+		if (images.length) assert.equal(images[0].value, 'attachment://rules.png')
 	}
 })
 

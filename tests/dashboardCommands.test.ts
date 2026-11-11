@@ -34,11 +34,11 @@ test('existing command modules pick up edited templates and preserve attachments
 	const payload = request.channel.payload
 	assert.match(components(payload.components[0]), /Отправить анкету/)
 	assert.match(components(payload.components[0]), /open_invite_modal/)
-	assert.equal(payload.files.length, 2)
+	assert.equal(payload.files, undefined)
 	assert.equal(payload.components[0].toJSON().accent_color ?? null, null)
 	await rules.execute(asMock(request), [])
 	assert.match(components(request.channel.payload.components[0]), /Правила нашего сервера/)
-	assert.equal(request.channel.payload.files.length, 1)
+	assert.equal(request.channel.payload.files, undefined)
 	assert.match(components(getNavigationContainer(null, false)), /https:\/\/example.com\/rules/)
 })
 

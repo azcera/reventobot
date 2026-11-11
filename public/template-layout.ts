@@ -5,7 +5,7 @@ import type { TemplateField } from '../shared/browserTypes'
 		const get = (key: string) => fields.find(field => field.key === key)?.value ?? ''
 		const add = (key: string, group: string, label: string, value: string) => result.push({ key, group, label, type: 'text', components: true, maxLength: 4000, value, default: value, variables: [...new Set([...value.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g)].map(match => match[1]))] })
 		const join = (parts: string[]) => parts.filter(Boolean).join('\n\n---\n\n')
-		const image = (key: string) => '<img src="' + get(key) + '" />'
+		const image = (key: string) => get(key) && !get(key).startsWith('attachment://') ? '<img src="' + get(key) + '" />' : ''
 		add('invite.document', 'Приглашение', 'Текст приглашения', [image('invite.1'), ...[5, 6, 7, 8, 9, 10].map(n => get('invite.' + n)), image('invite.2'), get('invite.11'), ...fields.filter(field => field.key.startsWith('invite.form.')).map(field => field.value), ...[12, 13, 14].map(n => get('invite.' + n))].filter(Boolean).join('\n\n***\n\n'))
 		const attr = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 		add('navigation.document', 'Навигация', 'Текст навигации', join([get('navigation.1'), ...Array.from({ length: 9 }, (_, i) => get('navigation.item.' + i + '.link') ? '<section buttonLabel="' + attr(get('navigation.item.' + i + '.label')) + '" buttonLink="' + attr(get('navigation.item.' + i + '.link')) + '">' + get('navigation.item.' + i + '.text') + '</section>' : '## ' + get('navigation.item.' + i + '.label'))]))

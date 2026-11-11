@@ -1,19 +1,15 @@
 import { getError } from '../utils/errors'
 import {
 	Events,
-	AttachmentBuilder,
-	MediaGalleryBuilder,
-	MediaGalleryItemBuilder,
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	ContainerBuilder,
 	TextDisplayBuilder,
 	SeparatorBuilder,
 	MessageFlags
 } from 'discord.js'
 import { NewMessage } from 'teleproto/events'
-import path = require('path')
+import { ContainerBuilder } from '../services/markdownContainer'
 import { initTelegramClient } from '../services/telegramService'
 import { store } from '../dashboard/store'
 require('dotenv').config()
@@ -102,12 +98,6 @@ export = (client: import('discord.js').Client) => {
 					if (!channel?.isSendable())
 						return console.error('[Discord] Канал для каптов не найден!')
 
-					const captImage = new MediaGalleryBuilder().addItems(
-						new MediaGalleryItemBuilder()
-							.setURL('https://i.imgur.com/hD6ep5D.png')
-							.setDescription('CAPT')
-					)
-
 					const enemyFaction = Buffer.from(isAttack ? defender : attacker)
 						.toString('base64url')
 						.replace(/_/g, '.')
@@ -126,7 +116,9 @@ export = (client: import('discord.js').Client) => {
 
 					const container = new ContainerBuilder()
 						.setAccentColor(isAttack ? 0x57f287 : 0x5865f2)
-						.addMediaGalleryComponents(captImage)
+					const banner = store.text('announcement.banner')
+					if (banner) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(banner))
+					container
 						.addTextDisplayComponents(
 							new TextDisplayBuilder().setContent(
 								isAttack ? '# ⚔️ КАПТ АТАКА ⚔️ ' : '# 🛡️ КАПТ ЗАЩИТА 🛡️'

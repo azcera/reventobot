@@ -433,9 +433,9 @@ test('announcement restores Telegram layout and shows own-family MVPs with unamb
 			{ id: 42, name: 'Other Player', damage: 1000, kills: 5 }],
 		1331: [{ id: 7, name: 'Enemy MVP', damage: 99999, kills: 99 }]
 	} }), rulesFromEnv({}), null, start)
-	const payload = announcement(war, null, start, f.members.values())
+	const payload = announcement(war, null, start, f.members.values(), {}, '<img src="https://example.com/capture.png" />')
 	const rendered = plain(payload)
-	assert.match(rendered, /attachment:\/\/capt.png/)
+	assert.match(rendered, /https:\/\/example.com\/capture.png/)
 	assert.match(rendered, /# 🛡️ КАПТ ЗАЩИТА 🛡️/)
 	assert.match(rendered, /> ### 🆚 Против: `Enemy`/)
 	assert.match(rendered, /08.11.2026 15:30:00/)
@@ -446,7 +446,8 @@ test('announcement restores Telegram layout and shows own-family MVPs with unamb
 	assert.doesNotMatch(rendered, /Maya Well/)
 	assert.match(rendered, /🎯 MVP по киллам: `Other Player` \/ `42` — \*\*5\*\*/)
 	assert.doesNotMatch(rendered, /Осталось|Статус API|Enemy MVP/)
-	assert.equal(payload.files[0].name, 'capt.png')
+	assert.equal('files' in payload, false)
+	assert.doesNotMatch(plain(announcement(war, null, start)), /example.com\/capture.png|hD6ep5D/)
 	assert.deepEqual(payload.allowedMentions, { parse: [] })
 	f.member.nickname = 'Maya | 999'
 	assert.match(plain(announcement(war, null, start, f.members.values(), { [f.member.id]: { static: '231542' } })), /<@222222222222222222>/)
@@ -525,7 +526,7 @@ test('finished announcement loads MVP bindings even without a registration', asy
 	assert.equal(f.row().registration_id, null)
 	assert.match(plain(f.changes.at(-1)), /MVP по урону: <@222222222222222222>/)
 	assert.match(plain(f.changes.at(-1)), /🏆 Результат: `Победа`/)
-	assert.deepEqual(f.changes.at(-1)!.attachments, [])
+	assert.equal(f.changes.at(-1)!.attachments, undefined)
 })
 
 test('testcapt info attack selects the latest finished attack from API rather than a newer defence', async () => {

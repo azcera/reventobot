@@ -43,12 +43,13 @@ test('legacy customizations become documents, survive restart, and reset to orig
 
 test('saved documents drive Discord invitation, navigation and every application state', async t => {
 	const f = await createFixture(); t.after(() => f.close()); await f.login()
-	const values: Record<string, string> = { 'invite.document': '# Приглашение\n---\n<img src="attachment://invites.png" />', 'invite.3': 'Оставить заявку на вступление', 'invite.4': 'Заполнить анкету', 'navigation.document': '# Основное\n***\n<section buttonLabel="Правила" buttonLink="https://example.com/rules">Описание правил</section>' }
+	const values: Record<string, string> = { 'invite.document': '# Приглашение\n---\n<img src="https://example.com/invite.png" />', 'invite.3': 'Оставить заявку на вступление', 'invite.4': 'Заполнить анкету', 'navigation.document': '# Основное\n***\n<section buttonLabel="Правила" buttonLink="https://example.com/rules">Описание правил</section>' }
 	for (const state of ['pending', 'accepted', 'rejected', 'interview']) values['application.document.' + state] = store.text('application.document.' + state).replace('# ', '# Изменено ')
 	const response = await f.request('/api/templates', { body: { revision: store.revision, values } })
 	assert.equal(response.status, 200, JSON.stringify(await response.json()))
 	const invite = (await require('../src/commands/admin/invite').buildPayload()).components[0].toJSON().components
 	assert.deepEqual(invite.map((component: { type: number }) => component.type), [10, 14, 12, 14, 9])
+	assert.equal(invite[2].items[0].media.url, 'https://example.com/invite.png')
 	assert.equal(invite.at(-1).components[0].content, 'Оставить заявку на вступление')
 	assert.equal(invite.at(-1).accessory.label, 'Заполнить анкету')
 	assert.equal(invite.at(-1).accessory.custom_id, 'open_invite_modal')

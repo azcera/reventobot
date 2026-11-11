@@ -7,7 +7,7 @@ import { Collection } from 'discord.js'
 import { upcomingEvents, buildSchedule as originalBuildSchedule, createEventSchedule as originalCreateEventSchedule, canCreateGroup as originalCanCreateGroup, selectionId, getSchedule } from '../src/services/eventSchedule'
 interface TestComponent extends RawComponent { components: TestComponent[]; items: { media: { url: string } }[]; accessory: TestComponent; content: string; custom_id?: string }
 function buildSchedule(events: Parameters<typeof originalBuildSchedule>[0], updatedAt: number, stale: boolean, now: number, emojis?: unknown) {
- const payload = originalBuildSchedule(events, updatedAt, stale, now, asMock<Parameters<typeof originalBuildSchedule>[4]>(emojis))
+ const payload = originalBuildSchedule(events, updatedAt, stale, now, asMock<Parameters<typeof originalBuildSchedule>[4]>(emojis), '<img src="https://example.com/schedule.png" />')
  return { ...payload, components: asMock<{ toJSON(): TestComponent }[]>(payload.components) }
 }
 const createEventSchedule = (dependencies: unknown) => originalCreateEventSchedule(asMock<Parameters<typeof originalCreateEventSchedule>[0]>(dependencies))
@@ -35,7 +35,7 @@ test('message has a group button beside nearest event and marks stale data', () 
 	const payload = buildSchedule(events, now, false, now)
 	const container = payload.components[0].toJSON()
 	assert.equal(container.components[0].type, 12)
-	assert.equal(container.components[0].items[0].media.url, 'https://i.imgur.com/7dBrrO0.png')
+	assert.equal(container.components[0].items[0].media.url, 'https://example.com/schedule.png')
 	assert.equal(payload.files, undefined)
 	assert.match(container.components[1].content, /^## /)
 	assert.match(container.components[2].components[0].content, /Тайники/)
@@ -57,6 +57,12 @@ test('message has a group button beside nearest event and marks stale data', () 
 	const stale = buildSchedule(events, now, true, now).components[0].toJSON()
 	assert.equal(stale.components[2].accessory.disabled, true)
 	assert.match(stale.components.at(-1)!.content, /Источник недоступен/)
+})
+
+test('schedule does not add an image when its template is empty', () => {
+	const payload = originalBuildSchedule(events, now, false, now)
+	const container = asMock<{ toJSON(): TestComponent }[]>(payload.components)[0].toJSON()
+	assert.equal(container.components.some(component => component.type === 12), false)
 })
 
 test('capture status follows Moscow weekdays and includes start but excludes end', () => {
@@ -131,7 +137,7 @@ test('publication works without external requests, survives restart and refuses 
 			return { attachments, edit: async (payload: ReturnType<typeof buildSchedule>) => {
 				payload.components[0].toJSON()
 				assert.equal(payload.files, undefined)
-				assert.deepEqual(payload.attachments, [{ id: 'banner' }])
+				assert.equal(payload.attachments, undefined)
 				edits++
 			} }
 		} },
@@ -144,7 +150,7 @@ test('publication works without external requests, survives restart and refuses 
 		}
 	}
 	const dependencies = {
-		client: { channels: { fetch: async () => channel } }, store: { roleIds: () => [] }, now: () => currentTime,
+		client: { channels: { fetch: async () => channel } }, store: { roleIds: () => [], text: () => '<img src="https://example.com/schedule.png" />' }, now: () => currentTime,
 		pool: { query: async (sql: string, params: string[]) => {
 			if (sql.startsWith('INSERT')) stored = { channel_id: params[0], message_id: params[1] }
 			return { rows: sql.startsWith('SELECT') && stored ? [stored] : [] }

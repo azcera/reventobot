@@ -19,9 +19,6 @@ export const dirtyGroup = (config: Config, drafts: Drafts, group: string) => Obj
 
 export function previewFields(config: Config, group: string, fields: TemplateField[], values: Record<string, string>, parser: ComponentParser) {
 	let result: PreviewField[] = fields.map(field => ({ ...field, value: values[field.key] ?? field.value }))
-	if (group === 'Правила' && !result.some(field => parser.parse(field.value).some(item => item.type === 'image'))) {
-		result = [{ type: 'text', value: parser.stringify([{ type: 'image', value: config.templates.find(field => field.key === 'rules.1')?.value ?? 'attachment://rules.png' }, { type: 'separator', divider: true }]) }, ...result]
-	}
 	if (group === 'Приглашение') return result.filter(field => field.key === 'invite.document')
 	if (group === 'Регистрация на капт') {
 		const text = (key: string) => result.find(field => field.key === 'capture.' + key)?.value ?? ''

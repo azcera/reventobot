@@ -8,10 +8,8 @@ const compiledRoot = path.resolve(__dirname, '..', '..')
 const ROOT_PATH = path.basename(compiledRoot) === 'dist' ? path.dirname(compiledRoot) : compiledRoot
 
 /**
- * Экспортирует абсолютные пути к корню проекта, папке изображений и public.
- * Используется для корректной загрузки локальных файлов (картинок) независимо от cwd.
+ * Экспортирует абсолютные пути к корню проекта и public независимо от cwd.
  */
 
-const IMAGES_PATH = path.join(ROOT_PATH, 'src', 'images')
 const PUBLIC_PATH = path.join(ROOT_PATH, 'public')
-export { ROOT_PATH, IMAGES_PATH, PUBLIC_PATH }
+export { ROOT_PATH, PUBLIC_PATH }

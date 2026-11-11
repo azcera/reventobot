@@ -1,6 +1,5 @@
 import type { BindingMember, Decisions, Registration, War, WarPlayer, QueueRow } from './familyWarTypes'
 import type { Store } from '../../types'
-import path = require('node:path')
 import { ContainerBuilder } from '../../services/markdownContainer'
 import {
 	MessageFlags,
@@ -9,9 +8,6 @@ import {
 	ButtonStyle,
 	TextDisplayBuilder,
 	SeparatorBuilder,
-	AttachmentBuilder,
-	MediaGalleryBuilder,
-	MediaGalleryItemBuilder,
 	escapeMarkdown
 } from 'discord.js'
 import {
@@ -31,7 +27,8 @@ function announcement(
 	registrationUrl: string | null,
 	now = Date.now(),
 	members: Iterable<BindingMember> = [],
-	decisions: Decisions = {}
+	decisions: Decisions = {},
+	banner = ''
 ) {
 	const closed = registrationClosed(war, now)
 	const battle = battleSummary(war)
@@ -60,13 +57,8 @@ function announcement(
 		)
 	const container = new ContainerBuilder()
 		.setAccentColor(war.attack ? 0x57f287 : 0x5865f2)
-		.addMediaGalleryComponents(
-			new MediaGalleryBuilder().addItems(
-				new MediaGalleryItemBuilder()
-					.setURL('https://i.imgur.com/hD6ep5D.png')
-					.setDescription('CAPT')
-			)
-		)
+	if (banner) container.addTextDisplayComponents(textBlock(banner))
+	container
 		.addTextDisplayComponents(textBlock(`# ${icon} КАПТ ${title} ${icon}`))
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(

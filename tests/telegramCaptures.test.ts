@@ -19,7 +19,7 @@ test('Telegram capture listener parses attack and defence messages and deduplica
 	const channels: { components: { toJSON(): unknown }[] }[] = []
 	const telegram = { handler: async (_event: unknown): Promise<void> => {}, filter: undefined as unknown, addEventHandler(handler: (event: unknown) => Promise<void>, filter: unknown) { this.handler = handler; this.filter = filter } }
 	const channel = { isSendable: () => true, send: async (payload: { components: { toJSON(): unknown }[] }) => channels.push(payload) }
-	const config = { getSetting: (key: string) => key === 'CAPT_INFO_CHANNEL_ID' ? 'capture-announcements' : null }
+	const config = { getSetting: (key: string) => key === 'CAPT_INFO_CHANNEL_ID' ? 'capture-announcements' : null, text: () => '<img src="https://example.com/capture.png" />' }
 	try {
 		require.cache[servicePath] = moduleStub({ id: servicePath, filename: servicePath, loaded: true, exports: { initTelegramClient: async () => telegram } })
 		require.cache[storePath] = moduleStub({ id: storePath, filename: storePath, loaded: true, exports: { store: config } })
@@ -46,6 +46,7 @@ test('Telegram capture listener parses attack and defence messages and deduplica
 
 		assert.equal(channels.length, 2)
 		const payload = channels.map(item => JSON.stringify(item.components.map(component => component.toJSON())))
+		assert.match(payload[0], /https:\/\/example.com\/capture.png/)
 		assert.match(payload[0], /Против: `Enemy_Name-X`/)
 		assert.match(payload[0], /capt_tg_RW5lbXlfTmFtZS1Y_09\.11\.2026-18:30/)
 		assert.match(payload[0], /Создать регу на АТАКУ/)

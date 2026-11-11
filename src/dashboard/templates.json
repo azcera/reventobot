@@ -1,8 +1,26 @@
 {
+  "announcement.banner": {
+    "group": "Объявление капта",
+    "label": "Изображение объявления (тег img)",
+    "default": "<img src=\"https://i.imgur.com/hD6ep5D.png\" />",
+    "type": "text",
+    "components": true,
+    "variables": [],
+    "maxLength": 512
+  },
+  "schedule.banner": {
+    "group": "Расписание",
+    "label": "Изображение расписания (тег img)",
+    "default": "<img src=\"https://i.imgur.com/7dBrrO0.png\" />",
+    "type": "text",
+    "components": true,
+    "variables": [],
+    "maxLength": 512
+  },
   "rules.1": {
     "group": "Правила",
-    "label": "attachment://rules.png",
-    "default": "attachment://rules.png",
+    "label": "Ссылка на прежний баннер правил",
+    "default": "",
     "type": "url",
     "variables": [],
     "maxLength": 512
@@ -113,8 +131,8 @@
   },
   "invite.1": {
     "group": "Приглашение",
-    "label": "attachment://invites.png",
-    "default": "attachment://invites.png",
+    "label": "Ссылка на прежний баннер приглашения",
+    "default": "",
     "type": "url",
     "variables": [],
     "maxLength": 512
@@ -169,8 +187,8 @@
   },
   "invite.2": {
     "group": "Приглашение",
-    "label": "attachment://revento.png",
-    "default": "attachment://revento.png",
+    "label": "Ссылка на прежний баннер семьи",
+    "default": "",
     "type": "url",
     "variables": [],
     "maxLength": 512

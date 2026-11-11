@@ -9,7 +9,6 @@ import { store, catalog, settingDefinitions, templateDefinition } from './store'
 import { parseMessageLink } from '../services/containerMessageService'
 import { isHttpsUrl } from './messageEditor'
 import permanent = require('./permanentMessages')
-import { IMAGES_PATH } from '../config/path'
 import navigation = require('./navigationMessages')
 import { createMajesticSync } from '../services/majesticSync'
 import { syncRolePrefixes } from '../services/rolePrefixSync'
@@ -25,6 +24,7 @@ function validateTemplates(values: Record<string, string | null>) {
 			if (typeof value !== 'string' || (value && !/^#[a-f0-9]{6}$/i.test(value))) throw problem(400, 'Цвет должен иметь вид #5865f2 или быть пустым.')
 			continue
 		}
+		if (value === '' && ['rules.1', 'invite.1', 'invite.2', 'announcement.banner', 'schedule.banner'].includes(key)) continue
 		if (typeof value !== 'string' || !value.trim() || value.length > (field.maxLength ?? 4000)) throw problem(400, `Проверьте длину поля «${field.label}».`)
 		if (field.type === 'url' && value !== field.default && !isHttpsUrl(value)) throw problem(400, 'Нужна HTTPS-ссылка.')
 		if (field.type === 'text') {
@@ -94,10 +94,6 @@ async function validateSettings(values: Record<string, unknown>, guild: D.Guild)
 }
 
 function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { auth = createAuth({ client, pool }), majestic }: { auth?: ReturnType<typeof createAuth>; majestic?: ReturnType<typeof createMajesticSync> } = {}) {
-	app.get('/template-images/:name', (req: E.Request, res: E.Response) => {
-		if (!['invites.png', 'revento.png', 'rules.png', 'capt.png'].includes(String(req.params.name))) return res.sendStatus(404)
-		res.sendFile((require('path') as typeof import('path')).join(IMAGES_PATH, String(req.params.name)))
-	})
 	auth.register(app)
 	app.use('/api', auth.middleware)
 	app.use('/api', async (req: E.Request, res: E.Response, next: E.NextFunction) => {

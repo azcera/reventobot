@@ -4,7 +4,6 @@ import type * as T from '../types'
 import type * as E from 'express'
 import type * as Pg from 'pg'
 import {
-	ContainerBuilder,
 	SectionBuilder,
 	TextDisplayBuilder,
 	ButtonBuilder,
@@ -13,13 +12,9 @@ import {
 	PermissionFlagsBits,
 	SeparatorBuilder,
 	SeparatorSpacingSize,
-	escapeMarkdown,
-	MediaGalleryBuilder,
-	MediaGalleryItemBuilder,
-	AttachmentBuilder
+	escapeMarkdown
 } from 'discord.js'
-import path = require('path')
-import { IMAGES_PATH } from '../config/path'
+import { ContainerBuilder } from './markdownContainer'
 import events = require('../config/eventSchedule')
 
 const UPDATE_INTERVAL = 15 * 60000
@@ -98,7 +93,7 @@ function getSchedule(now = Date.now()) {
 	}
 }
 
-function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolean, now = Date.now(), emojis?: D.Collection<string, D.GuildEmoji>): D.MessageCreateOptions & D.MessageEditOptions {
+function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolean, now = Date.now(), emojis?: D.Collection<string, D.GuildEmoji>, banner = ''): D.MessageCreateOptions & D.MessageEditOptions {
 	const eventEmoji = (label: string) =>
 		emojis
 			?.find(
@@ -110,13 +105,8 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
 	const container = new ContainerBuilder({ accent_color: null })
-		.addMediaGalleryComponents(
-			new MediaGalleryBuilder().addItems(
-				new MediaGalleryItemBuilder()
-					.setURL('https://i.imgur.com/7dBrrO0.png')
-					.setDescription('Расписание')
-			)
-		)
+	if (banner) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(banner))
+	container
 		.addTextDisplayComponents(
 			new TextDisplayBuilder().setContent('## Расписание Majestic RP')
 		)
@@ -211,16 +201,12 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 			snapshot.generatedAt,
 			false,
 			snapshot.generatedAt,
-			channel.guild?.emojis.cache
+			channel.guild?.emojis.cache,
+			store.text('schedule.banner')
 		)
 		if (messageId) {
 			try {
 				const message = await channel.messages.fetch(messageId)
-				const banner = message.attachments?.find(
-					attachment => attachment.name === 'schedule.png'
-				)
-				payload.attachments = banner ? [{ id: banner.id }] : []
-				if (banner) delete payload.files
 				await message.edit(payload)
 				return
 			} catch (caughtError) {
