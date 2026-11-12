@@ -46,7 +46,7 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 	DISCORD_NOTIFICATION_CHANNEL_IDS: { label: 'Каналы массовой Telegram-рассылки', type: 'channels', channelTypes: [0, 5] },
 	TELEGRAM_BROADCAST_ENABLED: { label: 'Доставка массовой Telegram-рассылки', type: 'boolean', default: true },
 	MAJESTIC_AUTO_NICKNAMES: { label: 'Автосинхронизация ников и рангов Majestic каждые 10 минут', type: 'boolean', default: true },
-	MAJESTIC_AUTO_KICK: { label: 'Автоматически исключать участников, отсутствующих в семье Majestic', type: 'boolean', default: true },
+	MAJESTIC_AUTO_KICK: { label: 'Автокик из Discord по новым увольнениям из семьи Majestic', type: 'boolean', default: true },
 	DASHBOARD_ALLOW_MENTIONS: { label: 'Разрешить @everyone, @here и пользователей при ручной публикации (роли разрешены всегда)', type: 'boolean', default: false }
 }
 
@@ -70,6 +70,7 @@ function createStore(env = process.env) {
 	return {
 		get ready() { return ready },
 		get revision() { return revision },
+		get majesticAutoKickChangedAt() { return state.majesticAutoKickChangedAt ?? 0 },
 		get templateVariables() { return structuredClone(state.templateVariables || {}) },
 		get templateVariableLabels() { return structuredClone(state.templateVariableLabels || {}) },
 		getSetting,
@@ -211,6 +212,9 @@ function createStore(env = process.env) {
 				if (section === 'templateVariables' && variableLabels) for (const [group, labels] of Object.entries(variableLabels)) {
 					const before = current.value.templateVariableLabels?.[group] || {}
 					if (JSON.stringify(before) !== JSON.stringify(labels)) changes[group + '.labels'] = { label: 'Названия переменных · ' + group, before, after: labels }
+				}
+				if (section === 'settings' && changes.MAJESTIC_AUTO_KICK) {
+					next.majesticAutoKickChangedAt = Math.max(Date.now(), (current.value.majesticAutoKickChangedAt || 0) + 1)
 				}
 				await db.query('UPDATE dashboard_state SET value = $1::jsonb, revision = revision + 1 WHERE id = 1', [JSON.stringify(next)])
 				await db.query('INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',

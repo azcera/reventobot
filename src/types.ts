@@ -82,6 +82,7 @@ export interface DashboardState {
 	templateVariableLabels?: Record<string, Record<string, string>>
 	settings: Record<string, SettingValue>
 	settingsEnvMigrated?: boolean
+	majesticAutoKickChangedAt?: number
 	bindings?: Record<string, Binding>
 	mclLists?: Record<string, MclList>
 	capturePresets?: Record<string, CapturePreset>
@@ -99,8 +100,12 @@ export interface MembershipSnapshot {
 	statics: Set<string>
 	linked: Map<string, string>
 	bindings: Record<string, string>
+	confirmed?: Record<string, { static: string; seenAt: number; joinedAt: number }>
+	dismissals?: FamilyDismissal[]
+	autoKickSince?: number
 	source: string
 }
+export interface FamilyDismissal { id: number; type: 'logs.family_log.uninviteFrom'; date: string; account: { id: number } }
 export interface FamilyCharacter { id: number; login: string; rankId: number; rankName: string }
 export interface FamilyMembers { total: number; items: FamilyCharacter[] }
 export interface MemberDecision { static?: string; excluded?: boolean; tierRoleId?: string }

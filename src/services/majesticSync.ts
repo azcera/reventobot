@@ -1,6 +1,6 @@
 import { getError } from '../utils/errors'
 import type { SyncEntry, RunningEntry, SyncState, SyncPreview, SyncResult } from './majesticTypes'
-interface SyncOptions { pool: Pg.Pool; store: T.Store; env?: T.Env; readFamily?: () => Promise<T.FamilyMembers>; now?: () => number; logger?: Pick<Console, 'error'>; sleep?: typeof delay }
+interface SyncOptions { pool: Pg.Pool; store: T.Store; env?: T.Env; readFamily?: () => Promise<T.FamilyMembers>; readDismissals?: () => Promise<T.FamilyDismissal[]>; now?: () => number; logger?: Pick<Console, 'error'>; sleep?: typeof delay }
 interface ResolveBody { discordId?: string; static?: string; tierRoleId?: string; excluded?: boolean; reset?: boolean }
 interface ApplyBody { previewId?: string; discordIds?: string[] }
 import type * as D from 'discord.js'
@@ -13,7 +13,7 @@ import { ROOT_PATH } from '../config/path'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { PermissionFlagsBits } from 'discord.js'
-import { readConfig, fetchMembers } from './majesticClient'
+import { readConfig, fetchMembers, fetchDismissals } from './majesticClient'
 import { loadSavedMajesticSession } from './telegramMajesticSession'
 import { loadDiscordMembers } from './discordMembers'
 import { buildPreview, rankRoles, tierRoles, parseNickname } from '../features/majestic/syncPreview'
@@ -22,7 +22,7 @@ const problem = (status: number, message: string) => Object.assign(new Error(mes
 const describe = (row: Partial<T.PreviewRow>) => JSON.stringify([row.status, row.static, row.gameRank, row.currentNickname,
 	row.currentRoleIds, row.nickname, row.addRoles, row.removeRoles])
 
-function createMajesticSync({ pool, store, env = process.env, readFamily, now = Date.now, logger = console, sleep = delay }: SyncOptions) {
+function createMajesticSync({ pool, store, env = process.env, readFamily, readDismissals, now = Date.now, logger = console, sleep = delay }: SyncOptions) {
 	loadEnvironment({ path: path.join(ROOT_PATH, '.env.majestic.local'), quiet: true })
 	if (env === process.env) loadSavedMajesticSession()
 	const entries = new Map<string, Promise<SyncEntry>>()
@@ -153,22 +153,25 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 	}
 	return {
 		async state(guild: D.Guild) { return view(await entry(guild.id)) },
-		async membershipSnapshot(guild: D.Guild): Promise<T.MembershipSnapshot> {
+		async membershipSnapshot(guild: D.Guild, { includeDismissals = false } = {}): Promise<T.MembershipSnapshot> {
 			const item = await entry(guild.id)
 			if (item.busy) throw Object.assign(problem(409, 'Синхронизация уже выполняется. Повторите позже.'), { code: 'MAJESTIC_SYNC_BUSY' })
 			item.busy = true
 			try {
+				const source = `${env.MAJESTIC_SERVER}/${env.MAJESTIC_CHARACTER_ID}`
+				const autoKick = store.getSetting('MAJESTIC_AUTO_KICK')
+				const previous = item.state.familyMembership
+				const settingChangedAt = store.majesticAutoKickChangedAt || 0
+				const autoKickSince = autoKick ? Math.max((previous?.source === source ? previous.autoKickSince : undefined) ?? now(), settingChangedAt) : undefined
+				// Read events before the roster: a re-invited player must be protected by the newer roster.
+				const dismissals = autoKick && includeDismissals
+					? await diagnose('majestic.dismissals', guild.id, () => readDismissals ? readDismissals() : fetchDismissals(readConfig(env))) : []
 				const data = await family(guild.id)
 				if (!data.total || data.items.length !== data.total) throw problem(502, 'Получен пустой или неполный состав Majestic.')
 				const members = await discordMembers(guild)
-				const source = `${env.MAJESTIC_SERVER}/${env.MAJESTIC_CHARACTER_ID}`
 				const statics = new Set(data.items.map(character => String(character.id)))
-				const previous = item.state.familyMembership
 				const bindings = { ...(previous?.source === source ? previous.bindings : {}) }
-				// Existing decisions were saved only after confirming the static in the family.
-				if (!previous) for (const [id, decision] of Object.entries(item.state.decisions)) {
-					if (decision.static) bindings[id] = decision.static
-				}
+				const confirmed = { ...(previous?.source === source ? previous.confirmed : {}) }
 				const linkedCandidates = new Map<string, string | undefined>([...members.values()].filter((member: D.GuildMember) => !member.user.bot).map((member: D.GuildMember) =>
 					[member.id, item.state.decisions[member.id]?.static || bindings[member.id] || parseNickname(member.nickname)?.static]))
 				const linked = new Map([...linkedCandidates].filter((pair): pair is [string, string] => typeof pair[1] === 'string'))
@@ -176,10 +179,23 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 				for (const staticId of linked.values()) if (staticId) counts.set(staticId, (counts.get(staticId) || 0) + 1)
 				for (const [id, staticId] of linked) {
 					if (statics.has(staticId) && counts.get(staticId) === 1) bindings[id] = staticId
+					const member = members.get(id)!
+					const nicknameStatic = parseNickname(member.nickname)?.static
+					const conflictingNickname = [...members.values()].some(other => other.id !== id && !other.user.bot && parseNickname(other.nickname)?.static === staticId)
+					if (item.state.decisions[id]?.excluded || counts.get(staticId) !== 1 || conflictingNickname ||
+						(nicknameStatic && nicknameStatic !== staticId) || !member.joinedTimestamp ||
+						(confirmed[id] && (confirmed[id].static !== staticId || confirmed[id].joinedAt !== member.joinedTimestamp))) delete confirmed[id]
+					if (statics.has(staticId) && !item.state.decisions[id]?.excluded && counts.get(staticId) === 1 && !conflictingNickname &&
+						(!nicknameStatic || nicknameStatic === staticId) && member.joinedTimestamp) {
+						confirmed[id] = { static: staticId, seenAt: now(), joinedAt: member.joinedTimestamp }
+					}
 				}
-				item.state.familyMembership = { source, bindings }
+				for (const id of Object.keys(confirmed)) if (!linked.has(id)) delete confirmed[id]
+				if (source !== `${env.MAJESTIC_SERVER}/${env.MAJESTIC_CHARACTER_ID}` || autoKick !== store.getSetting('MAJESTIC_AUTO_KICK') ||
+					settingChangedAt !== (store.majesticAutoKickChangedAt || 0)) throw problem(409, 'Настройки Majestic изменились. Проверка остановлена.')
+				item.state.familyMembership = { source, bindings, confirmed, autoKickSince }
 				await save(guild.id, item)
-				return { members, statics, linked, bindings, source }
+				return { members, statics, linked, bindings, confirmed, dismissals, autoKickSince, source }
 			} finally { item.busy = false }
 		},
 		async autoNicknames(guild: D.Guild) {
@@ -266,6 +282,10 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, now = 
 				await audit(actor, 'majestic.resolve', discordId, { decision: reset ? null : decision })
 				if (reset) delete item.state.decisions[discordId]
 				else item.state.decisions[discordId] = decision
+				if (item.state.familyMembership && (reset || staticId !== undefined || excluded !== undefined)) {
+					delete item.state.familyMembership.confirmed?.[discordId]
+					if (reset) delete item.state.familyMembership.bindings[discordId]
+				}
 				if (item.state.preview) item.state.preview.invalidated = true
 				await save(guild.id, item)
 			} catch (caught) {

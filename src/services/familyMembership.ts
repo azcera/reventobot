@@ -1,6 +1,7 @@
 import { getError } from '../utils/errors'
-interface MembershipOptions { client: D.Client; pool: Pg.Pool; store: T.Store; sync: { membershipSnapshot(guild: D.Guild): Promise<T.MembershipSnapshot> }; env?: T.Env; logger?: Pick<Console, 'info' | 'error'>; setTimer?: typeof setTimeout; clearTimer?: typeof clearTimeout; now?: () => number }
+interface MembershipOptions { client: D.Client; pool: Pg.Pool; store: T.Store; sync: { membershipSnapshot(guild: D.Guild, options?: { includeDismissals?: boolean }): Promise<T.MembershipSnapshot> }; env?: T.Env; logger?: Pick<Console, 'info' | 'error'>; setTimer?: typeof setTimeout; clearTimer?: typeof clearTimeout; now?: () => number }
 interface SelectionSession { action: string; actorId: string; guildId: string; source: string; ids: string[]; createdAt: number }
+interface KickEvidence { static: string; eventId: number; date: string; joinedAt: number }
 type Report = ReturnType<typeof classify>
 import type * as D from 'discord.js'
 import type * as T from '../types'
@@ -19,8 +20,9 @@ const PREFIX = 'family_cleanup_'
 const CATEGORIES = ['Не в составе семьи', 'Ник не по форме', 'Без ролей']
 const isMembershipMessage = (message: D.Message) => message.components.some(component => JSON.stringify(component.toJSON()).includes(PREFIX))
 
-function classify(snapshot: T.MembershipSnapshot, applications: Set<string>, autoKick = true) {
+function classify(snapshot: T.MembershipSnapshot, applications: Set<string>, autoKick = true, checkedAt = Date.now()) {
 	const manual: D.GuildMember[] = [], automatic: D.GuildMember[] = []
+	const evidence = new Map<string, KickEvidence>()
 	const reasons = new Map<string, string>()
 	for (const member of snapshot.members.values()) {
 		if (member.user.bot || member.id === member.guild?.ownerId ||
@@ -31,16 +33,31 @@ function classify(snapshot: T.MembershipSnapshot, applications: Set<string>, aut
 			continue
 		}
 		if (applications.has(member.id)) continue
-		const malformed = !parseNickname(member.nickname)
-		if (!malformed && snapshot.statics.has(snapshot.linked.get(member.id) || '')) continue
-		if (autoKick && snapshot.bindings[member.id] && !snapshot.statics.has(snapshot.bindings[member.id])) automatic.push(member)
+		const parsed = parseNickname(member.nickname)
+		const malformed = !parsed
+		const linked = snapshot.linked.get(member.id)
+		// Any current identity present in the roster blocks automatic exclusion.
+		const present = [linked, parsed?.static, snapshot.bindings[member.id]].some(id => id && snapshot.statics.has(id))
+		if (!malformed && present) continue
+		const confirmed = snapshot.confirmed?.[member.id]
+		const event = confirmed && snapshot.dismissals?.filter(item => String(item.account.id) === confirmed.static &&
+			Date.parse(item.date) > Math.max(confirmed.seenAt, snapshot.autoKickSince ?? checkedAt) && Date.parse(item.date) <= checkedAt)
+			.sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0]
+		const ambiguous = confirmed && [...snapshot.members.values()].some(other => other.id !== member.id && !other.user.bot &&
+			(snapshot.linked.get(other.id) === confirmed.static || parseNickname(other.nickname)?.static === confirmed.static))
+		if (autoKick && !present && confirmed && event && !ambiguous && linked === confirmed.static &&
+			snapshot.bindings[member.id] === confirmed.static && (!parsed || parsed.static === confirmed.static) &&
+			member.joinedTimestamp === confirmed.joinedAt && confirmed.joinedAt <= confirmed.seenAt) {
+			automatic.push(member)
+			evidence.set(member.id, { static: confirmed.static, eventId: event.id, date: event.date, joinedAt: confirmed.joinedAt })
+		}
 		else {
 			manual.push(member)
 			reasons.set(member.id, malformed ? 'Ник не по форме' : 'Не в составе семьи')
 		}
 	}
 	manual.sort((a, b) => reasons.get(a.id)!.localeCompare(reasons.get(b.id)!, 'ru'))
-	return { manual, automatic, reasons }
+	return { manual, automatic, reasons, evidence }
 }
 
 function reportPages(report: Report): { reason?: string; members: D.GuildMember[] }[] {
@@ -63,9 +80,9 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 		const result = await pool.query<{ user_id: string }>('SELECT user_id FROM family_applications')
 		return new Set(result.rows.map(row => row.user_id))
 	}
-	async function load(guild: D.Guild) {
-		const snapshot = await sync.membershipSnapshot(guild)
-		return { ...classify(snapshot, await applications(), store.getSetting('MAJESTIC_AUTO_KICK')), source: snapshot.source }
+	async function load(guild: D.Guild, automatic = false) {
+		const snapshot = await sync.membershipSnapshot(guild, { includeDismissals: automatic })
+		return { ...classify(snapshot, await applications(), automatic && store.getSetting('MAJESTIC_AUTO_KICK'), now()), source: snapshot.source }
 	}
 	async function freshMember(guild: D.Guild, id: string) {
 		const member = await guild.members.fetch({ user: id, force: true })
@@ -73,18 +90,29 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 		if ((await applications()).has(id)) return null
 		return member
 	}
-	async function change(guild: D.Guild, id: string, action: string, actor: T.Actor) {
+	async function change(guild: D.Guild, id: string, action: string, actor: T.Actor,
+		expected?: { source: string; static: string; eventId: number }) {
 		try {
+			let evidence: KickEvidence | undefined
+			if (expected) {
+				const report = await load(guild, true)
+				evidence = report.evidence.get(id)
+				if (!store.getSetting('MAJESTIC_AUTO_KICK') || report.source !== expected.source ||
+					!evidence || evidence.static !== expected.static || evidence.eventId !== expected.eventId) return false
+			}
 			const member = await freshMember(guild, id)
 			if (!member) return false
+			if (expected && (!store.getSetting('MAJESTIC_AUTO_KICK') || member.joinedTimestamp !== evidence!.joinedAt ||
+				(parseNickname(member.nickname)?.static && parseNickname(member.nickname)!.static !== expected.static))) return false
 			const permission = action === 'kick' ? PermissionFlagsBits.KickMembers : PermissionFlagsBits.ManageRoles
 			if (!guild.members.me?.permissions.has(permission)) throw new Error('Недостаточно прав у бота')
 			if (action === 'kick' ? !member.kickable : !member.manageable) throw new Error('Иерархия ролей запрещает действие')
 			if (action === 'roles' && member.roles.cache.some(role => role.id !== guild.id && (role.managed || !role.editable))) {
 				throw new Error('Невозможно снять все роли: есть управляемые или недоступные роли')
 			}
-			await store.audit(actor, 'family.' + action + '.request', id)
-			const reason = `Нет в семье Majestic; ${actor.id}`
+			await store.audit(actor, 'family.' + action + '.request', id, evidence ? { ...evidence, source: expected!.source } : {})
+			if (evidence && (!store.getSetting('MAJESTIC_AUTO_KICK') || (store.majesticAutoKickChangedAt || 0) >= Date.parse(evidence.date))) return false
+			const reason = evidence ? `Увольнение Majestic #${evidence.eventId}; static ${evidence.static}; ${actor.id}` : `Нет в семье Majestic; ${actor.id}`
 			if (action === 'kick') await member.kick(reason)
 			else await member.roles.set([], reason)
 			await store.audit(actor, 'family.' + action + '.result', id, { status: 'applied' })
@@ -128,11 +156,13 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 		for (const message of existing.slice(pages.length)) await message.delete()
 	}
 	async function refresh(guild: D.Guild) {
-		const report = await load(guild)
+		const report = await load(guild, true)
 		let failed = 0
 		for (const member of report.automatic) {
 			if (!store.getSetting('MAJESTIC_AUTO_KICK')) break
-			if (!await change(guild, member.id, 'kick', { id: 'family-auto', name: 'Проверка состава семьи' })) failed++
+			const evidence = report.evidence.get(member.id)!
+			if (!await change(guild, member.id, 'kick', { id: 'family-auto', name: 'Журнал увольнений Majestic' },
+				{ source: report.source, static: evidence.static, eventId: evidence.eventId })) failed++
 		}
 		await publish(guild, report, failed)
 	}

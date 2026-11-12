@@ -18,8 +18,8 @@ function readConfig(env: T.Env) {
 	return { sessionId, server, characterId }
 }
 
-async function fetchMembers(config: ReturnType<typeof readConfig>, fetchImpl = fetch): Promise<T.FamilyMembers> {
-	const url = `https://api.majestic-files.net/id/${config.server}/${config.characterId}/family/members`
+async function requestFamily(config: ReturnType<typeof readConfig>, endpoint: string, fetchImpl = fetch) {
+	const url = `https://api.majestic-files.net/id/${config.server}/${config.characterId}/family/${endpoint}`
 	let response
 	try {
 		response = await fetchImpl(url, {
@@ -48,8 +48,28 @@ async function fetchMembers(config: ReturnType<typeof readConfig>, fetchImpl = f
 	} catch {
 		throw new Error('Majestic вернул ответ, который не является JSON.')
 	}
-	const result = data?.result
-	if (data?.code !== 200 || data?.status !== true || !Array.isArray(result?.items) ||
+	if (data?.code !== 200 || data?.status !== true) throw new Error('Ошибка API Majestic.')
+	return data.result
+}
+
+async function fetchDismissals(config: ReturnType<typeof readConfig>, fetchImpl = fetch): Promise<T.FamilyDismissal[]> {
+	const result = await requestFamily(config, 'logs?limit=50&type=logs.family_log.uninviteFrom', fetchImpl)
+	if (!Array.isArray(result?.items) || typeof result.hasMore !== 'boolean' ||
+		result.items.length > 50 || (result.hasMore && (!Number.isSafeInteger(result.nextCursor) || !result.items.length))) {
+		throw new Error('Неожиданная структура журнала увольнений Majestic.')
+	}
+	const items: T.FamilyDismissal[] = result.items
+	if (items.some(item => !item || !Number.isSafeInteger(item.id) || item.id <= 0 ||
+		item.type !== 'logs.family_log.uninviteFrom' || !Number.isSafeInteger(item.account?.id) || item.account.id <= 0 ||
+		typeof item.date !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(item.date) ||
+		!Number.isFinite(Date.parse(item.date)) || new Date(item.date).toISOString() !== item.date) ||
+		new Set(items.map(item => item.id)).size !== items.length) throw new Error('Некорректные события увольнений Majestic.')
+	return items
+}
+
+async function fetchMembers(config: ReturnType<typeof readConfig>, fetchImpl = fetch): Promise<T.FamilyMembers> {
+	const result = await requestFamily(config, 'members', fetchImpl)
+	if (!Array.isArray(result?.items) ||
 		!Number.isInteger(result.total) || result.total < 0) {
 		throw new Error('Неожиданная структура ответа Majestic или ошибка API.')
 	}
@@ -78,4 +98,4 @@ async function checkMembers(config: ReturnType<typeof readConfig>, fetchImpl = f
 	}
 }
 
-export { readConfig, fetchMembers, checkMembers }
+export { readConfig, fetchMembers, fetchDismissals, checkMembers }
