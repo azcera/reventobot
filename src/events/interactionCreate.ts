@@ -53,20 +53,17 @@ export = (client: import('discord.js').Client) => {
 
 		if (interaction.isButton() && (interaction.customId.startsWith('capt_api_') || interaction.customId.startsWith('war_'))) {
 			if (!client.familyWars) return interaction.reply({ content: 'API-регистрация каптов временно отключена.', flags: MessageFlags.Ephemeral })
-			return client.familyWars.handle(interaction)
+			return await client.familyWars.handle(interaction)
 		}
 
 		if (('customId' in interaction && interaction.customId.startsWith('mcl_')) && (interaction.isButton() || interaction.isUserSelectMenu() || interaction.isStringSelectMenu())) {
 			if (!client.mclLists) return interaction.reply({ content: 'Списки временно недоступны.', flags: MessageFlags.Ephemeral })
-			try { await client.mclLists.handle(interaction) }
-			catch (caught) {
- const error = getError(caught); console.error('[Lists] Ошибка обработки:', error); if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: 'Не удалось выполнить действие.', flags: MessageFlags.Ephemeral }) }
-			return
+			return await client.mclLists.handle(interaction)
 		}
 
 		if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('family_cleanup_')) {
 			if (!client.familyMembership) return interaction.reply({ content: 'Проверка семьи ещё не готова.', flags: MessageFlags.Ephemeral })
-			return client.familyMembership.handle(interaction)
+			return await client.familyMembership.handle(interaction)
 		}
 
 		if (
@@ -103,7 +100,7 @@ export = (client: import('discord.js').Client) => {
 		}
 		if (interaction.isButton() && customId === 'archive_show_notice') {
 			if (!await authorize(interaction, dashboard)) return
-			return (require('../features/archive/archiveContextCommands') as typeof import('../features/archive/archiveContextCommands')).showNotice(interaction, interaction.message.content)
+			return await (require('../features/archive/archiveContextCommands') as typeof import('../features/archive/archiveContextCommands')).showNotice(interaction, interaction.message.content)
 		}
 		if (interaction.isModalSubmit() && customId === 'archive_notice') {
 			if (!await authorize(interaction, dashboard)) return
@@ -122,6 +119,8 @@ export = (client: import('discord.js').Client) => {
 		// selects
 
 		if (interaction.isStringSelectMenu()) {
+			// The temporary role menu is acknowledged by its collector in inviteModeration.
+			if (customId.startsWith('invite_select_additional_')) return
 			if (customId === 'move_all_channel')
 				return await moveAllInteractions.handleMoveAllSelect(interaction)
 			if (customId.startsWith('invite_select_voice_'))
@@ -161,7 +160,7 @@ export = (client: import('discord.js').Client) => {
 			if (customId === 'cancel')
 				return await archiveInteractions.cancelArchive(interaction)
 			if (customId === 'archive_find') return await findArchive(interaction)
-			if (customId.includes('_'))
+			if (customId.startsWith('create_') || customId.startsWith('cancel_create_'))
 				return await archiveInteractions.handleDynamicButtons(interaction)
 		}
 
@@ -186,7 +185,7 @@ export = (client: import('discord.js').Client) => {
 		if (!interaction.deferred && !interaction.replied) await interaction.reply({ content: 'Это действие устарело. Откройте актуальное сообщение бота.', flags: MessageFlags.Ephemeral })
 		} catch (caught) {
 			const error = getError(caught)
-			console.error('[Interaction]', { id: interaction.id, elapsedMs: Math.round(performance.now() - startedAt), code: error.code, message: error.message })
+			console.error('[Interaction]', { id: interaction.id, customId: 'customId' in interaction ? interaction.customId : undefined, ageMs: Date.now() - interaction.createdTimestamp, elapsedMs: Math.round(performance.now() - startedAt), acknowledged: interaction.deferred || interaction.replied, code: error.code, message: error.message })
 			if (error.code === 10062 || error.code === 40060) return
 			try {
 				const payload = { content: 'Не удалось выполнить действие. Попробуйте ещё раз.' }

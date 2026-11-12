@@ -276,12 +276,12 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 	}
 	async function handle(interaction: D.ButtonInteraction<'cached'>) {
 		const match = /^(capt_api|war_join|war_leave|war_sort|war_page)_RU8_([1-9]\d*)(?:_(-?\d+))?$/.exec(interaction.customId)
-		if (!match || !interaction.guild || interaction.guild.id !== env.GUILD_ID) return
+		if (!match || !interaction.guild || interaction.guild.id !== env.GUILD_ID) {
+			return interaction.reply({ content: 'Эта кнопка капта устарела или недоступна на этом сервере. Откройте актуальное сообщение бота.', flags: MessageFlags.Ephemeral })
+		}
 		const create = match[1] === 'capt_api'
-		try {
-			if (!create) await interaction.deferUpdate()
-			else await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-		} catch { return }
+		if (!create) await interaction.deferUpdate()
+		else await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 		const respond = (content: string) => create ? interaction.editReply({ content }) : interaction.followUp({ content, flags: MessageFlags.Ephemeral })
 		try {
 			await ensureSchema()
