@@ -115,80 +115,13 @@ async function handleModerationButton(interaction: import('discord.js').ButtonIn
 				targetUserId
 			])
 
-			const additionalRolesRaw = dashboard.getSetting('FAMILY_ADDITIONAL_ROLES')
-			const additionalRoles = additionalRolesRaw
-				? additionalRolesRaw
-						.split(',')
-						.map(r => r.trim())
-						.filter(Boolean)
-				: []
-
-			// Если доп. ролей нет, просто удаляем канал и завершаем
-			if (additionalRoles.length === 0 || !targetMember) {
-				await followUpEphemeralWithAutoDelete(interaction, {
-					content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален.`
-				})
-				setTimeout(
-					() => interaction.channel?.delete().catch(console.error),
-					2000
-				)
-				return
-			}
-
-			// Если есть доп. роли, показываем меню
-			const selectMenu = new StringSelectMenuBuilder()
-				.setCustomId(`invite_select_additional_${targetUserId}`)
-				.setPlaceholder('Выберите дополнительную роль для выдачи')
-
-			additionalRoles.forEach((roleId, index) => {
-				const role = interaction.guild.roles.cache.get(roleId)
-				selectMenu.addOptions(
-					new StringSelectMenuOptionBuilder()
-						.setLabel(role ? `${index + 1}️⃣ ${role.name}` : `Роль (${roleId})`)
-						.setValue(roleId)
-				)
-			})
-
 			await followUpEphemeralWithAutoDelete(interaction, {
-				content: `✅ Заявка <@${targetUserId}> одобрена! Выберите роль (активно 30 сек):`,
-				components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)]
+				content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален через 5 секунд.`
 			})
-
-			const collector = interaction.channel!.createMessageComponentCollector({
-				filter: i =>
-					i.user.id === interaction.user.id &&
-					i.customId === `invite_select_additional_${targetUserId}`,
-				time: 30000,
-				max: 1
-			})
-
-			collector.on('collect', async menuInteraction => {
-				await menuInteraction.deferUpdate() // Подтверждаем выбор в меню
-				if (!menuInteraction.isStringSelectMenu()) return
-				const chosenRoleId = menuInteraction.values[0]
-				if (targetMember)
-					await targetMember.roles.add(chosenRoleId).catch(console.error)
-
-				await menuInteraction.followUp({
-					content: `✅ Роль <@&${chosenRoleId}> выдана участнику <@${targetUserId}>!`,
-					flags: MessageFlags.Ephemeral as const
-				})
-
-				setTimeout(
-					() => interaction.channel?.delete().catch(console.error),
-					1500
-				)
-			})
-
-			collector.on('end', async collected => {
-				if (collected.size === 0) {
-					// Если роль не выбрали, все равно удаляем канал, так как заявка уже одобрена и удалена из БД
-					setTimeout(
-						() => interaction.channel?.delete().catch(console.error),
-						1500
-					)
-				}
-			})
+			setTimeout(
+				() => interaction.channel?.delete().catch(console.error),
+				5000
+			)
 		} catch (caught) {
  const error = getError(caught);
 			console.error('Ошибка при принятии заявки:', error)

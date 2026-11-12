@@ -119,8 +119,6 @@ export = (client: import('discord.js').Client) => {
 		// selects
 
 		if (interaction.isStringSelectMenu()) {
-			// The temporary role menu is acknowledged by its collector in inviteModeration.
-			if (customId.startsWith('invite_select_additional_')) return
 			if (customId === 'move_all_channel')
 				return await moveAllInteractions.handleMoveAllSelect(interaction)
 			if (customId.startsWith('invite_select_voice_'))

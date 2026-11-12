@@ -68,10 +68,12 @@ test('opening an application form remains the initial response', async () => {
 	assert.deepEqual(f.responses.map(response => response.method), ['showModal'])
 })
 
-test('temporary additional-role menus remain owned by their collector', async () => {
+test('retired additional-role menus receive a stale-action reply', async () => {
 	const f = fixture('invite_select_additional_123', {}, 'select')
 	await f.dispatch()
-	assert.equal(f.responses.length, 0)
+	assert.equal(f.responses.length, 1)
+	assert.equal(f.responses[0].payload.flags, MessageFlags.Ephemeral)
+	assert.match(f.responses[0].payload.content, /устарело/)
 })
 
 test('archive search acknowledges before slow Discord requests and then completes the reply', async () => {

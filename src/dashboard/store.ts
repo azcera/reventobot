@@ -40,7 +40,6 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 	ACCESS_MOVE_ALL_ROLES: { label: 'Перемещение участников: /move-all', type: 'roles' },
 	ROLE_PREFIXES: { label: 'Префиксы ролей в никах (приоритет сверху вниз)', type: 'rolePrefixes' },
 	MAIN_ROLE_ID: { label: 'Роль после принятия заявки', type: 'role' },
-	FAMILY_ADDITIONAL_ROLES: { label: 'Дополнительные роли после принятия', type: 'roles' },
 	AUTO_ROLE: { label: 'Роль участников для архивов', type: 'role' },
 	ARCHIVE_GROUP_ROLES: { label: 'Группы ролей в архивах', type: 'roles' },
 	PRIORITY_ROLES: { label: 'Приоритет ролей на капт (сверху вниз)', type: 'roles' },
