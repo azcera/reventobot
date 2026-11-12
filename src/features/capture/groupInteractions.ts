@@ -82,7 +82,7 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 		target = interaction.fields.getTextInputValue('group_target')
 	}
 
-	const code = interaction.fields.getTextInputValue('group_code').trim()
+	const code = interaction.fields.getTextInputValue('group_code').trim().replace(/^groupID:/, '').trim()
 
 	const parsedDate = scheduledDate || parseDateTime(timeInput || '')
 	if (!parsedDate || isNaN(parsedDate.getTime())) {
