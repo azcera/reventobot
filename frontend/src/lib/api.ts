@@ -11,7 +11,7 @@ const field = (value: unknown): boolean => record(value) && text(value.key) && t
 const settingValue = (value: unknown): boolean => text(value) || boolean(value) || array(value, entry => record(entry) && text(entry.roleId) && text(entry.prefix))
 const setting = (value: unknown): boolean => record(value) && text(value.key) && text(value.label) && text(value.type) && settingValue(value.value)
 const history = (value: unknown): boolean => record(value) && (text(value.id) || number(value.id)) && text(value.action) && text(value.actor) && text(value.target) && text(value.created_at) && (value.details === undefined || value.details === null || text(value.details) || record(value.details))
-const config = (value: unknown): boolean => record(value) && number(value.revision) && array(value.templates, field) && array(value.settings, setting) && (value.bindings === undefined || record(value.bindings))
+const config = (value: unknown): boolean => record(value) && number(value.revision) && array(value.templates, field) && array(value.settings, setting) && (value.bindings === undefined || record(value.bindings)) && (value.templateVariables === undefined || record(value.templateVariables) && Object.values(value.templateVariables).every(group => record(group) && Object.values(group).every(text)))
 const source = (value: unknown): boolean => record(value) && text(value.url) && text(value.channelId) && boolean(value.canEdit) && text(value.revision)
 const item = (value: unknown): boolean => record(value) && (value.type === 'separator' || ['text', 'image', 'section'].includes(String(value.type)) && text(value.value))
 const mclList = (value: unknown): boolean => record(value) && ['id', 'title', 'channelId', 'roleId', 'addName', 'removeName'].every(key => text(value[key])) && (value.accessRoleId === undefined || text(value.accessRoleId))
@@ -19,7 +19,8 @@ const row = (value: unknown): boolean => record(value) && text(value.discordId) 
 const majestic = (value: unknown): boolean => record(value) && boolean(value.busy) && boolean(value.configured) && record(value.decisions) && record(value.rankRoles) && (value.preview === null || record(value.preview) && text(value.preview.id) && number(value.preview.generatedAt) && number(value.preview.familyTotal) && array(value.preview.rows, row) && record(value.preview.summary)) && (value.run === null || record(value.run) && text(value.run.kind) && text(value.run.status) && number(value.run.completed) && number(value.run.total) && Array.isArray(value.run.results))
 
 function validResponse(path: string, value: unknown): boolean {
-  if (['config', 'templates', 'templates/create', 'templates/delete', 'settings', 'permanent-message', 'permanent-message/publish', 'permanent-message/sync', 'navigation/sync'].includes(path)) return config(value)
+  if (['config', 'template-variables', 'templates', 'templates/create', 'templates/delete', 'settings', 'permanent-message', 'permanent-message/publish', 'permanent-message/sync', 'navigation/sync'].includes(path)) return config(value)
+  if (path.startsWith('channel-threads/')) return array(value, channel => resource(channel) && record(channel) && number(channel.type))
   if (path === 'resources') return record(value) && array(value.roles, resource) && array(value.channels, channel => resource(channel) && record(channel) && number(channel.type))
   if (path === 'session') return record(value) && text(value.csrf) && resource(value.guild) && resource(value.user)
   if (path === 'history') return array(value, history)

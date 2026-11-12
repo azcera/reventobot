@@ -2,9 +2,10 @@ import { createApi, readAuthStatus } from './lib/api'
 import type { Api, Config, Resources, Session, Drafts, SettingsDraft, Notify, Run, Guild, HistoryEntry, Overview as OverviewData } from './types'
 import { errorMessage, errorStatus } from './types'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, ArrowUpRight, BookOpen, Check, ChevronRight, Database, Files, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, Wifi, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, ListChecks, CalendarDays, Braces, BookOpen, Check, ChevronRight, Database, Files, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, Wifi, X } from 'lucide-react'
 import { Button, Empty, IconButton, Loading, Panel, useModal } from './components/ui'
 import { HistoryRows } from './components/History'
+import { Variables } from './pages/Variables'
 import { Templates } from './pages/Templates'
 import { Settings } from './pages/Settings'
 import { Majestic } from './pages/Majestic'
@@ -16,10 +17,11 @@ import { showGuide } from './guides'
 const pages = {
 	overview: { title: 'Обзор', label: 'Обзор', description: 'Твой сервер. Всё под контролем.', icon: LayoutDashboard },
 	templates: { title: 'Шаблоны сообщений', label: 'Шаблоны', description: 'Редактируй содержимое. Структуру и кнопки сохранит бот.', icon: Files },
+	variables: { title: 'Переменные шаблонов', label: 'Переменные', description: 'Значения для быстрой замены в шаблонах.', icon: Braces },
 	settings: { title: 'Настройки', label: 'Настройки', description: 'Каналы, роли и параметры работы бота.', icon: Settings2 },
 	access: { title: 'Доступ к функциям', label: 'Доступ', description: 'Дополнительные роли для функций бота.', icon: ShieldCheck },
-	mcl: { title: 'Списки', label: 'Списки', description: 'Управляй списками участников по ролям.', icon: Files },
-	captures: { title: 'Управление сборами', label: 'Сборы', description: 'Предустановки ручной регистрации на мероприятия.', icon: Files },
+	mcl: { title: 'Списки', label: 'Списки', description: 'Управляй списками участников по ролям.', icon: ListChecks },
+	captures: { title: 'Управление сборами', label: 'Сборы', description: 'Предустановки ручной регистрации на мероприятия.', icon: CalendarDays },
 	majestic: { title: 'Majestic — синхронизация', label: 'Majestic', description: 'Сверь состав семьи с Discord перед применением изменений.', icon: RefreshCw },
 	history: { title: 'История изменений', label: 'История изменений', description: 'Последние 100 действий администраторов. Время — московское.', icon: History }
 }
@@ -139,7 +141,7 @@ export function App() {
 	const current = pages[page]
 	return <div className="app-shell">
 		{menu && <button className="sidebar-scrim" aria-label="Закрыть меню" onClick={() => setMenu(false)} />}
-		<aside className={`sidebar ${menu ? 'sidebar-open' : ''}`} aria-label="Рабочее пространство"><a href="#overview" className="brand"><img src="/revento-logo.png" alt="" /><span>REVENTO<small>CONTROL ROOM</small></span></a><div className="server-card"><span className="server-avatar">{session.guild.name.slice(0, 1)}</span><div className="min-w-0"><strong className="block truncate text-sm font-medium" title={session.guild.name}>{session.guild.name}</strong><span className="text-[11px] text-muted">Твой сервер</span></div></div><div><p className="nav-caption">РАБОЧЕЕ ПРОСТРАНСТВО</p><nav aria-label="Разделы дашборда">{Object.entries(pages).map(([key, { label, icon: Icon }]) => <a href={'#' + key} key={key} aria-current={page === key ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span></a>)}</nav></div><div className="sidebar-bottom"><div className="user-avatar">{session.user.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium" title={session.user.name}>{session.user.name}</p><p className="mt-1 text-[10px] text-muted">Аккаунт Discord</p></div><IconButton icon={LogOut} label="Выйти из аккаунта" disabled={busy} onClick={async () => {
+		<aside className={`sidebar ${menu ? 'sidebar-open' : ''}`} aria-label="Рабочее пространство"><a href="#overview" className="brand"><img src="/revento-logo.png" alt="" /><span>REVENTO<small>CONTROL ROOM</small></span></a><div><p className="nav-caption">РАБОЧЕЕ ПРОСТРАНСТВО</p><nav aria-label="Разделы дашборда">{Object.entries(pages).map(([key, { label, icon: Icon }]) => <a href={'#' + key} key={key} aria-current={page === key ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span></a>)}</nav></div><div className="sidebar-bottom"><div className="user-avatar">{session.user.avatar ? <img src={session.user.avatar} alt="" className="size-full rounded-full object-cover" /> : session.user.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium" title={session.user.name}>{session.user.name}</p><p className="mt-1 text-[10px] text-muted">Аккаунт Discord</p></div><IconButton icon={LogOut} label="Выйти из аккаунта" disabled={busy} onClick={async () => {
 			if (!await modal({ title: 'Выйти из аккаунта?', message: dirty ? 'Несохранённые правки будут потеряны. Для входа потребуется авторизация через Discord.' : 'Для входа потребуется снова авторизоваться через Discord.', confirm: 'Выйти' })) return
 			run(async () => { await api('logout', {}); sessionRef.current = null; setSession(null); setConfig(null); setResources(null); setDrafts({}); setSettings({}); setLoginStatus('Ты вышел из аккаунта.'); setToast('') })
 		}} /></div></aside>
@@ -149,6 +151,7 @@ export function App() {
 					: <fieldset className="min-w-0" disabled={busy} aria-busy={busy}>
 						<div hidden={page !== 'overview'}><Overview active={page === 'overview'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
 						<div hidden={page !== 'templates'}><Templates config={config} setConfig={setConfig} resources={resources} drafts={drafts} setDrafts={setDrafts} api={api} run={run} notify={notify} /></div>
+						<div hidden={page !== 'variables'}><Variables config={config} setConfig={setConfig} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'settings'}><Settings config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'access'}><Settings access config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'mcl'}><MclLists active={page === 'mcl'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>

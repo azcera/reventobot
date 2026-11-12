@@ -41,7 +41,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | Редактирование и публикация сообщений | `src/dashboard/messageEditor.ts`, `src/dashboard/permanentMessages.ts`, `src/dashboard/navigationMessages.ts`, `src/services/containerMessageService.ts` |
 | База и схема | `src/services/database.ts`; SQL также ищи в сервисе соответствующей функции |
 | Оболочка и навигация UI | `frontend/src/App.tsx`, `frontend/src/main.tsx` |
-| Страницы UI | `frontend/src/pages/{Templates,Settings,Majestic}.tsx` |
+| Страницы UI | `frontend/src/pages/{Templates,Variables,Settings,Majestic}.tsx` |
 | Редактор, предпросмотр, общие элементы | `frontend/src/components/`, `frontend/src/lib/` |
 | Стили и подсказки UI | `frontend/src/styles.css`, `frontend/src/guides.tsx`, `public/theme.css` |
 | Общий Markdown и документы шаблонов | `public/markdown.ts`, `public/component-markdown.ts`, `public/template-document.ts`, `public/template-layout.ts`, `src/services/markdownContainer.ts` |

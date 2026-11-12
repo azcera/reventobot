@@ -15,7 +15,7 @@ export function validatePresets(value: unknown, guild: Guild): CapturePreset[] {
 		if (typeof item.target !== 'string' || !item.target.trim() || item.target.length > 100 || /[\r\n]/.test(item.target)) throw problem(400, 'Укажите цель длиной до 100 символов в одной строке.')
 		const channel = guild.channels.cache.get(item.channelId)
 		if (!channel || channel.type !== 0 || !guild.members.me || !channel.permissionsFor(guild.members.me)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) throw problem(400, 'Выберите текстовый канал, в который бот может отправлять сообщения.')
-		if (typeof item.accessRoleId !== 'string' || item.accessRoleId && (!guild.roles.cache.has(item.accessRoleId) || item.accessRoleId === guild.id)) throw problem(400, 'Выберите роль доступа к команде.')
+		if (typeof item.accessRoleId !== 'string' || item.accessRoleId.split(',').filter(Boolean).some((id: string) => !guild.roles.cache.has(id) || id === guild.id)) throw problem(400, 'Выберите роль доступа к команде.')
 		if (!Number.isInteger(item.maxMain) || item.maxMain < 1 || item.maxMain > 2147483647) throw problem(400, 'Количество участников должно быть целым числом от 1 до 2147483647.')
 		ids.add(item.id); names.add(item.command)
 		return { id: item.id, command: item.command, target: item.target.trim(), channelId: item.channelId, accessRoleId: item.accessRoleId, maxMain: item.maxMain }
@@ -23,7 +23,7 @@ export function validatePresets(value: unknown, guild: Guild): CapturePreset[] {
 }
 
 function canCreate(interaction: GuildInteraction, preset: CapturePreset, store: Store) {
-	return interaction.member.permissions.has(PermissionFlagsBits.Administrator) || store.roleIds('ADMIN_ROLES').some(id => interaction.member.roles.cache.has(id)) || Boolean(preset.accessRoleId && interaction.member.roles.cache.has(preset.accessRoleId))
+	return interaction.member.permissions.has(PermissionFlagsBits.Administrator) || store.roleIds('ADMIN_ROLES').some(id => interaction.member.roles.cache.has(id)) || preset.accessRoleId.split(',').filter(Boolean).some(id => interaction.member.roles.cache.has(id))
 }
 
 export function createCapturePresets({ client, pool, store }: ServiceOptions) {

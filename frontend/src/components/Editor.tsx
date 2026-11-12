@@ -4,7 +4,8 @@ import { errorMessage } from '../types'
 import React, { useId, useLayoutEffect, useRef, useState } from 'react'
 import { Bold, Code, CodeXml, Eye, Heading1, Heading2, Heading3, Image, Italic, Link, List, ListOrdered, Minus, PanelRight, Pilcrow, Quote, Redo2, SeparatorHorizontal, SquareDashed, Strikethrough, TextCursorInput, Underline, Undo2 } from 'lucide-react'
 import { queryAt, suggestions } from '../lib/mentions'
-import { IconButton, useModal } from './ui'
+import { editorTokens, type EditorToken } from '../lib/editorTokens'
+import { Button, Field, IconButton, useModal } from './ui'
 
 type Format = [LucideIcon, string, string, string, string?, boolean?]
 const formats: Format[] = [
@@ -15,107 +16,149 @@ const formats: Format[] = [
 ]
 const componentFormats: Format[] = [[Minus, 'Разделитель', '', '', '---', true], [SeparatorHorizontal, 'Большой разделитель', '', '', '***', true], [Image, 'Изображение', '', '', '<img src="https://example.com/image.png" />', true], [PanelRight, 'Секция с кнопкой справа', '<section buttonLabel="Открыть" buttonLink="https://example.com">', '</section>', 'Текст секции', true]]
 
-export function MarkdownEditor({ id, value, onChange, maxLength = 16000, components = true, resources, ...props }: Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> & { value: string; onChange(value: string): void; components?: boolean; resources: Resources }) {
-	const ref = useRef<HTMLTextAreaElement>(null)
-	const selection = useRef<[number, number] | null>(null)
-	const stack = useRef([{ value, start: 0, end: 0 }])
-	const position = useRef(0)
-	const listId = useId()
-	const [query, setQuery] = useState<ReturnType<typeof queryAt>>(null)
-	const [selected, setSelected] = useState(0)
-	const [, updateHistory] = useState(0)
-	const modal = useModal()
-	const found = suggestions(query, resources)
-	useLayoutEffect(() => {
-		if (stack.current[position.current].value !== value) { stack.current = [{ value, start: 0, end: 0 }]; position.current = 0 }
-		if (selection.current) { ref.current!.focus(); ref.current!.setSelectionRange(...selection.current); selection.current = null }
-		const input = ref.current!
-		if (input.clientWidth) {
-			input.style.height = 'auto'
-			input.style.height = Math.max(240, input.scrollHeight + 2) + 'px'
+function rawText(node: Node): string {
+	if (node instanceof HTMLElement && node.dataset.source !== undefined) return node.dataset.source
+	if (node.nodeType === Node.TEXT_NODE) return node.textContent || ''
+	if (node.nodeName === 'BR') return '\n'
+	return [...node.childNodes].map(rawText).join('')
+}
+
+function caretRange(root: HTMLElement): [number, number] {
+	const selection = window.getSelection()
+	if (!selection?.rangeCount || !root.contains(selection.anchorNode) || !root.contains(selection.focusNode)) return [0, 0]
+	const range = selection.getRangeAt(0)
+	const before = range.cloneRange(); before.selectNodeContents(root); before.setEnd(range.startContainer, range.startOffset)
+	const through = before.cloneRange(); through.setEnd(range.endContainer, range.endOffset)
+	return [rawText(before.cloneContents()).length, rawText(through.cloneContents()).length]
+}
+
+function setCaret(root: HTMLElement, start: number, end: number) {
+	const locate = (offset: number): [Node, number] => {
+		for (let i = 0; i < root.childNodes.length; i++) {
+			const node = root.childNodes[i], size = rawText(node).length
+			if (offset <= size) return node.nodeType === Node.TEXT_NODE ? [node, offset] : [root, i + (offset > 0 ? 1 : 0)]
+			offset -= size
 		}
-	}, [value])
-	useLayoutEffect(() => {
-		const input = ref.current!
-		let previousWidth = 0
-		const observer = new ResizeObserver(() => {
-			if (!input.clientWidth || input.clientWidth === previousWidth) return
-			previousWidth = input.clientWidth
-			input.style.height = 'auto'
-			input.style.height = Math.max(240, input.scrollHeight + 2) + 'px'
-		})
-		observer.observe(input)
-		return () => observer.disconnect()
-	}, [])
-	function remember() {
-		const input = ref.current!
-		stack.current[position.current] = { value: input.value, start: input.selectionStart, end: input.selectionEnd }
+		return [root, root.childNodes.length]
 	}
+	const range = document.createRange(); range.setStart(...locate(start)); range.setEnd(...locate(end))
+	root.focus({ preventScroll: true }); window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range)
+}
+
+function TagForm({ token, selected, onSubmit, close }: { token: Pick<EditorToken, 'kind' | 'source'>; selected: string; onSubmit(value: string | null): void; close(): void }) {
+	let initialText = selected, initialUrl = '', initialLabel = 'Открыть'
+	if (token.source) {
+		if (token.kind === 'link') { const match = /^\[([^\]]*)\]\((.*)\)$/.exec(token.source); initialText = match?.[1] || ''; initialUrl = match?.[2] || '' }
+		else { try { const item = window.componentMarkdown.parse(token.source)[0]; if (item.type === 'image') initialUrl = item.value; if (item.type === 'section') { initialText = item.value; initialUrl = item.btnLink || ''; initialLabel = item.btnLabel || '' } } catch { /* Keep malformed source editable. */ } }
+	}
+	const [text, setText] = useState(initialText), [url, setUrl] = useState(initialUrl), [label, setLabel] = useState(initialLabel), [error, setError] = useState('')
+	return <form className="mt-5 grid gap-4" onSubmit={event => {
+		event.preventDefault()
+		try {
+			const parsed = new URL(url); if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error('Укажи HTTP(S)-ссылку без логина и пароля.')
+			let source: string
+			if (token.kind === 'link') { if (/[\]\n]/.test(text) || /[\s)]/.test(url)) throw new Error('Проверь подпись и ссылку.'); source = `[${text}](${url})` }
+			else { source = window.componentMarkdown.stringify([token.kind === 'image' ? { type: 'image', value: url } : { type: 'section', value: text, btnLabel: label, btnLink: url }]); window.componentMarkdown.parse(source) }
+			onSubmit(source); close()
+		} catch (error) { setError(errorMessage(error)) }
+	}}>
+		{token.kind !== 'image' && <Field label={token.kind === 'section' ? 'Текст секции' : 'Текст ссылки'}><textarea required value={text} rows={4} onChange={event => setText(event.target.value)} /></Field>}
+		{token.kind === 'section' && <Field label="Название кнопки"><input required value={label} maxLength={80} onChange={event => setLabel(event.target.value)} /></Field>}
+		<Field label={token.kind === 'image' ? 'Ссылка на изображение' : token.kind === 'section' ? 'Ссылка кнопки' : 'Адрес ссылки'}><input required type="url" value={url} onChange={event => setUrl(event.target.value)} /></Field>
+		{error && <p role="alert" className="text-danger">{error}</p>}
+		<div className="flex flex-wrap justify-end gap-2">{token.source && <Button variant="danger" onClick={() => { onSubmit(null); close() }}>Удалить</Button>}<Button onClick={close}>Отмена</Button><Button type="submit" variant="primary">{token.source ? 'Сохранить' : 'Добавить'}</Button></div>
+	</form>
+}
+
+export function MarkdownEditor({ id, value, onChange, maxLength = 16000, components = true, resources, ...props }: Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> & { value: string; onChange(value: string): void; components?: boolean; resources: Resources }) {
+	const ref = useRef<HTMLDivElement>(null)
+	const selection = useRef<[number, number] | null>(null)
+	const lastSelection = useRef<[number, number]>([0, 0])
+	const stack = useRef([{ value, start: 0, end: 0 }]), position = useRef(0)
+	const listId = useId()
+	const [query, setQuery] = useState<ReturnType<typeof queryAt>>(null), [selected, setSelected] = useState(0)
+	const [renderVersion, updateHistory] = useState(0)
+	const modal = useModal(), found = suggestions(query, resources)
+	function remember() { const [start, end] = caretRange(ref.current!); lastSelection.current = [start, end]; stack.current[position.current] = { value, start, end } }
 	function change(next: string, start: number, end = start) {
-		if (next.length > maxLength) { selection.current = null; modal({ kind: 'error', title: 'Слишком длинный текст', message: `В этом поле допускается не больше ${maxLength} символов.` }); return }
-		stack.current.splice(position.current + 1)
-		stack.current.push({ value: next, start, end })
+		if (next.length > maxLength) { modal({ kind: 'error', title: 'Слишком длинный текст', message: `В этом поле допускается не больше ${maxLength} символов.` }); updateHistory(n => n + 1); return }
+		stack.current.splice(position.current + 1); stack.current.push({ value: next, start, end })
 		if (stack.current.length > 100) stack.current.shift()
-		position.current = stack.current.length - 1
-		onChange(next)
-		updateHistory(n => n + 1)
+		position.current = stack.current.length - 1; selection.current = [start, end]; lastSelection.current = [start, end]
+		onChange(next); updateHistory(n => n + 1)
 	}
 	function restore(redo: boolean) {
-		remember()
-		const next = position.current + (redo ? 1 : -1)
-		if (!stack.current[next]) return
-		position.current = next
-		const state = stack.current[next]
-		selection.current = [state.start, state.end]
-		onChange(state.value)
-		setQuery(null)
-		updateHistory(n => n + 1)
+		const next = position.current + (redo ? 1 : -1); if (!stack.current[next]) return
+		position.current = next; const state = stack.current[next]; selection.current = [state.start, state.end]; lastSelection.current = selection.current
+		onChange(state.value); setQuery(null); updateHistory(n => n + 1)
 	}
+	function replace(start: number, end: number, content: string) { change(value.slice(0, start) + content + value.slice(end), start + content.length); setQuery(null) }
 	function insert(before: string, after = '', sample = 'текст', line = false) {
-		remember()
-		const input = ref.current!, start = input.selectionStart, end = input.selectionEnd
-		const text = value.slice(start, end) || sample
-		const prefix = line && start && value[start - 1] !== '\n' ? '\n' : ''
-		const suffix = line && value[end] !== '\n' ? '\n' : ''
-		const content = prefix + (line && !after && before ? text.split('\n').map(part => before + part).join('\n') : before + text + after) + suffix
-		selection.current = [start, start + content.length]
-		change(value.slice(0, start) + content + value.slice(end), start, start + content.length)
-		setQuery(null)
+		const [start, end] = lastSelection.current, text = value.slice(start, end) || sample
+		const prefix = line && start && value[start - 1] !== '\n' ? '\n' : '', suffix = line && value[end] !== '\n' ? '\n' : ''
+		replace(start, end, prefix + (line && !after && before ? text.split('\n').map(part => before + part).join('\n') : before + text + after) + suffix)
 	}
-	function refresh(input: HTMLTextAreaElement) { setQuery(queryAt(input.value, input.selectionStart, input.selectionEnd)); setSelected(0) }
+	function openTag(kind: EditorToken['kind'], token?: EditorToken) {
+		const [start, end] = token ? [token.start, token.end] : lastSelection.current
+		modal({ title: (token ? 'Редактировать: ' : 'Добавить: ') + ({ image: 'изображение', section: 'секция', link: 'ссылка' })[kind], hideFooter: true,
+			content: ({ close }) => <TagForm token={{ kind, source: token?.source || '' }} selected={token ? '' : value.slice(start, end)} close={close} onSubmit={source => {
+				const block = kind !== 'link' && source !== null
+				replace(start, end, (block && start && value[start - 1] !== '\n' ? '\n' : '') + (source || '') + (block && value[end] !== '\n' ? '\n' : ''))
+			}} /> })
+	}
+	useLayoutEffect(() => {
+		const root = ref.current!
+		if (stack.current[position.current].value !== value) { stack.current = [{ value, start: 0, end: 0 }]; position.current = 0 }
+		const focused = document.activeElement === root, caret = selection.current || (focused ? caretRange(root) : null)
+		const nodes: Node[] = []; let offset = 0
+		for (const token of editorTokens(value, components)) {
+			nodes.push(document.createTextNode(value.slice(offset, token.start)))
+			const chip = document.createElement('span'); chip.contentEditable = 'false'; chip.dataset.source = token.source; chip.className = 'editor-chip'; chip.role = 'button'; chip.tabIndex = 0; chip.textContent = token.label; chip.setAttribute('aria-label', 'Редактировать: ' + token.label)
+			chip.onclick = () => openTag(token.kind, token)
+			chip.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); openTag(token.kind, token) } }
+			nodes.push(chip); offset = token.end
+		}
+		nodes.push(document.createTextNode(value.slice(offset)))
+		if (root.closest('fieldset')?.disabled) root.setAttribute('aria-disabled', 'true'); else root.removeAttribute('aria-disabled')
+		root.replaceChildren(...nodes)
+		if (caret) {
+			setCaret(root, Math.min(caret[0], value.length), Math.min(caret[1], value.length))
+			const rect = window.getSelection()?.getRangeAt(0).getBoundingClientRect()
+			const toolbar = root.previousElementSibling?.getBoundingClientRect()
+			if (rect && rect.height) { const top = Math.max(0, toolbar?.bottom || 0) + 16; if (rect.top < top) window.scrollBy(0, rect.top - top); else if (rect.bottom > window.innerHeight - 32) window.scrollBy(0, rect.bottom - window.innerHeight + 32) }
+		}
+		selection.current = null
+	}, [value, components, renderVersion])
+	function refresh() { const [start, end] = caretRange(ref.current!); lastSelection.current = [start, end]; setQuery(queryAt(value, start, end)); setSelected(0) }
 	function choose(index: number) {
-		const item = found[index]
-		if (!query || !item) return
-		remember()
-		const mention = (query.kind === '@' ? `<@&${item.id}>` : `<#${item.id}>`) + ' '
-		selection.current = [query.start + mention.length, query.start + mention.length]
-		change(value.slice(0, query.start) + mention + value.slice(query.end), query.start + mention.length)
-		setQuery(null)
+		const item = found[index]; if (!query || !item) return
+		replace(query.start, query.end, (query.kind === '@' ? `<@&${item.id}>` : `<#${item.id}>`) + ' ')
 	}
 	return <div className="relative min-w-0">
-		<div className="editor-toolbar" role="toolbar" aria-label="Форматирование Markdown">
+		<div className="editor-toolbar" role="toolbar" aria-label="Форматирование Markdown" onPointerDown={event => event.preventDefault()}>
 			<IconButton icon={Undo2} label="Отменить (Ctrl+Z)" disabled={!position.current} onClick={() => restore(false)} />
 			<IconButton icon={Redo2} label="Повторить (Ctrl+Shift+Z)" disabled={position.current >= stack.current.length - 1} onClick={() => restore(true)} />
 			<span className="toolbar-divider" />
-			{[...formats, ...(components ? componentFormats : [])].map(([Icon, label, ...args]) => <IconButton key={label} icon={Icon} label={label} onPointerDown={event => event.preventDefault()} onClick={() => insert(...args)} />)}
+			{[...formats, ...(components ? componentFormats : [])].map(([Icon, label, ...args]) => <IconButton key={label} icon={Icon} label={label} onClick={() => Icon === Link ? openTag('link') : Icon === Image ? openTag('image') : Icon === PanelRight ? openTag('section') : insert(...args)} />)}
 		</div>
-		<textarea ref={ref} id={id} value={value} maxLength={maxLength} className="markdown-source" spellCheck={false} {...props}
+		<div ref={ref} id={id} role="textbox" aria-label={props['aria-label'] || 'Текст сообщения'} aria-describedby={props['aria-describedby']} aria-multiline="true" contentEditable={!props.disabled} suppressContentEditableWarning className="markdown-source" spellCheck={false}
 			aria-autocomplete="list" aria-controls={found.length ? listId : undefined} aria-activedescendant={found.length ? `${listId}-${selected}` : undefined}
-			onBeforeInput={remember} onChange={event => { change(event.target.value, event.target.selectionStart, event.target.selectionEnd); refresh(event.currentTarget) }}
-			onClick={event => refresh(event.currentTarget)} onBlur={() => setQuery(null)} onKeyDown={event => {
+			onDrop={event => event.preventDefault()}
+			onBeforeInput={event => { if (ref.current?.closest('fieldset')?.disabled) { event.preventDefault(); return }; const type = (event.nativeEvent as InputEvent).inputType; if (type === 'historyUndo' || type === 'historyRedo') { event.preventDefault(); restore(type === 'historyRedo') } else remember() }}
+			onInput={event => { if ((event.nativeEvent as InputEvent).isComposing) return; const root = ref.current!, [start, end] = caretRange(root); const next = rawText(root); change(next, start, end); setQuery(queryAt(next, start, end)); setSelected(0) }}
+			onMouseUp={refresh} onClick={refresh} onKeyUp={event => { if (!event.ctrlKey && !event.metaKey && !(found.length && ['ArrowUp', 'ArrowDown'].includes(event.key))) refresh() }} onBlur={() => setQuery(null)}
+			onCompositionEnd={() => { const root = ref.current!, [start, end] = caretRange(root); change(rawText(root), start, end) }}
+			onPaste={event => { event.preventDefault(); remember(); const [start, end] = lastSelection.current; replace(start, end, event.clipboardData.getData('text/plain').replace(/\r\n?/g, '\n')) }}
+			onKeyDown={event => {
+				if (ref.current?.closest('fieldset')?.disabled) { event.preventDefault(); return }
 				if (event.nativeEvent.isComposing) return
-				if ((event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase())) { event.preventDefault(); restore(event.key.toLowerCase() === 'y' || event.shiftKey); return }
-				if (!found.length) return
-				if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setSelected(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + found.length) % found.length) }
-				else if (['Enter', 'Tab'].includes(event.key)) { event.preventDefault(); choose(selected) }
-				else if (event.key === 'Escape') { event.preventDefault(); setQuery(null) }
-				else if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) setQuery(null)
+				if ((event.ctrlKey || event.metaKey) && !event.altKey && ['KeyZ', 'KeyY'].includes(event.code)) { event.preventDefault(); restore(event.code === 'KeyY' || event.shiftKey); return }
+				if (found.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setSelected(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + found.length) % found.length); return }
+				if (found.length && ['Enter', 'Tab'].includes(event.key)) { event.preventDefault(); choose(selected); return }
+				if (event.key === 'Escape') setQuery(null)
+				if (event.key === 'Enter') { event.preventDefault(); remember(); const [start, end] = lastSelection.current; replace(start, end, '\n') }
 			}} />
-		{found.length > 0 && <div id={listId} role="listbox" aria-label={query!.kind === '@' ? 'Роли сервера' : 'Каналы сервера'} className="mention-menu">
-			{found.map((item, index) => <button key={item.id} id={`${listId}-${index}`} role="option" aria-selected={selected === index} tabIndex={-1} type="button" onPointerDown={event => event.preventDefault()} onClick={() => choose(index)}>
-				<span>{query!.kind}{item.name}</span><small>{item.id}</small>
-			</button>)}
-		</div>}
+		{found.length > 0 && <div id={listId} role="listbox" aria-label={query!.kind === '@' ? 'Роли сервера' : 'Каналы сервера'} className="mention-menu">{found.map((item, index) => <button key={item.id} id={`${listId}-${index}`} role="option" aria-selected={selected === index} tabIndex={-1} type="button" onPointerDown={event => event.preventDefault()} onClick={() => choose(index)}><span>{query!.kind}{item.name}</span><small>{item.id}</small></button>)}</div>}
 		<div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-muted"><span>Markdown · @ для ролей, # для каналов</span><span className="tabular-nums">{value.length.toLocaleString('ru-RU')} / {maxLength.toLocaleString('ru-RU')}</span></div>
 	</div>
 }

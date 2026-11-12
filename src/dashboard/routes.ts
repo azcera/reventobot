@@ -15,7 +15,7 @@ import { createMajesticSync } from '../services/majesticSync'
 import { syncRolePrefixes } from '../services/rolePrefixSync'
 import { getSchedule } from '../services/eventSchedule'
 
-function validateTemplates(values: Record<string, string | null>) {
+function validateTemplates(values: Record<string, string | null>, custom = store.templateVariables) {
 	if (!values || typeof values !== 'object' || Array.isArray(values) || !Object.keys(values).length) throw problem(400, 'Выберите шаблон.')
 	for (const [key, value] of Object.entries(values)) {
 		const field = templateDefinition(key)
@@ -30,7 +30,9 @@ function validateTemplates(values: Record<string, string | null>) {
 		if (field.type === 'url' && value !== field.default && !isHttpsUrl(value)) throw problem(400, 'Нужна HTTPS-ссылка.')
 		if (field.type === 'text') {
 			try {
-				const items = (require('../../public/component-markdown') as typeof import('../../public/component-markdown')).parse(value)
+				const expanded = value.replace(/\{([^{}]+)\}/g, (match, name: string) => Object.hasOwn(custom[field.group] || {}, name) ? custom[field.group][name] : match)
+				if (expanded.length > (field.maxLength ?? 4000)) throw new Error('Текст с переменными превышает допустимую длину.')
+				const items = (require('../../public/component-markdown') as typeof import('../../public/component-markdown')).parse(expanded)
 				const components = field.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3')
 				if (!components && items.some(item => item.type !== 'text')) throw new Error('В этом поле доступно только форматирование текста; структуру задаёт сообщение.')
 				if (components && items.some(item => item.type !== 'text')) (require('../services/containerMessageService') as typeof import('../services/containerMessageService')).buildEditPayload({ items })
@@ -39,8 +41,8 @@ function validateTemplates(values: Record<string, string | null>) {
  const error = getError(caughtError)
  throw problem(400, `Поле «${field.label}»: ${error.message}`) }
 		}
-		const variables = [...value.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g)].map(match => match[1])
-		if (!key.startsWith('permanent.') && (variables.some((name: string) => !(field.variables || []).includes(name)) || (field.variables || []).some((name: string) => !variables.includes(name)))) throw problem(400, 'Сохраните все переменные шаблона без изменения их названий.')
+		const variables = [...value.matchAll(/\{([a-zA-Zа-яА-ЯёЁ][a-zA-Zа-яА-ЯёЁ0-9_]*)\}/g)].map(match => match[1])
+		if (!key.startsWith('permanent.') && (variables.some((name: string) => !(field.variables || []).includes(name) && !Object.hasOwn(custom[field.group] || {}, name)) || (field.variables || []).some((name: string) => !variables.includes(name)))) throw problem(400, 'Сохраните все переменные шаблона без изменения их названий.')
 	}
 	const fields = new Map(store.snapshot().templates.map(field => [field.key, field]))
 	for (const [key, value] of Object.entries(values)) {
@@ -113,7 +115,7 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
  const error = getError(caughtError)
  respondError(res, error) }
 	})
-	app.get('/api/session', (req: E.Request, res: E.Response) => res.json({ user: req.dashboardUser, csrf: req.csrf, guild: { id: req.guild.id, name: req.guild.name } }))
+	app.get('/api/session', (req: E.Request, res: E.Response) => res.json({ user: { ...req.dashboardUser, avatar: req.guild.members.cache.get(req.dashboardUser!.id)?.user.displayAvatarURL({ size: 64 }) }, csrf: req.csrf, guild: { id: req.guild.id, name: req.guild.name } }))
 	app.get('/api/schedule', (req: E.Request, res: E.Response) => res.set('Cache-Control', 'no-store').json(getSchedule()))
 	const sync = client.majesticSync = majestic || client.majesticSync || createMajesticSync({ pool, store })
 	app.get('/api/majestic', async (req: E.Request, res: E.Response) => {
@@ -136,12 +138,34 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 		try {
 			await req.guild.roles.fetch()
 			const channels = await req.guild.channels.fetch()
-			res.json({ channels: [...channels.values()].filter((channel): channel is NonNullable<typeof channel> => Boolean(channel)).map(channel => ({ id: channel.id, name: channel.name, type: channel.type,
+			res.json({ channels: [...channels.values()].filter((channel): channel is NonNullable<typeof channel> => Boolean(channel)).map(channel => ({ id: channel.id, name: channel.name, type: channel.type, parentId: channel.parentId,
 				canSend: Boolean(channel.permissionsFor(client.user!)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])) })),
 			roles: [...req.guild.roles.cache.values()].filter(role => role.id !== req.guild.id).sort((a, b) => b.position - a.position).map(role => ({ id: role.id, name: role.name })) })
 		} catch (caughtError) {
  const error = getError(caughtError)
  respondError(res, error) }
+	})
+	app.get('/api/channel-threads/:id', async (req: E.Request, res: E.Response) => {
+		try {
+			const channel = await req.guild.channels.fetch(String(req.params.id))
+			if (!channel || !('threads' in channel)) throw problem(400, 'Выберите канал с ветками.')
+			const active = await req.guild.channels.fetchActiveThreads()
+			const threads = new Map(active.threads)
+			for (const type of (channel.type === 0 ? ['public', 'private'] as const : ['public'] as const)) {
+				let before: Date | undefined
+				while (true) {
+					let archived
+					try { archived = await channel.threads.fetchArchived({ type, fetchAll: false, limit: 100, before }) }
+					catch (caught) { const error = getError(caught); if (error.code === 50013 || error.code === 50001) break; throw error }
+					for (const thread of archived.threads.values()) threads.set(thread.id, thread)
+					const timestamp = archived.threads.last()?.archiveTimestamp
+					if (!archived.hasMore || !timestamp || before && timestamp >= before.getTime()) break
+					before = new Date(timestamp)
+				}
+			}
+
+			res.json([...threads.values()].filter(thread => thread.parentId === channel.id && !thread.locked && thread.permissionsFor(client.user!)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessagesInThreads])).map(thread => ({ id: thread.id, name: thread.name, type: thread.type, parentId: channel.id, canSend: true })))
+		} catch (caught) { respondError(res, getError(caught)) }
 	})
 	client.mclLists ||= (require('../services/mclLists') as typeof import('../services/mclLists')).createMclLists({ client, pool, store })
 	client.capturePresets ||= (require('../features/capture/capturePresets') as typeof import('../features/capture/capturePresets')).createCapturePresets({ client, pool, store })
@@ -198,6 +222,22 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
  const error = getError(caughtError)
  respondError(res, error) }
 		finally { prefixSyncs.delete(req.guild.id) }
+	})
+	app.post('/api/template-variables', async (req: E.Request, res: E.Response) => {
+		try {
+			const { group, values, revision } = req.body
+			const fields = store.snapshot().templates.filter(field => field.group === group)
+			if (!fields.length || !Number.isSafeInteger(revision) || !values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length > 50) throw problem(400, 'Проверьте шаблон и список переменных (до 50).')
+			const reserved = new Set(fields.flatMap(field => field.variables || []))
+			for (const [name, value] of Object.entries(values)) if (!/^[a-zA-Zа-яА-ЯёЁ][a-zA-Zа-яА-ЯёЁ0-9_]{0,63}$/.test(name) || reserved.has(name) || typeof value !== 'string' || value.length > 4000 || /\{[^{}]+\}/.test(value)) throw problem(400, 'Используйте уникальное имя без пробелов и значение до 4000 символов без вложенных переменных. Системные имена зарезервированы.')
+			validateTemplates(Object.fromEntries(fields.map(field => [field.key, field.value])), { ...store.templateVariables, [group]: values })
+			await store.save('templateVariables', { [group]: values }, revision, req.dashboardUser)
+			const keys = fields.map(field => field.key)
+			const syncResults: T.SyncResult[] = await permanent.syncMessages(keys, client, req.guild, undefined, req.dashboardUser)
+			if (keys.some(key => key.startsWith('navigation.'))) syncResults.push(...await navigation.sync(client, req.guild))
+			if (syncResults.length) await store.audit(req.dashboardUser, 'message.sync', group, { syncResults }).catch(error => console.error('[Dashboard audit]', error.message))
+			res.json({ ...store.snapshot(), syncResults })
+		} catch (caught) { respondError(res, getError(caught)) }
 	})
 	app.post('/api/templates/create', async (req: E.Request, res: E.Response) => {
 		try {

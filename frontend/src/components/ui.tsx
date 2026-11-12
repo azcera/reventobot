@@ -51,7 +51,7 @@ function Modal({ item, dismiss }: { item: ModalItem; dismiss(value: boolean): vo
 		const dialog = ref.current!
 		const previous = document.activeElement
 		dialog.showModal()
-		return () => { dialog.close(); if (previous instanceof HTMLElement && previous.isConnected) previous.focus() }
+		return () => { dialog.close(); if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }) }
 	}, [])
 	const Icon = item.kind === 'error' ? AlertCircle : item.kind === 'guide' ? BookOpen : item.kind === 'success' ? CheckCircle2 : Info
 	return <dialog ref={ref} aria-labelledby={titleId} aria-describedby={item.message ? descriptionId : undefined}

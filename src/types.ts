@@ -78,6 +78,7 @@ export interface ContainerData { noColor?: boolean; accentColor?: string; items:
 export interface EditableField { path: string; label: string; value: string; maxLength: number; type: string; components?: boolean }
 export interface DashboardState {
 	templates: Record<string, string>
+	templateVariables?: Record<string, Record<string, string>>
 	settings: Record<string, SettingValue>
 	bindings?: Record<string, Binding>
 	mclLists?: Record<string, MclList>

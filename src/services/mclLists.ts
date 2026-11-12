@@ -17,7 +17,7 @@ function validateLists(lists: T.MclList[], guild: D.Guild) {
   const channel = guild.channels.cache.get(list.channelId)
   if (!channel || channel.type !== 0) throw problem(400, 'Выберите текстовый канал сервера.')
   if (!guild.roles.cache.has(list.roleId) || list.roleId === guild.id) throw problem(400, 'Выберите роль списка.')
-  if (list.accessRoleId && (!guild.roles.cache.has(list.accessRoleId) || list.accessRoleId === guild.id)) throw problem(400, 'Выберите роль доступа.')
+  if (list.accessRoleId !== undefined && (typeof list.accessRoleId !== 'string' || list.accessRoleId.split(',').filter(Boolean).some(id => !guild.roles.cache.has(id) || id === guild.id))) throw problem(400, 'Выберите роль доступа.')
   if (typeof list.title !== 'string' || !list.title.trim() || list.title.length > 100 || /[\r\n]/.test(list.title)) throw problem(400, 'Заголовок должен содержать от 1 до 100 символов в одной строке.')
   for (const name of [list.addName, list.removeName]) {
    if (typeof name !== 'string' || !name.trim() || name !== name.trim() || name.length > 32 || /[\r\n]/.test(name) || names.has(name)) throw problem(400, 'Названия команд должны быть уникальны и содержать от 1 до 32 символов.')
@@ -27,7 +27,7 @@ function validateLists(lists: T.MclList[], guild: D.Guild) {
 }
 
 function canManage(interaction: T.GuildInteraction, list: T.MclList, store: T.Store) {
- return interaction.member.permissions.has(PermissionFlagsBits.Administrator) || store.roleIds('ADMIN_ROLES').some(id => interaction.member.roles.cache.has(id)) || Boolean(list.accessRoleId && interaction.member.roles.cache.has(list.accessRoleId))
+ return interaction.member.permissions.has(PermissionFlagsBits.Administrator) || store.roleIds('ADMIN_ROLES').some(id => interaction.member.roles.cache.has(id)) || (list.accessRoleId || '').split(',').filter(Boolean).some(id => interaction.member.roles.cache.has(id))
 }
 
 function createMclLists({ client, pool, store }: T.ServiceOptions) {

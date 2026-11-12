@@ -1,6 +1,6 @@
 import type { Config, Resources, SettingField, SettingValue, SettingsDraft, RolePrefix, Setter, PageServices } from '../types'
 import { errorMessage } from '../types'
-import React from 'react'
+import React, { useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { Button, Field, IconButton, Panel, useModal } from '../components/ui'
 
@@ -30,6 +30,8 @@ function RolePrefixes({ field, value, onChange, resources, onSync }: { field: Se
 
 export function Settings({ config, setConfig, resources, draft, setDraft, api, run, notify, access = false }: PageServices & { config: Config; setConfig: Setter<Config | null>; resources: Resources; draft: SettingsDraft; setDraft: Setter<SettingsDraft>; access?: boolean }) {
 	const modal = useModal()
+	const [search, setSearch] = useState('')
+	const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 	const set = (key: string, value: SettingValue) => setDraft(previous => ({ ...previous, [key]: value }))
 	function save(event: React.FormEvent) {
 		event.preventDefault()
@@ -49,16 +51,13 @@ export function Settings({ config, setConfig, resources, draft, setDraft, api, r
 		})
 	}
 	const fieldsForPage = config.settings.filter(field => field.key.startsWith('ACCESS_') === access)
-	const categories: [string, SettingField[]][] = access ? [['Дополнительные роли доступа', fieldsForPage]] : [
-		['Каналы', config.settings.filter(field => ['channel', 'channels'].includes(field.type))],
-		['Роли и приоритеты', fieldsForPage.filter(field => ['role', 'roles'].includes(field.type))],
-		['Префиксы участников', config.settings.filter(field => field.type === 'rolePrefixes')],
-		['Поведение бота', config.settings.filter(field => !['channel', 'channels', 'role', 'roles', 'rolePrefixes'].includes(field.type))]
-	]
-	return <form className="grid gap-6" onSubmit={save} noValidate>{access && <div className="callout">Администраторы сервера и роли модераторов бота всегда сохраняют доступ. Здесь указаны только дополнительные роли.</div>}{categories.filter(([, fields]) => fields.length).map(([title, fields]) => <Panel key={title} title={title}><div className={`grid gap-6 p-5 sm:p-6 ${title === 'Каналы' ? 'lg:grid-cols-2' : ''}`}>
+	const category = (key: string) => key.startsWith('MAJESTIC_') ? 'Majestic' : /TELEGRAM|DISCORD_NOTIFICATION/.test(key) ? 'Telegram и рассылки' : /ARCHIVE|PARENT_CHANNEL|AUTO_ROLE/.test(key) ? 'Архивы' : /CAPT|PLUS_CHANNEL|PRIORITY/.test(key) ? 'Капты и сборы' : /INVITE|LOG_CHANNEL|MAIN_ROLE|FAMILY_ADDITIONAL/.test(key) ? 'Заявки и принятие' : /PREFIX/.test(key) ? 'Префиксы участников' : 'Общие настройки'
+	const categories = Object.entries(fieldsForPage.reduce<Record<string, SettingField[]>>((groups, field) => { const title = access ? 'Дополнительные роли доступа' : category(field.key); (groups[title] ||= []).push(field); return groups }, {})).map(([title, fields]) => [title, fields!.filter(field => `${field.label} ${field.key} ${title}`.toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru').trim()))] as [string, SettingField[]])
+
+	return <form className="grid gap-6" onSubmit={save} noValidate><Field label="Поиск настроек"><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Название настройки или категории" /></Field>{!categories.some(([, fields]) => fields.length) && <p role="status" className="text-muted">Настройки не найдены</p>}{access && <div className="callout">Администраторы сервера и роли модераторов бота всегда сохраняют доступ. Здесь указаны только дополнительные роли.</div>}{categories.filter(([, fields]) => fields.length).map(([title, fields]) => <details className="panel" key={title} open={Boolean(search.trim()) || Boolean(expanded[title])} onToggle={event => { if (!search.trim()) { const open = event.currentTarget.open; setExpanded(previous => previous[title] === open ? previous : { ...previous, [title]: open }) } }}><summary className="p-5 font-medium">{title}<span className="ml-2 text-xs text-muted">{fields.length}</span></summary><div className={`grid gap-6 p-5 sm:p-6 ${title === 'Каналы' ? 'lg:grid-cols-2' : ''}`}>
 		{fields.map(field => field.type === 'rolePrefixes' ? <RolePrefixes key={field.key} field={field} value={Array.isArray(draft[field.key]) ? draft[field.key] as RolePrefix[] : []} onChange={value => set(field.key, value)} resources={resources} onSync={() => syncPrefixes(field)} />
 			: field.type === 'boolean' ? <label key={field.key} className="toggle-row"><span className="text-sm">{field.label}</span><input type="checkbox" role="switch" checked={Boolean(draft[field.key])} onChange={event => set(field.key, event.target.checked)} /><span className="toggle-track" aria-hidden="true" /></label>
 				: field.type === 'color' ? <Field key={field.key} label={field.label}><input type="color" value={String(draft[field.key] ?? '')} onChange={event => set(field.key, event.target.value)} /></Field>
 					: <OrderedChoices key={field.key} field={field} value={draft[field.key]} onChange={value => set(field.key, value)} resources={resources} hiddenRoles={access ? String(config.settings.find(item => item.key === 'ADMIN_ROLES')?.value ?? '').split(',').map(id => id.trim()).filter(Boolean) : []} />)}
-	</div></Panel>)}<div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-muted">Настройки применяются без перезапуска бота</p><Button type="submit" variant="primary" icon={Save}>Сохранить настройки</Button></div></form>
+	</div></details>)}<div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-muted">Настройки применяются без перезапуска бота</p><Button type="submit" variant="primary" icon={Save}>Сохранить настройки</Button></div></form>
 }

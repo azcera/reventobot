@@ -42,7 +42,7 @@ async function publish(kind: string, channelId: string, revision: number, client
 	publications.add(kind)
 	try {
 		const channel = await guild.channels.fetch(channelId)
-		if (!channel || ![0, 5].includes(channel.type) || !channel.isTextBased() || !channel.permissionsFor(client.user!)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])) throw problem(400, 'Выберите доступный текстовый канал сервера.')
+		if (!channel || ![0, 5, 10, 11, 12].includes(channel.type) || !channel.isTextBased() || !channel.permissionsFor(client.user!)?.has([PermissionsBitField.Flags.ViewChannel, channel.isThread() ? PermissionsBitField.Flags.SendMessagesInThreads : PermissionsBitField.Flags.SendMessages]) || channel.isThread() && channel.locked) throw problem(400, 'Выберите доступный текстовый канал сервера.')
 		const binding = store.bindings[kind]
 		if (binding?.link && parseMessageLink(binding.link).channelId === channelId) {
 			await updateMessage(kind, binding, client, guild, actor)
@@ -71,7 +71,11 @@ async function publish(kind: string, channelId: string, revision: number, client
 		payload.flags = MessageFlags.IsComponentsV2
 		payload.allowedMentions = { parse: [], repliedUser: false }
 		const sent = await channel.send(payload as D.MessageCreateOptions)
-		try { await store.save('bindings', { [kind]: bindingFor(kind, sent) }, revision, actor) }
+		try {
+			const nextBinding = binding && !definition(kind)!.command ? { ...binding, link: sent.url, fields: binding.fields.map(field => ({ ...field, default: store.text(field.key, {}, field.default, true) })) } : bindingFor(kind, sent)
+			if (!binding && ['promotion', 'recruit'].includes(kind)) nextBinding.fields[0].default = store.text(kind + '.document', {}, undefined, true)
+			await store.save('bindings', { [kind]: nextBinding }, revision, actor)
+		}
 		catch (caughtError) {
  const error = getError(caughtError)
 

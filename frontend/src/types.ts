@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 
 export interface Resource { id: string; name: string }
-export interface ChannelResource extends Resource { type: number; canSend?: boolean }
+export interface ChannelResource extends Resource { type: number; canSend?: boolean; parentId?: string | null }
 export interface Resources { roles: Resource[]; channels: ChannelResource[] }
 export interface RolePrefix { roleId: string; prefix: string }
 export type SettingValue = string | boolean | RolePrefix[]
@@ -10,14 +10,14 @@ export interface TemplateField { key: string; group: string; label: string; type
 export type PreviewField = Pick<TemplateField, 'type' | 'value'> & Partial<TemplateField>
 export interface Binding { link: string; fields?: TemplateField[] }
 export interface SyncResult { kind: string; ok: boolean; error?: string; logError?: string; updated?: number }
-export interface Config { revision: number; templates: TemplateField[]; settings: SettingField[]; bindings: Record<string, Binding>; syncResults?: SyncResult[] }
+export interface Config { revision: number; templateVariables?: Record<string, Record<string, string>>; templates: TemplateField[]; settings: SettingField[]; bindings: Record<string, Binding>; syncResults?: SyncResult[] }
 export type Drafts = Record<string, Record<string, string>>
 export type SettingsDraft = Record<string, SettingValue>
 export type Setter<T> = Dispatch<SetStateAction<T>>
 export type Notify = (message: string, error?: boolean) => void
 export type Run = (work: () => Promise<unknown>) => Promise<unknown>
 export interface Guild { id: string; name: string }
-export interface Session { csrf: string; guild: Guild; user: Resource }
+export interface Session { csrf: string; guild: Guild; user: Resource & { avatar?: string } }
 export interface MclList { id: string; title: string; channelId: string; roleId: string; accessRoleId?: string; addName: string; removeName: string }
 export interface CapturePreset { id: string; command: string; target: string; channelId: string; accessRoleId: string; maxMain: number }
 export interface SourceMessage { url: string; channelId: string; canEdit: boolean; revision: string }
@@ -35,7 +35,7 @@ export interface ApiRoutes {
   config: Config; resources: Resources; session: Session; overview: Overview; history: HistoryEntry[];
   'mcl-lists': { lists: MclList[]; revision: number }; majestic: MajesticState;
   'capture-presets': { presets: CapturePreset[]; revision: number };
-  templates: Config; 'templates/create': Config; 'templates/delete': Config; settings: Config; 'permanent-message': Config; 'permanent-message/publish': Config; 'permanent-message/sync': Config; 'navigation/sync': Config;
+  'template-variables': Config; templates: Config; 'templates/create': Config; 'templates/delete': Config; settings: Config; 'permanent-message': Config; 'permanent-message/publish': Config; 'permanent-message/sync': Config; 'navigation/sync': Config;
   'role-prefixes/sync': { updated: number; unchanged: number; skipped: number; failed: number };
   'send-container': { success: boolean; error?: string; logError?: string }; 'edit-container': ApiRoutes['send-container'] & { source: SourceMessage };
   logout: { success: boolean }
@@ -43,6 +43,7 @@ export interface ApiRoutes {
 export type Api = {
   <P extends keyof ApiRoutes>(path: P, body?: unknown): Promise<ApiRoutes[P]>;
   (path: `container-message?${string}`, body?: unknown): Promise<{ items: ComponentItem[]; source: SourceMessage }>;
+  (path: `channel-threads/${string}`, body?: unknown): Promise<ChannelResource[]>;
   (path: `majestic/${string}`, body?: unknown): Promise<MajesticState>;
 }
 export interface PageServices { api: Api; run: Run; notify: Notify }

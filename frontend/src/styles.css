@@ -87,11 +87,12 @@
 	.editor-tabs button { @apply flex items-center gap-2 rounded-md px-4 py-2 text-xs text-muted transition-colors hover:text-text; }
 	.editor-tabs button svg { @apply size-3.5; }
 	.editor-tabs button[aria-selected='true'] { @apply bg-surface text-text shadow-sm; }
-	.editor-toolbar { @apply flex flex-wrap gap-1 rounded-t-lg border border-line bg-surface p-2; }
+	.editor-toolbar { position: sticky; top: 0; z-index: 25; @apply flex flex-wrap gap-1 rounded-t-lg border border-line bg-surface p-2; }
 	.editor-toolbar .icon-button { @apply size-8 rounded-md border-transparent bg-transparent; }
 	.editor-toolbar .icon-button:hover { @apply border-line bg-panel; }
 	.toolbar-divider { @apply mx-1 my-1 w-px bg-line; }
-	textarea.markdown-source { @apply min-h-60 resize-y rounded-t-none border-t-0 px-4 py-4 font-mono text-[13px] leading-[1.85]; }
+	.markdown-source { @apply min-h-60 rounded-b-lg border border-line border-t-0 bg-input px-4 py-4 font-mono text-[13px] leading-[1.85]; white-space: pre-wrap; overflow-wrap: anywhere; overflow-anchor: none; }
+	.editor-chip { @apply mx-1 inline-block max-w-full cursor-pointer rounded-md border border-brand/40 bg-brand-soft px-2 py-0.5 font-sans text-xs text-brand; white-space: normal; }
 	.mention-menu { @apply absolute left-0 right-0 z-20 mt-1 max-h-64 overflow-auto rounded-lg border border-line bg-surface p-1 shadow-xl; }
 	.mention-menu button { @apply flex w-full flex-wrap items-center justify-between gap-2 rounded px-3 py-2 text-left text-xs; }
 	.mention-menu button[aria-selected='true'], .mention-menu button:hover { @apply bg-brand-soft text-brand; }
@@ -206,7 +207,7 @@
 }
 
 @media (max-width: 639px) {
-	input:not([type='checkbox']), select, textarea.markdown-source { font-size: 16px; }
+	input:not([type='checkbox']), select, .markdown-source { font-size: 16px; }
 	.discord-message { grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 18px 10px 24px; }
 	.discord-avatar { width: 28px; height: 28px; }
 	.discord-container { padding: 12px; }

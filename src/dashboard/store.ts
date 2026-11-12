@@ -69,6 +69,7 @@ function createStore() {
 	return {
 		get ready() { return ready },
 		get revision() { return revision },
+		get templateVariables() { return structuredClone(state.templateVariables || {}) },
 		getSetting,
 		get bindings() { return structuredClone(state.bindings || {}) },
 		get mclLists() { return structuredClone(state.mclLists || {}) },
@@ -77,7 +78,7 @@ function createStore() {
 		decorate(key: string, container: ContainerBuilder) {
 			return container.clearAccentColor()
 		},
-		text(key: string, variables: Record<string, unknown> = {}, fallback?: string) {
+		text(key: string, variables: Record<string, unknown> = {}, fallback?: string, raw = false) {
 			const generated = key.includes('.document') ? layout.documents([...legacyFields().map(field => ({ ...field, value: state.templates[field.key] ?? field.value })), ...Object.entries(state.templates).filter(([key]) => !catalog[key] && /^rules\.(heading|rule)\./.test(key)).map(([key, value]) => ({ ...templateDefinition(key)!, key, value }))]).find(field => field.key === key)?.value : undefined
 			let source = (/^(archives|unanswered)\./.test(key) ? undefined : state.templates[key]) ?? generated ?? catalog[key]?.default ?? fallback
 			if (key === 'schedule.banner' && typeof source === 'string' && source.trim().startsWith('<img')) {
@@ -90,14 +91,15 @@ function createStore() {
 				source = markdown.stringify(markdown.parse(source).map(item => visibleSeparators && item.type === 'separator' ? { ...item, divider: true } : item))
 			}
 			if (typeof source !== 'string') throw new Error(`Unknown template: ${key}`)
-			return source.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (match, name: string) =>
-				Object.hasOwn(variables, name) ? String(variables[name]) : match)
+			const custom = raw ? {} : state.templateVariables?.[catalog[key]?.group || templateDefinition(key)?.group || ''] || {}
+			return source.replace(/\{([a-zA-Zа-яА-ЯёЁ][a-zA-Zа-яА-ЯёЁ0-9_]*)\}/g, (match, name: string) =>
+				Object.hasOwn(variables, name) ? String(variables[name]) : Object.hasOwn(custom, name) ? custom[name] : match)
 		},
 		snapshot() {
 			const fields = { ...catalog }
 			for (const kind of ['promotion', 'recruit']) if (!state.bindings?.[kind]) fields[kind + '.document'] = templateDefinition(kind + '.document')!
 			for (const key of Object.keys(state.templates)) if (templateDefinition(key)) fields[key] = templateDefinition(key)!
-			return { revision, bindings: this.bindings, templates: Object.entries(fields).sort(([a], [b]) => {
+			return { revision, templateVariables: this.templateVariables, bindings: this.bindings, templates: Object.entries(fields).sort(([a], [b]) => {
 				if (a.startsWith('rules.') !== b.startsWith('rules.')) return a.startsWith('rules.') ? -1 : 1
 				if (a === 'rules.1' || b === 'rules.1') return a === b ? 0 : a === 'rules.1' ? -1 : 1
 				const order = (key: string) => { const parts = key.split('.'); return [Number(parts[2]), parts[1] === 'heading' ? 0 : Number(parts[3])] }
@@ -105,7 +107,7 @@ function createStore() {
 				const x = order(a), y = order(b)
 				return x[0] - y[0] || x[1] - y[1]
 			}).filter(([key]) => !hiddenTemplate(key)).map(([key, value]) => ({
-				key, ...value, ...(value.type === 'text' ? { components: value.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3') } : {}), value: this.text(key, {}, value.default)
+				key, ...value, ...(value.type === 'text' ? { components: value.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3') } : {}), value: this.text(key, {}, value.default, true)
 			})), settings: Object.entries(settingDefinitions).map(([key, value]) => ({ key, ...value, value: getSetting(key) })) }
 		},
 		async init(database: Pool) {
@@ -143,7 +145,7 @@ function createStore() {
 		async forgetNavigation(messageId: string) {
 			await pool.query('DELETE FROM dashboard_navigation_messages WHERE message_id = $1', [messageId])
 		},
-		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | CapturePreset | null>, expectedRevision: number, actor?: Actor | string) {
+		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | CapturePreset | Record<string, string> | null>, expectedRevision: number, actor?: Actor | string) {
 			const db = await pool.connect()
 			try {
 				await db.query('BEGIN')
