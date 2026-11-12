@@ -35,6 +35,10 @@ async function setup(page: Page, options: SetupOptions = {}) {
 			const field = { key: 'permanent.' + kind + '.document', group: body.name!, label: 'Текст сообщения', type: 'text', components: true, default: '# Новое сообщение', value: '# Новое сообщение' }
 			config.templates.push(field); config.bindings[kind] = { link: '', fields: [field] }; config.revision++; data = config
 		}
+		else if (path === 'templates/delete') {
+			const group = config.bindings[body.kind!].fields![0].group
+			config.templates = config.templates.filter(field => field.group !== group); delete config.bindings[body.kind!]; config.revision++; data = config
+		}
 		else if (path === 'templates') { for (const [key, value] of Object.entries(body.values)) { const field = config.templates.find(field => field.key === key); if (field) field.value = value == null ? field.default ?? '' : String(value) } config.revision++; data = config }
 		else if (path === 'settings') { for (const [key, value] of Object.entries(body.values)) config.settings.find(field => field.key === key)!.value = value ?? ''; config.revision++; data = config }
 		else if (path === 'container-message') data = { success: true, source: imported, items: [{ type: 'text', value: '## Загруженный контейнер' }] }
@@ -216,6 +220,7 @@ test('new template is created on the templates page and publishes with a persist
 	await page.goto('/#templates')
 	await expect(page.getByRole('navigation').getByRole('link', { name: 'Конструктор v2' })).toHaveCount(0)
 	await page.getByRole('button', { name: 'Новый шаблон', exact: true }).click()
+	await expect(page.getByRole('dialog').getByRole('button', { name: 'Понятно', exact: true })).toHaveCount(0)
 	await page.getByLabel('Название шаблона').fill('Моё сообщение')
 	await page.getByRole('button', { name: 'Создать шаблон', exact: true }).click()
 	await expect(page.getByLabel('Раздел шаблона')).toHaveValue('Моё сообщение')
@@ -430,5 +435,52 @@ test('Discord components retain their layout and fit a narrow screen', async ({ 
 		await expect(page.getByRole('dialog')).toBeVisible()
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 	}
+	expect(errors).toEqual([])
+})
+
+
+test('capture edits one document and schedule exposes only an image link', async ({ page }) => {
+	const { errors } = await setup(page)
+	await page.goto('/#templates')
+	await page.getByLabel('Раздел шаблона').selectOption('Объявление капта')
+	const editor = page.getByRole('textbox', { name: 'Текст объявления капта', exact: true })
+	await expect(page.locator('textarea:visible')).toHaveCount(1)
+	await expect(editor).toHaveValue(/<img/)
+	await editor.fill('## {title} {icon}\nПротив {enemy}, время {time}, квадрат {zone}, врагов {count}')
+	await page.getByRole('tab', { name: 'Предпросмотр', exact: true }).click()
+	await expect(page.locator('.discord-preview')).toContainText('Против')
+	await expect(page.locator('.discord-preview .discord-image')).toHaveCount(0)
+	await page.getByLabel('Раздел шаблона').selectOption('Расписание')
+	await expect(page.locator('textarea:visible')).toHaveCount(0)
+	const image = page.getByRole('textbox', { name: 'Ссылка на картинку расписания', exact: true })
+	await expect(image).toHaveValue('https://i.imgur.com/7dBrrO0.png')
+	await image.fill('https://example.com/schedule.png')
+	await page.getByRole('button', { name: 'Сохранить шаблон', exact: true }).click()
+	await expect(page.getByRole('status').filter({ hasText: 'Шаблон сохранён' })).toBeVisible()
+	expect(errors).toEqual([])
+})
+
+
+test('custom template deletion confirms, clears drafts and preserves built-in templates', async ({ page }) => {
+	const { calls, errors } = await setup(page)
+	await page.goto('/#templates')
+	await expect(page.getByRole('button', { name: 'Удалить шаблон', exact: true })).toHaveCount(0)
+	await page.getByRole('button', { name: 'Новый шаблон', exact: true }).click()
+	await page.getByLabel('Название шаблона').fill('Удаляемый')
+	await page.getByRole('button', { name: 'Создать шаблон', exact: true }).click()
+	await expect(page.getByLabel('Раздел шаблона')).toHaveValue('Удаляемый')
+	await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).fill('Несохранённый текст')
+	await page.getByRole('button', { name: 'Удалить шаблон', exact: true }).click()
+	await expect(page.getByRole('dialog')).toContainText('останется в Discord')
+	await page.getByRole('button', { name: 'Отмена', exact: true }).click()
+	await expect(page.getByRole('textbox', { name: 'Текст сообщения', exact: true })).toHaveValue('Несохранённый текст')
+	expect(calls.filter(call => call.path === 'templates/delete')).toHaveLength(0)
+	await page.getByRole('button', { name: 'Удалить шаблон', exact: true }).click()
+	await page.getByRole('dialog').getByRole('button', { name: 'Удалить шаблон', exact: true }).click()
+	await expect(page.getByRole('status').filter({ hasText: 'Шаблон удалён' })).toBeVisible()
+	await expect(page.getByLabel('Раздел шаблона').getByRole('option', { name: 'Удаляемый', exact: true })).toHaveCount(0)
+	await expect(page.getByLabel('Раздел шаблона')).toHaveValue('Правила')
+	await expect(page.getByRole('button', { name: 'Удалить шаблон', exact: true })).toHaveCount(0)
+	expect(calls.find(call => call.path === 'templates/delete')!.headers['x-csrf-token']).toBe('test-csrf')
 	expect(errors).toEqual([])
 })

@@ -7,7 +7,7 @@ import { Collection } from 'discord.js'
 import { upcomingEvents, buildSchedule as originalBuildSchedule, createEventSchedule as originalCreateEventSchedule, canCreateGroup as originalCanCreateGroup, selectionId, getSchedule } from '../src/services/eventSchedule'
 interface TestComponent extends RawComponent { components: TestComponent[]; items: { media: { url: string } }[]; accessory: TestComponent; content: string; custom_id?: string }
 function buildSchedule(events: Parameters<typeof originalBuildSchedule>[0], updatedAt: number, stale: boolean, now: number, emojis?: unknown) {
- const payload = originalBuildSchedule(events, updatedAt, stale, now, asMock<Parameters<typeof originalBuildSchedule>[4]>(emojis), '<img src="https://example.com/schedule.png" />')
+ const payload = originalBuildSchedule(events, updatedAt, stale, now, asMock<Parameters<typeof originalBuildSchedule>[4]>(emojis), 'https://example.com/schedule.png')
  return { ...payload, components: asMock<{ toJSON(): TestComponent }[]>(payload.components) }
 }
 const createEventSchedule = (dependencies: unknown) => originalCreateEventSchedule(asMock<Parameters<typeof originalCreateEventSchedule>[0]>(dependencies))
@@ -157,7 +157,7 @@ test('publication works without external requests, survives restart and refuses 
 		}
 	}
 	const dependencies = {
-		client: { channels: { fetch: async () => channel } }, store: { roleIds: () => [], text: (key: string, variables?: Record<string, unknown>) => key === 'schedule.banner' ? '<img src="https://example.com/schedule.png" />' : require('../src/dashboard/templateText').templateText(key, variables) }, now: () => currentTime,
+		client: { channels: { fetch: async () => channel } }, store: { roleIds: () => [], text: (key: string, variables?: Record<string, unknown>) => key === 'schedule.banner' ? 'https://example.com/schedule.png' : require('../src/dashboard/templateText').templateText(key, variables) }, now: () => currentTime,
 		pool: { query: async (sql: string, params: string[]) => {
 			if (sql.startsWith('INSERT')) stored = { channel_id: params[0], message_id: params[1] }
 			return { rows: sql.startsWith('SELECT') && stored ? [stored] : [] }
@@ -188,17 +188,11 @@ test('publication works without external requests, survives restart and refuses 
 })
 
 
-test('schedule uses editable text while keeping live event data and button actions', () => {
-	const { templateText } = require('../src/dashboard/templateText')
-	const payload = originalBuildSchedule(getSchedule(now).events, now, false, now, undefined, '', (key, variables) => {
-		if (key === 'schedule.title') return '## Наши события'
-		if (key === 'schedule.button') return 'Записаться'
-		if (key === 'schedule.nearest') return 'Сейчас: ' + variables!.event
-		return templateText(key, variables)
-	})
+test('schedule uses fixed text and button actions', () => {
+	const payload = originalBuildSchedule(getSchedule(now).events, now, false, now)
 	const result = JSON.stringify(asMock<{ toJSON(): unknown }>(payload.components![0]).toJSON())
-	assert.match(result, /Наши события/)
-	assert.match(result, /Сейчас: Тайники/)
-	assert.match(result, /Записаться/)
+	assert.match(result, /Расписание Majestic RP/)
+	assert.match(result, /Ближайшее/)
+	assert.match(result, /Создать групп/)
 	assert.match(result, /schedule_group_/)
 })

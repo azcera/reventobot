@@ -150,11 +150,11 @@ test('template and settings changes persist, affect rendering immediately and re
 test('template variables, color, lengths, unknown settings and wrong channel types are validated', async t => {
 	const f = await createFixture(); t.after(() => f.close())
 	for (const values of [{ 'capture.title': 'Без цели' }, { 'capture.title': '{evil}' }, { 'missing.key': 'text' }, { 'rules.1': 'http://example.com' }, { 'rules.1': 'https://' }, { 'capture.color': '#00000' }, JSON.parse('{"__proto__":null}')]) assert.throws(() => validateTemplates(values))
-	for (const [key, field] of Object.entries(catalog as Record<string, TemplateField>).filter(([key]) => !/^(archives|unanswered)\./.test(key))) assert.doesNotThrow(() => validateTemplates({ [key]: field.default! }), key)
-	for (const key of ['announcement.banner', 'schedule.banner']) {
-		assert.doesNotThrow(() => validateTemplates({ [key]: '' }))
-		assert.doesNotThrow(() => validateTemplates({ [key]: '<img src="https://example.com/custom.png" />' }))
-	}
+	for (const [key, field] of Object.entries(catalog as Record<string, TemplateField>).filter(([key]) => require('../src/dashboard/store').templateDefinition(key))) assert.doesNotThrow(() => validateTemplates({ [key]: field.default! }), key)
+	assert.doesNotThrow(() => validateTemplates({ 'schedule.banner': '' }))
+	assert.doesNotThrow(() => validateTemplates({ 'schedule.banner': 'https://example.com/custom.png' }))
+	assert.throws(() => validateTemplates({ 'schedule.banner': '<img src="https://example.com/custom.png" />' }))
+	for (const key of ['schedule.title', 'announcement.title', 'announcement.banner']) assert.throws(() => validateTemplates({ [key]: 'Текст' }))
 	await assert.rejects(() => validateSettings({ TOKEN: 'secret' }, f.guild), /Неизвестная/)
 	await assert.rejects(() => validateSettings(JSON.parse('{"__proto__":""}'), f.guild), /Неизвестная/)
 	await assert.rejects(() => validateSettings({ INVITE_CATEGORY_ID: f.channelId }, f.guild), /Недопустимый/)

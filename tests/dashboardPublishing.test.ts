@@ -189,3 +189,40 @@ test('custom template persists before publication and synchronizes saved edits a
 	assert.equal((await f.request('/api/templates/create', { body: { name: 'Мой шаблон', revision: store.revision } })).status, 400)
 	assert.equal((await f.request('/api/templates/create', { body: { name: 'Другой', revision: -1 } })).status, 409)
 })
+
+
+test('deleting a custom template removes saved data and its binding without changing Discord', async t => {
+	const f = await createFixture(); t.after(() => f.close()); await f.login()
+	for (const published of [false, true]) {
+		let response = await f.request('/api/templates/create', { body: { name: 'Удаляемый', revision: store.revision } })
+		assert.equal(response.status, 200)
+		let config = await response.json()
+		const kind = Object.keys(config.bindings).find(key => key.startsWith('custom-'))!
+		let field = config.templates.find((field: TemplateField) => field.group === 'Удаляемый')
+		await store.save('templates', { [field.key]: '# Сохранённые изменения' }, store.revision, 'admin')
+		if (published) {
+			f.channel.send = async (payload: MutableMessagePayload) => { f.message.components = payload.components.map(componentJSON); return f.message }
+			response = await f.request('/api/permanent-message/publish', { body: { kind, channelId: f.channelId, revision: store.revision } })
+			assert.equal(response.status, 200)
+			config = await response.json(); field = config.templates.find((field: TemplateField) => field.group === 'Удаляемый')
+			await store.save('templates', { [field.key]: '# После публикации' }, store.revision, 'admin')
+		}
+		const original = JSON.stringify(f.message.components)
+		f.guild.channels.fetch = async () => { throw new Error('deletion must not access Discord') }
+		const remove = (revision = store.revision) => f.request('/api/templates/delete', { body: { kind, revision } })
+		assert.equal((await remove(-1)).status, 409)
+		assert.ok(store.bindings[kind])
+		response = await remove(); assert.equal(response.status, 200, await response.clone().text())
+		config = await response.json()
+		assert.equal(config.bindings[kind], undefined)
+		assert.equal(config.templates.some((field: TemplateField) => field.group === 'Удаляемый'), false)
+		const restarted = createStore(); await restarted.init(f.pool)
+		assert.equal(restarted.bindings[kind], undefined)
+		assert.throws(() => restarted.text(field.key), /Unknown template/)
+		assert.equal(JSON.stringify(f.message.components), original)
+		assert.equal((await remove()).status, 400)
+		f.guild.channels.fetch = async () => f.channel
+	}
+	assert.equal((await f.request('/api/templates/delete', { body: { kind: 'rules', revision: store.revision } })).status, 400)
+	assert.ok(store.snapshot().templates.some(field => field.group === 'Правила'))
+})

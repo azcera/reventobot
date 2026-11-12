@@ -50,7 +50,6 @@ export function DiscordPreview({ channel = 'предпросмотр', children 
 
 export function TemplatePreview({ config, group, fields, values, channel }: { config: Config; group: string; fields: TemplateField[]; values: Record<string, string>; channel: string }) {
 	const [applicationState, setApplicationState] = useState('pending')
-	const [announcementState, setAnnouncementState] = useState('telegram')
 	const application = ['Заявка', 'Личные сообщения заявок'].includes(group)
 	const dm = group === 'Личные сообщения заявок'
 	const states: Record<string, string> = dm ? { accepted: 'Принята', rejected: 'Отклонена', interview: 'Обзвон' } : { pending: 'На рассмотрении', accepted: 'Принята', rejected: 'Отклонена', interview: 'Обзвон' }
@@ -63,13 +62,13 @@ export function TemplatePreview({ config, group, fields, values, channel }: { co
 	const sampleText = (value: string) => value.replace(/<t:\d+:[A-Za-z]>/g, match => match.endsWith(':R>') ? 'только что' : new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))
 		.replace(/<@!?\d+>/g, mention => mention.includes('987654321098765432') ? '@Куратор' : '@Tony').replace(/<#123456789012345678>/g, '#Обзвон')
 	return <div className="grid gap-4">
-		{group === 'Объявление капта' && <label className="flex flex-wrap items-center gap-3 text-sm text-muted">Источник объявления<select className="w-auto" aria-label="Источник объявления в предпросмотре" value={announcementState} onChange={event => setAnnouncementState(event.target.value)}><option value="telegram">Telegram</option><option value="game">Majestic — предстоящий капт</option><option value="finished">Majestic — завершённый капт</option></select></label>}
 		{application && <label className="flex flex-wrap items-center gap-3 text-sm text-muted">Состояние заявки<select className="w-auto" aria-label="Состояние заявки в предпросмотре" value={state} onChange={event => setApplicationState(event.target.value)}>{Object.entries(states).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
 		<DiscordPreview channel={channel}>
 			{application ? <><Components source={sampleText(text(`${dm ? 'dm' : 'application'}.document.${state}`))} />
 				{!dm && state === 'pending' && <><div className="discord-divider" /><div className="discord-buttons">{['application.1', 'application.2', 'application.3'].map((key, index) => <DiscordButton key={key} variant={index === 1 ? 'danger' : 'primary'}>{text(key)}</DiscordButton>)}</div></>}
 			</> : <>
-				{previewFields(config, group, fields, values, window.componentMarkdown).filter(field => group !== 'Объявление капта' || (field.key !== 'announcement.game' || announcementState !== 'telegram') && (field.key !== 'announcement.mvp' || announcementState === 'finished') && (field.key !== 'announcement.mention' || announcementState === 'telegram')).map((field, index) => field.type === 'color' ? null : field.type === 'button' ? <DiscordButton key={field.key || index}>{replaceExamples(field.value)}</DiscordButton> : field.type === 'url' ? <DiscordImage key={field.value} src={field.value} /> : <Components key={field.key || index} source={replaceExamples(field.value)} components={field.components !== false} />)}
+				{previewFields(config, group, fields, values, window.componentMarkdown).map((field, index) => field.type === 'color' ? null : field.type === 'button' ? <DiscordButton key={field.key || index}>{replaceExamples(field.value)}</DiscordButton> : field.type === 'url' ? field.value ? <DiscordImage key={field.value} src={field.value} /> : null : <Components key={field.key || index} source={replaceExamples(field.value)} components={field.components !== false} />)}
+				{group === 'Объявление капта' && <DiscordButton>⚔️ Создать регу на АТАКУ ⚔️</DiscordButton>}
 				{group === 'Приглашение' && <><div className="discord-divider discord-divider-large" /><div className="discord-section"><Markdown source={text('invite.3')} /><DiscordButton>{text('invite.4')}</DiscordButton></div></>}
 			</>}
 		</DiscordPreview>

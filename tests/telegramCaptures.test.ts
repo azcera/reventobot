@@ -19,7 +19,7 @@ test('Telegram capture listener parses attack and defence messages and deduplica
 	const channels: { components: { toJSON(): unknown }[] }[] = []
 	const telegram = { handler: async (_event: unknown): Promise<void> => {}, filter: undefined as unknown, addEventHandler(handler: (event: unknown) => Promise<void>, filter: unknown) { this.handler = handler; this.filter = filter } }
 	const channel = { isSendable: () => true, send: async (payload: { components: { toJSON(): unknown }[] }) => channels.push(payload) }
-	const config = { getSetting: (key: string) => key === 'CAPT_INFO_CHANNEL_ID' ? 'capture-announcements' : null, text: (key: string, variables?: Record<string, unknown>) => key === 'announcement.banner' ? '<img src="https://example.com/capture.png" />' : require('../src/dashboard/templateText').templateText(key, variables) }
+	const config = { getSetting: (key: string) => key === 'CAPT_INFO_CHANNEL_ID' ? 'capture-announcements' : null, text: (key: string, variables?: Record<string, unknown>) => require('../src/dashboard/templateText').templateText(key, variables).replace('https://i.imgur.com/hD6ep5D.png', 'https://example.com/capture.png') }
 	try {
 		require.cache[servicePath] = moduleStub({ id: servicePath, filename: servicePath, loaded: true, exports: { initTelegramClient: async () => telegram } })
 		require.cache[storePath] = moduleStub({ id: storePath, filename: storePath, loaded: true, exports: { store: config } })

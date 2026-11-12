@@ -37,7 +37,7 @@ export function Loading({ children = 'Загружаем данные…' }: { c
 	return <div role="status" className="flex items-center justify-center gap-3 py-16 text-muted"><LoaderCircle className="size-5 animate-spin" aria-hidden="true" />{children}</div>
 }
 
-export interface ModalOptions { kind?: string; title: string; message?: string; confirm?: string; danger?: boolean; content?: React.ReactNode | ((controls: { close(): void }) => React.ReactNode) }
+export interface ModalOptions { kind?: string; title: string; message?: string; confirm?: string; danger?: boolean; hideFooter?: boolean; content?: React.ReactNode | ((controls: { close(): void }) => React.ReactNode) }
 export type ShowModal = (options: ModalOptions) => Promise<boolean>
 interface ModalItem extends ModalOptions { id: number; resolve(value: boolean): void }
 const ModalContext = createContext<ShowModal | null>(null)
@@ -67,10 +67,10 @@ function Modal({ item, dismiss }: { item: ModalItem; dismiss(value: boolean): vo
 			<h2 id={titleId} className="mb-3 pr-7 text-xl font-semibold tracking-tight">{item.title}</h2>
 			{item.message && <p id={descriptionId} className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{item.message}</p>}
 			{typeof item.content === 'function' ? item.content({ close: () => dismiss(false) }) : item.content}
-			<div className="mt-7 flex flex-wrap justify-end gap-2">
+			{!item.hideFooter && <div className="mt-7 flex flex-wrap justify-end gap-2">
 				{item.confirm && <Button onClick={() => dismiss(false)}>Отмена</Button>}
 				<Button variant={item.danger ? 'danger' : 'primary'} icon={item.confirm ? undefined : Check} onClick={() => dismiss(true)}>{item.confirm || 'Понятно'}</Button>
-			</div>
+			</div>}
 		</div>
 	</dialog>
 }

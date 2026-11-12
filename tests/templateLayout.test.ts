@@ -93,3 +93,18 @@ test('rules legacy image is part of the editable document and cannot return afte
 	const restarted = createStore(); await restarted.init(pool)
 	assert.equal(restarted.text('rules.document'), '## Без изображения')
 })
+
+
+test('capture has one editable document and schedule exposes only an image URL', async () => {
+	const local = createStore(), pool = memoryPool(); await local.init(pool)
+	await local.save('templates', { 'announcement.title': '# {title} {icon}', 'announcement.details': 'Враг {enemy}, начало {time}, квадрат {zone}, врагов {count}', 'schedule.title': 'Старый заголовок', 'schedule.banner': '<img src="https://example.com/schedule.png" />' }, local.revision, 'admin')
+	const fields = local.snapshot().templates
+	assert.deepEqual(fields.filter(field => field.group === 'Объявление капта').map(field => field.key), ['announcement.document'])
+	assert.deepEqual(fields.filter(field => field.group === 'Расписание').map(field => [field.key, field.type, field.value]), [['schedule.banner', 'url', 'https://example.com/schedule.png']])
+	assert.match(local.text('announcement.document'), /Враг \{enemy\}/)
+	const document = '# {title} {icon}\n{enemy} {time} {zone} {count}'
+	await local.save('templates', { 'announcement.document': document }, local.revision, 'admin')
+	const restart = createStore(); await restart.init(pool)
+	assert.equal(restart.text('announcement.document'), document)
+	assert.doesNotMatch(restart.text('announcement.document'), /<img/)
+})

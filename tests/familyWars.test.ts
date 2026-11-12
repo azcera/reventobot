@@ -433,7 +433,7 @@ test('announcement restores Telegram layout and shows own-family MVPs with unamb
 			{ id: 42, name: 'Other Player', damage: 1000, kills: 5 }],
 		1331: [{ id: 7, name: 'Enemy MVP', damage: 99999, kills: 99 }]
 	} }), rulesFromEnv({}), null, start)
-	const payload = announcement(war, null, start, f.members.values(), {}, '<img src="https://example.com/capture.png" />')
+	const payload = announcement(war, null, start, f.members.values(), {}, (key: string, variables?: Record<string, unknown>) => require('../src/dashboard/templateText').templateText(key, variables).replace('https://i.imgur.com/hD6ep5D.png', 'https://example.com/capture.png'))
 	const rendered = plain(payload)
 	assert.match(rendered, /https:\/\/example.com\/capture.png/)
 	assert.match(rendered, /# 🛡️ КАПТ ЗАЩИТА 🛡️/)
@@ -447,7 +447,7 @@ test('announcement restores Telegram layout and shows own-family MVPs with unamb
 	assert.match(rendered, /🎯 MVP по киллам: `Other Player` \/ `42` — \*\*5\*\*/)
 	assert.doesNotMatch(rendered, /Осталось|Статус API|Enemy MVP/)
 	assert.equal('files' in payload, false)
-	assert.doesNotMatch(plain(announcement(war, null, start)), /example.com\/capture.png|hD6ep5D/)
+	assert.doesNotMatch(plain(announcement(war, null, start)), /example.com\/capture.png/)
 	assert.deepEqual(payload.allowedMentions, { parse: [] })
 	f.member.nickname = 'Maya | 999'
 	assert.match(plain(announcement(war, null, start, f.members.values(), { [f.member.id]: { static: '231542' } })), /<@222222222222222222>/)
@@ -635,13 +635,13 @@ test('testcapt info previews latest finished announcement with historical time, 
 })
 
 
-test('announcement text and button use saved templates with live capture values', async () => {
+test('announcement uses one saved document with live capture values', async () => {
 	const store = createStore(); await store.init(require('./helpers/dashboardFixture').memoryPool())
-	await store.save('templates', { 'announcement.title': '# {title} {icon}', 'announcement.details': 'Враг: {enemy} / {time} / {zone} / {count}', 'announcement.button': '{icon} Регистрация {target}' }, store.revision, 'admin')
+	await store.save('templates', { 'announcement.document': '# {title} {icon}\nВраг: {enemy} / {time} / {zone} / {count}' }, store.revision, 'admin')
 	const war = normalizeWar(rawWar(), rulesFromEnv({}))
-	const result = plain(announcement(war, null, start, [], {}, '', store.text.bind(store)))
+	const result = plain(announcement(war, null, start, [], {}, store.text.bind(store)))
 	assert.match(result, /Враг:/)
 	assert.match(result, /Enemy/)
-	assert.match(result, /Регистрация/)
+	assert.match(result, /Создать регу/)
 	assert.match(result, /capt_api_/)
 })

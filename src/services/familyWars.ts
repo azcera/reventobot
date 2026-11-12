@@ -120,7 +120,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 				await save(row)
 			}
 		}
-		const payload = announcement(row.data, url(row), now(), guild.members.cache.values(), bindings, store.text('announcement.banner'), store.text.bind(store))
+		const payload = announcement(row.data, url(row), now(), guild.members.cache.values(), bindings, store.text.bind(store))
 		const version = JSON.stringify(payload.components.map(component => component.toJSON()))
 		if (row.announcement_id && !row.registration.announcementFinished && row.registration.announcementVersion !== version) {
 			await edit(row, 'announcement', payload)
@@ -202,9 +202,8 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 					await save(row)
 					if (!row.announcement_id && (canAnnounce(war, now()) || row.announcement_state === 'sending')) {
 						row.announcement_channel_id ||= String(store.getSetting('CAPT_INFO_CHANNEL_ID'))
-						const payload = announcement(war, url(row), now(), [], {}, store.text('announcement.banner'), store.text.bind(store))
+						const payload = announcement(war, url(row), now(), [], {}, store.text.bind(store))
 						if (canAnnounce(war, now())) {
-							payload.components[0].addTextDisplayComponents(new TextDisplayBuilder().setContent(store.text('announcement.mention')))
 							payload.allowedMentions = { parse: ['everyone'] }
 						}
 						await deliver(row, 'announcement', payload)
@@ -253,7 +252,7 @@ function createFamilyWars({ client, pool, store, env = process.env, fetchImpl = 
 		source = normalizeWar(source.raw, rules, previous?.data, now())!
 		if (preview) {
 			await loadMembers(message.guild)
-			const payload = announcement(source, null, now(), message.guild.members.cache.values(), await decisions(message.guild.id), store.text('announcement.banner'), store.text.bind(store))
+			const payload = announcement(source, null, now(), message.guild.members.cache.values(), await decisions(message.guild.id), store.text.bind(store))
 			payload.components[0].addTextDisplayComponents(new TextDisplayBuilder().setContent(`🧪 Просмотр последнего завершённого капта №${source.apiId}.`))
 			return message.reply(payload)
 		}

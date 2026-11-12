@@ -11,11 +11,12 @@ const catalog: Record<string, TemplateField> = rawCatalog
 import layout = require('../../public/template-layout')
 const legacyFields = () => Object.entries(catalog).filter(([key]) => !key.includes('.document')).map(([key, field]) => ({ ...field, key, value: field.default ?? '' }))
 for (const field of layout.documents(legacyFields())) catalog[field.key!] = field as TemplateField
-const hiddenTemplate = (key: string) => /^(panel|archives|unanswered)\./.test(key) || (/^(invite|navigation|application|dm)\./.test(key) && !key.includes('.document') && !['invite.3', 'invite.4', 'application.1', 'application.2', 'application.3'].includes(key)) || /^capture\.(1|4|5|6|queue|main|reserve|left)$/.test(key)
+const retiredEventField = (key: string) => key.startsWith('schedule.') && key !== 'schedule.banner' || key.startsWith('announcement.') && key !== 'announcement.document'
+const hiddenTemplate = (key: string) => retiredEventField(key) || /^(panel|archives|unanswered)\./.test(key) || (/^(invite|navigation|application|dm)\./.test(key) && !key.includes('.document') && !['invite.3', 'invite.4', 'application.1', 'application.2', 'application.3'].includes(key)) || /^capture\.(1|4|5|6|queue|main|reserve|left)$/.test(key)
 import { defaultRolePrefixes } from '../utils/adminPrefix'
 
 function templateDefinition(key: string): TemplateField | null {
-	if (/^(panel|archives|unanswered)\./.test(key)) return null
+	if (retiredEventField(key) || /^(panel|archives|unanswered)\./.test(key)) return null
 	if (Object.hasOwn(catalog, key)) return catalog[key]
 	if (key === 'rules.document') return { group: 'Правила', label: 'Правила целиком', type: 'text', maxLength: 4000, variables: [] }
 	if (['promotion.document', 'recruit.document'].includes(key)) return { group: key.startsWith('promotion.') ? 'Система повышения' : 'Памятка рекрута', label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, variables: [], default: key.startsWith('promotion.') ? '# Система повышения' : '# Памятка рекрута' }
@@ -79,6 +80,10 @@ function createStore() {
 		text(key: string, variables: Record<string, unknown> = {}, fallback?: string) {
 			const generated = key.includes('.document') ? layout.documents([...legacyFields().map(field => ({ ...field, value: state.templates[field.key] ?? field.value })), ...Object.entries(state.templates).filter(([key]) => !catalog[key] && /^rules\.(heading|rule)\./.test(key)).map(([key, value]) => ({ ...templateDefinition(key)!, key, value }))]).find(field => field.key === key)?.value : undefined
 			let source = (/^(archives|unanswered)\./.test(key) ? undefined : state.templates[key]) ?? generated ?? catalog[key]?.default ?? fallback
+			if (key === 'schedule.banner' && typeof source === 'string' && source.trim().startsWith('<img')) {
+				const parsed = (require('../../public/component-markdown') as typeof import('../../public/component-markdown')).parse(source)
+				source = parsed.find(item => item.type === 'image')?.value || ''
+			}
 			if ((key.includes('.document') || key.startsWith('permanent.')) && typeof source === 'string' && source.includes('<separator')) {
 				const markdown: typeof import('../../public/component-markdown') = (require('../../public/component-markdown') as typeof import('../../public/component-markdown'))
 				const visibleSeparators = /^(promotion|recruit)\.document$|^permanent\.(promotion|recruit)\./.test(key)

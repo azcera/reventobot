@@ -209,6 +209,14 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 			res.json(store.snapshot())
 		} catch (caught) { respondError(res, getError(caught)) }
 	})
+	app.post('/api/templates/delete', async (req: E.Request, res: E.Response) => {
+		try {
+			const { kind, revision } = req.body
+			if (typeof kind !== 'string' || !/^custom-[a-f0-9-]{36}$/.test(kind) || !store.bindings[kind] || !Number.isSafeInteger(revision)) throw problem(400, 'Выберите пользовательский шаблон и обновите данные.')
+			await store.save('bindings', { [kind]: null }, revision, req.dashboardUser)
+			res.json(store.snapshot())
+		} catch (caught) { respondError(res, getError(caught)) }
+	})
 	app.post('/api/permanent-message/publish', async (req: E.Request, res: E.Response) => {
 		try {
 			const { kind, channelId, revision } = req.body

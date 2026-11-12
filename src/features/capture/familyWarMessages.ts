@@ -29,7 +29,6 @@ function announcement(
 	now = Date.now(),
 	members: Iterable<BindingMember> = [],
 	decisions: Decisions = {},
-	banner = '',
 	render: TemplateText = templateText
 ) {
 	const closed = registrationClosed(war, now)
@@ -55,20 +54,13 @@ function announcement(
 		.setCustomId(`capt_api_${suffix(war)}`)
 		.setDisabled(closed)
 		.setLabel(
-			render('announcement.button', { icon, target: war.attack ? 'АТАКУ' : 'ЗАЩИТУ' })
+			templateText('announcement.button', { icon, target: war.attack ? 'АТАКУ' : 'ЗАЩИТУ' })
 		)
 	const container = new ContainerBuilder()
 		.setAccentColor(war.attack ? 0x57f287 : 0x5865f2)
-	if (banner) container.addTextDisplayComponents(textBlock(banner))
 	container
-		.addTextDisplayComponents(textBlock(render('announcement.title', { icon, title })))
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(
-			textBlock(
-				[render('announcement.details', { enemy: code(war.enemy), time: code(startTime), zone: code(war.zone ?? 'Неопределён'), count: code(Array.isArray(enemies) ? enemies.length : 'Неопределено') }),
-				render('announcement.game', { map: code(war.map), resultIcon: battle.result === 'Победа' ? '🏆' : battle.result === 'Поражение' ? '❌' : '❔', result: code(battle.result), status: code(war.status || 'не указан') + (war.neutral ? ' · Нейтральная территория' : ''), registration: registrationUrl ? '\n[Открыть регистрацию](' + registrationUrl + ')' : '' })].join('\n')
-			)
-		)
+		.addTextDisplayComponents(textBlock(render('announcement.document', { icon, title, enemy: code(war.enemy), time: code(startTime), zone: code(war.zone ?? 'Неопределён'), count: code(Array.isArray(enemies) ? enemies.length : 'Неопределено') })))
+		.addTextDisplayComponents(textBlock(templateText('announcement.game', { map: code(war.map), resultIcon: battle.result === 'Победа' ? '🏆' : battle.result === 'Поражение' ? '❌' : '❔', result: code(battle.result), status: code(war.status || 'не указан') + (war.neutral ? ' · Нейтральная территория' : ''), registration: registrationUrl ? '\n[Открыть регистрацию](' + registrationUrl + ')' : '' })))
 		.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(button))
 	if (war.status === 'finished') {
 		const bindings = bindingIndex(members, decisions)
@@ -85,7 +77,7 @@ function announcement(
 			.addSeparatorComponents(new SeparatorBuilder())
 			.addTextDisplayComponents(
 				textBlock(
-					render('announcement.mvp', { damage: label(battle.damageMvp, 'damage'), kills: label(battle.killsMvp, 'kills') })
+					templateText('announcement.mvp', { damage: label(battle.damageMvp, 'damage'), kills: label(battle.killsMvp, 'kills') })
 				)
 			)
 	}
