@@ -9,7 +9,7 @@ export function editorFields(config: Config, group: string): TemplateField[] {
 		key: 'rules.document', group, type: 'text', label: 'Правила целиком', components: true,
 		value: fields.filter(field => /^rules\.(heading|rule)\./.test(field.key)).map(field => field.value).join('\n\n---\n\n'), variables: []
 	}]
-	const order = group === 'Приглашение' ? ['invite.document', 'invite.3', 'invite.4'] : group === 'Регистрация на капт' ? ['capture.title', 'capture.time', 'capture.info', 'capture.sort', 'capture.confirmed', 'capture.waiting', 'capture.2', 'capture.3', 'capture.sortTime', 'capture.sortPriority'] : []
+	const order = group === 'Приглашение' ? ['invite.document', 'invite.3', 'invite.4'] : group === 'Регистрация на капт' ? ['capture.document', 'capture.2', 'capture.3', 'capture.sortTime', 'capture.sortPriority'] : []
 	return fields.sort((a, b) => order.length ? order.indexOf(a.key) - order.indexOf(b.key) : Number(b.key.includes('.document')) - Number(a.key.includes('.document')))
 }
 
@@ -21,8 +21,7 @@ export function previewFields(config: Config, group: string, fields: TemplateFie
 	let result: PreviewField[] = fields.map(field => ({ ...field, value: values[field.key] ?? field.value }))
 	if (group === 'Приглашение') return result.filter(field => field.key === 'invite.document')
 	if (group === 'Регистрация на капт') {
-		const text = (key: string) => result.find(field => field.key === 'capture.' + key)?.value ?? ''
-		result = [{ type: 'text', value: [text('title') + '\n\n' + text('time') + '\n\n' + text('info'), text('sort') + '\n\n' + text('confirmed'), text('waiting')].join('\n\n---\n\n') }, ...['2', '3', 'sortTime'].map(key => result.find(field => field.key === 'capture.' + key)).filter((field): field is PreviewField => Boolean(field))]
+		result = ['document', '2', '3', 'sortTime'].map(key => result.find(field => field.key === 'capture.' + key)).filter((field): field is PreviewField => Boolean(field))
 	}
 	if (group === 'Обычная регистрация') result = ['document', 'sortTime', 'join', 'leave', 'editTime'].map(key => result.find(field => field.key === 'registration.' + key)).filter((field): field is PreviewField => Boolean(field))
 	return result

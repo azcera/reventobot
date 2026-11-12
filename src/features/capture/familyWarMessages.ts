@@ -132,51 +132,22 @@ function registrationMessage(
 			? `\nСостав получен: <t:${Math.floor(war.rosterUpdatedAt / 1000)}:R>`
 			: '')
 	const container = new ContainerBuilder()
-		.addTextDisplayComponents(
-			textBlock(
-				store.text('capture.title', {
-					target: `капт против ${text(war.enemy)}`
-				})
-			),
-			textBlock(store.text('capture.time', { time: timestamp(war.startAt) })),
-			textBlock(
-				store.text('capture.info', {
-					map: text(war.map),
-					zone: text(war.zone),
-					status: text(war.status || 'не указан'),
-					registrationStatus: closed
-						? 'Регистрация закрыта. Обновление остановлено.'
-						: 'Время и состав обновляются автоматически.',
-					freshness
-				})
-			)
-		)
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(
-			textBlock(
-				store.text('capture.sort', {
-					mode:
-						registration.sortMode === 'time'
-							? 'по времени записи'
-							: 'по роли и времени записи'
-				})
-			),
-			textBlock(
-				store.text('capture.confirmed', {
-					count: confirmed.length,
-					players: list(confirmed)
-				})
-			)
-		)
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(
-			textBlock(
-				store.text('capture.waiting', {
-					count: waiting.length,
-					players: list(waiting)
-				})
-			)
-		)
+		.addTextDisplayComponents(textBlock(store.text('capture.document', {
+			target: `капт против ${text(war.enemy)}`,
+			time: timestamp(war.startAt),
+			map: text(war.map),
+			zone: text(war.zone),
+			status: text(war.status || 'не указан'),
+			registrationStatus: closed
+				? 'Регистрация закрыта. Обновление остановлено.'
+				: 'Время и состав обновляются автоматически.',
+			freshness,
+			mode: registration.sortMode === 'time' ? 'по времени записи' : 'по роли и времени записи',
+			confirmedCount: confirmed.length,
+			confirmedPlayers: list(confirmed),
+			waitingCount: waiting.length,
+			waitingPlayers: list(waiting)
+		})))
 	if (war.testSource)
 		container.addTextDisplayComponents(
 			textBlock(

@@ -13,7 +13,7 @@ import layout = require('../../public/template-layout')
 const legacyFields = () => Object.entries(catalog).filter(([key]) => !key.includes('.document')).map(([key, field]) => ({ ...field, key, value: field.default ?? '' }))
 for (const field of layout.documents(legacyFields())) catalog[field.key!] = field as TemplateField
 const retiredEventField = (key: string) => key.startsWith('schedule.') && key !== 'schedule.banner' || key.startsWith('announcement.') && key !== 'announcement.document'
-const hiddenTemplate = (key: string) => retiredEventField(key) || /^(panel|archives|unanswered)\./.test(key) || (/^(invite|navigation|application|dm)\./.test(key) && !key.includes('.document') && !['invite.3', 'invite.4', 'application.1', 'application.2', 'application.3'].includes(key)) || /^capture\.(1|4|5|6|queue|main|reserve|left)$/.test(key)
+const hiddenTemplate = (key: string) => retiredEventField(key) || /^(panel|archives|unanswered)\./.test(key) || (/^(invite|navigation|application|dm)\./.test(key) && !key.includes('.document') && !['invite.3', 'invite.4', 'application.1', 'application.2', 'application.3'].includes(key)) || /^capture\.(1|4|5|6|queue|main|reserve|left|title|time|info|sort|confirmed|waiting)$/.test(key)
 import { defaultRolePrefixes } from '../utils/adminPrefix'
 
 function templateDefinition(key: string): TemplateField | null {

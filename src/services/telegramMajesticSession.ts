@@ -52,7 +52,7 @@ function createTelegramMajesticSession({ send, pool, env = process.env, validate
 	async function prompt() {
 		const chatId = env.TG_NOTIFICATION_CHAT_ID?.trim()
 		if (!chatId) return
-		await send(chatId, 'Отправьте новое значение sessionId Majestic. Текущая сессия продолжает работать до успешной проверки новой.')
+		await send(chatId, 'Отправьте новое значение sessionId Majestic или JSON вида {"state":{"sessionId":"..."},"version":0}. Текущая сессия продолжает работать до успешной проверки новой.')
 		waitingSince = Math.floor(now() / 1000)
 	}
 	function schedule() {
@@ -72,7 +72,13 @@ function createTelegramMajesticSession({ send, pool, env = process.env, validate
 			if (text.trim() === '/session') { await prompt(); return true }
 			if (!waitingSince || !date || date < waitingSince || text.trim().startsWith('/')) return false
 			try {
-				const config = readConfig({ ...env, MAJESTIC_SESSION_ID: text.trim() })
+				let sessionId = text.trim()
+				if (sessionId.startsWith('{')) {
+					const data: unknown = JSON.parse(sessionId)
+					if (!data || typeof data !== 'object' || !('state' in data) || !data.state || typeof data.state !== 'object' || !('sessionId' in data.state) || typeof data.state.sessionId !== 'string') throw new Error('Invalid session JSON')
+					sessionId = data.state.sessionId.trim()
+				}
+				const config = readConfig({ ...env, MAJESTIC_SESSION_ID: sessionId })
 				await validate(config)
 				await save(config.sessionId)
 				env.MAJESTIC_SESSION_ID = config.sessionId

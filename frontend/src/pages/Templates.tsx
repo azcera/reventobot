@@ -29,6 +29,7 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 	const groups = [...new Set(config.templates.map(field => field.group))]
 	const [selectedGroup, setSelectedGroup] = useState(groups[0])
 	const [generation, setGeneration] = useState(0)
+	const [applicationState, setApplicationState] = useState('pending')
 	const variablesRef = useRef<HTMLDivElement>(null)
 	useEffect(() => {
 		let frame = 0
@@ -48,6 +49,10 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 	const modal = useModal()
 	const group = groups.includes(selectedGroup) ? selectedGroup : groups[0]
 	const fields = editorFields(config, group)
+	const application = ['Заявка', 'Личные сообщения заявок'].includes(group)
+	const states = application ? fields.filter(field => field.key.includes('.document.')) : []
+	const state = states.find(field => field.key.endsWith('.' + applicationState)) || states[0]
+	const visibleFields = application ? fields.filter(field => field === state || group === 'Заявка' && state?.key.endsWith('.pending') && field.type === 'button') : fields
 	const values = { ...fieldValues(fields), ...drafts[group] }
 	const kind = Object.keys(permanentGroups).find(key => permanentGroups[key] === group) || Object.keys(config.bindings).find(key => key.startsWith('custom-') && config.bindings[key].fields?.[0]?.group === group)
 	const binding = kind && config.bindings?.[kind]?.link ? config.bindings[kind] : undefined
@@ -100,7 +105,9 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 		}}>
 			<Panel title="Содержимое сообщения" action={<span className="text-xs text-muted">Markdown</span>}>
 				<form onSubmit={save} noValidate>
-					<div className="grid gap-6 p-5 sm:p-6">{fields.map(field => <Field key={field.key} label={field.key.endsWith('.document') || fields.length === 1 && field.type === 'text' ? 'Текст сообщения' : field.label || 'Текст сообщения'} hint={field.variables?.length ? 'Сохрани переменные: ' + field.variables.map(name => '{' + name + '}').join(', ') : undefined}>
+					<div className="grid gap-6 p-5 sm:p-6">
+						{application && <Field label="Состояние заявки"><select value={state?.key || ''} onChange={event => setApplicationState(event.target.value.split('.').at(-1)!)}>{states.map(field => <option key={field.key} value={field.key}>{field.label}</option>)}</select></Field>}
+						{visibleFields.map(field => <Field key={field.key} label={field.key.endsWith('.document') || fields.length === 1 && field.type === 'text' ? 'Текст сообщения' : field.label || 'Текст сообщения'} hint={field.variables?.length ? 'Сохрани переменные: ' + field.variables.map(name => '{' + name + '}').join(', ') : undefined}>
 						{field.type === 'text' ? <MarkdownEditor key={field.key + generation} value={values[field.key]} maxLength={field.maxLength || 16000} components={field.components !== false} resources={resources} onChange={value => setDrafts(previous => ({ ...previous, [group]: { ...values, [field.key]: value } }))} />
 							: <input type={field.type === 'url' && !values[field.key].startsWith('attachment://') ? 'url' : 'text'} value={values[field.key]} maxLength={field.maxLength || 16000} onChange={event => setDrafts(previous => ({ ...previous, [group]: { ...values, [field.key]: event.target.value } }))} />}
 					</Field>)}</div>
