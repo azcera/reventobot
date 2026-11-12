@@ -1,5 +1,8 @@
 import { getError } from '../../utils/errors'
 import { store as dashboard } from '../../dashboard/store'
+import { createArchiveChannel } from '../../utils/channelUtils'
+import { parseDisplayName } from '../../utils/parseDisplayName'
+import { findMemberArchive } from '../archive/archiveSearch'
 import { ContainerBuilder } from '../../services/markdownContainer'
 import {
 	ModalBuilder,
@@ -140,6 +143,14 @@ async function processModerationButton(interaction: import('discord.js').ButtonI
 					dashboard.getSetting('MAIN_ROLE_ID') || dashboard.getSetting('AUTO_ROLE')
 				).trim()
 				await targetMember.roles.add(roleId)
+				const parsed = parseDisplayName(targetMember.displayName) || parseDisplayName(appData?.full_name)
+				if (!parsed) throw new Error('Не удалось определить имя и статик для создания архива.')
+				if (!await findMemberArchive(interaction.guild, parsed)) {
+					await createArchiveChannel(interaction.guild, {
+						channelName: ['archive', parsed.memberName.toLowerCase(), parsed.memberStatic].join(' '),
+						member: targetMember
+					})
+				}
 			}
 
 			const targetUser = await interaction.client.users

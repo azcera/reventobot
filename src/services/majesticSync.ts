@@ -195,7 +195,13 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, readDi
 					settingChangedAt !== (store.majesticAutoKickChangedAt || 0)) throw problem(409, 'Настройки Majestic изменились. Проверка остановлена.')
 				item.state.familyMembership = { source, bindings, confirmed, autoKickSince }
 				await save(guild.id, item)
-				return { members, statics, linked, bindings, confirmed, dismissals, autoKickSince, source }
+				const represented = new Set([
+					...linked.values(), ...Object.values(bindings),
+					...Object.values(item.state.decisions).map(decision => decision.static),
+					...[...members.values()].filter(member => !member.user.bot).map(member => parseNickname(member.nickname)?.static)
+				])
+				const missingMembers = data.items.filter(character => !represented.has(String(character.id)))
+				return { members, statics, missingMembers, linked, bindings, confirmed, dismissals, autoKickSince, source }
 			} finally { item.busy = false }
 		},
 		async autoNicknames(guild: D.Guild) {

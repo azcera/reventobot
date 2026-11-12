@@ -18,7 +18,11 @@ const EXCLUDED_ROLE_ID = '1445808131832676560'
 const INTERVAL_MS = 10 * 60 * 1000
 const PREFIX = 'family_cleanup_'
 const CATEGORIES = ['Не в составе семьи', 'Ник не по форме', 'Без ролей']
-const isMembershipMessage = (message: D.Message) => message.components.some(component => JSON.stringify(component.toJSON()).includes(PREFIX))
+const MISSING_HEADING = '### В семье, но нет в Discord и привязках'
+const isMembershipMessage = (message: D.Message) => message.components.some(component => {
+	const json = JSON.stringify(component.toJSON())
+	return json.includes(PREFIX) || json.includes(MISSING_HEADING)
+})
 
 function classify(snapshot: T.MembershipSnapshot, applications: Set<string>, autoKick = true, checkedAt = Date.now()) {
 	const manual: D.GuildMember[] = [], automatic: D.GuildMember[] = []
@@ -57,11 +61,14 @@ function classify(snapshot: T.MembershipSnapshot, applications: Set<string>, aut
 		}
 	}
 	manual.sort((a, b) => reasons.get(a.id)!.localeCompare(reasons.get(b.id)!, 'ru'))
-	return { manual, automatic, reasons, evidence }
+	return { manual, automatic, reasons, evidence, missingMembers: snapshot.missingMembers || [] }
 }
 
-function reportPages(report: Report): { reason?: string; members: D.GuildMember[] }[] {
-	const pages = []
+function reportPages(report: Report): { reason?: string; members: D.GuildMember[]; missingMembers?: T.FamilyCharacter[] }[] {
+	const pages: ReturnType<typeof reportPages> = []
+	for (let offset = 0; offset < Math.max(1, report.missingMembers.length); offset += 25) {
+		pages.push({ members: [], missingMembers: report.missingMembers.slice(offset, offset + 25) })
+	}
 	for (const reason of CATEGORIES) {
 		const members = report.manual.filter((member: D.GuildMember) => report.reasons.get(member.id) === reason)
 		for (let offset = 0; offset < members.length; offset += 25) {
@@ -137,19 +144,22 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 		existing.sort((a, b) => a.createdTimestamp - b.createdTimestamp)
 		const pages = reportPages(report)
 		for (let page = 0; page < pages.length; page++) {
-			const { members, reason } = pages[page]
+			const { members, reason, missingMembers } = pages[page]
 			const text = `## Несинхронизированно с игрой — ${report.manual.length}\n` +
 				`Страница ${page + 1}/${pages.length}. Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
 				(failed ? `⚠️ Не удалось автоматически кикнуть: ${failed}. Проверьте права и журнал бота.\n` : '') +
-				(members.length ? `### ${reason}\n${members.map((member: D.GuildMember) => `- [${escapeMarkdown(member.displayName || member.user.globalName || member.user.username || member.id).replace(/@/g, '＠')}](https://discord.com/users/${member.id}) · ${member.id}`).join('\n')}` : 'Список пуст.')
+				(missingMembers ? `${MISSING_HEADING} — ${report.missingMembers.length}\n` +
+					(missingMembers.map(character => `- ${escapeMarkdown(character.login).replace(/@/g, '＠')} | ${character.id}`).join('\n') || 'Список пуст.') :
+					members.length ? `### ${reason}\n${members.map((member: D.GuildMember) => `- <@${member.id}>`).join('\n')}` : 'Список пуст.')
 			const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
-			container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+			if (!missingMembers) container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
 				...['kick', 'roles'].map(action => new ButtonBuilder().setCustomId(`${PREFIX}open_${action}_${page}`)
 					.setLabel(action === 'kick' ? 'Выбрать для кика' : 'Выбрать для снятия ролей')
 					.setStyle(action === 'kick' ? ButtonStyle.Danger : ButtonStyle.Secondary).setDisabled(!members.length)),
 				new ButtonBuilder().setCustomId(`${PREFIX}copy_${CATEGORIES.indexOf(reason || '')}`)
 					.setLabel('Скопировать список').setStyle(ButtonStyle.Secondary).setDisabled(!members.length)))
-			const payload = { components: [container], flags: MessageFlags.IsComponentsV2 as const, allowedMentions: { parse: [] } }
+			const payload = { components: [container], flags: MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications,
+				allowedMentions: { parse: [], users: members.map(member => member.id) } }
 			if (existing[page]) await existing[page].edit(payload)
 			else await channel.send(payload)
 		}
@@ -238,7 +248,7 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 						const select = new StringSelectMenuBuilder().setCustomId(PREFIX + 'apply_' + id)
 							.setPlaceholder(action === 'kick' ? 'Кикнуть выбранных участников' : 'Снять все роли у выбранных')
 							.setMinValues(1).setMaxValues(members.length).addOptions(members.map((member: D.GuildMember) => ({
-								label: String(member.displayName || member.id).slice(0, 100), value: member.id, description: member.id
+								label: String(member.displayName || member.user.globalName || member.user.username).slice(0, 100), value: member.id
 							})))
 						return interaction.editReply({ content: 'Выберите участников. Действие выполнится сразу после отправки выбора.', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] })
 					}

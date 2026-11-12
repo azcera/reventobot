@@ -98,6 +98,7 @@ export interface ServiceOptions { client: Client; pool: Pool; store: Store; env?
 export interface MembershipSnapshot {
 	members: Collection<string, GuildMember>
 	statics: Set<string>
+	missingMembers?: FamilyCharacter[]
 	linked: Map<string, string>
 	bindings: Record<string, string>
 	confirmed?: Record<string, { static: string; seenAt: number; joinedAt: number }>
