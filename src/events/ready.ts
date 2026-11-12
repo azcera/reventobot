@@ -34,6 +34,8 @@ export = (client: import('discord.js').Client) => {
 				await client.mclLists?.sync(guild)
 			} catch (caught) {
  const error = getError(caught); console.error('[MCL] Ошибка синхронизации:', error) }
+			try { await client.capturePresets?.sync(guild) }
+			catch (caught) { console.error('[Capture presets] Ошибка синхронизации:', getError(caught)) }
 			try {
 				await updateLists(guild)
 				console.log('✅ Успешное обновление списков.')

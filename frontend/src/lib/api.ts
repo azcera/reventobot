@@ -25,6 +25,7 @@ function validResponse(path: string, value: unknown): boolean {
   if (path === 'history') return array(value, history)
   if (path === 'overview') return record(value) && boolean(value.ready) && number(value.ping) && number(value.uptime) && boolean(value.database) && array(value.history, history)
   if (path === 'mcl-lists') return record(value) && number(value.revision) && array(value.lists, mclList)
+  if (path === 'capture-presets') return record(value) && number(value.revision) && array(value.presets, item => record(item) && ['id', 'command', 'target', 'channelId', 'accessRoleId'].every(key => text(item[key])) && number(item.maxMain))
   if (path === 'majestic' || path.startsWith('majestic/')) return majestic(value)
   if (path.startsWith('container-message?')) return record(value) && array(value.items, item) && source(value.source)
   if (path === 'role-prefixes/sync') return record(value) && ['updated', 'unchanged', 'skipped', 'failed'].every(key => number(value[key]))

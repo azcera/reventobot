@@ -409,6 +409,19 @@ test('approval cannot exceed the capture limit across menus', async () => {
 })
 
 
+test('preset publication uses its configured channel while ordinary registration uses PLUS_CHANNEL_ID', async () => {
+	const { store } = require('../src/dashboard/store') as typeof import('../src/dashboard/store')
+	const published: string[] = []
+	const channel = (id: string) => ({ isSendable: () => true, send: async () => { published.push(id); return { id: 'new-capture' } } })
+	const source = { ...guild, channels: {
+		cache: new Map([[store.getSetting('PLUS_CHANNEL_ID'), channel('default')]]),
+		fetch: async (id: string) => { assert.equal(id, 'preset-channel'); return channel(id) }
+	} }
+	await manager.sendCollection(asMock({ guild: source }), 'now', 'Тренировка', 15, false, 'preset-channel')
+	await manager.sendCollection(asMock({ guild: source }), 'now', 'Обычная', 20, false)
+	assert.deepEqual(published, ['preset-channel', 'default'])
+})
+
 test('manual registration starts in waiting and only admin-approved users enter the limited confirmed list', () => {
 	const container = manager.buildCaptureMessage('now', [ids[0], ids[1]], [ids[2]], [], 'тренировка', 2, guild).components[0].toJSON()
 	const contents = container.components.filter(component => component.type === 10).map(component => component.content)

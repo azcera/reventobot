@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import type { Config, Decision, MajesticState, SettingValue } from '../../frontend/src/types'
 const { createStore } = require('../../dist/src/dashboard/store.js') as { createStore(): { snapshot(): Config } }
 
-interface RequestBody extends Decision { values: Record<string, SettingValue | null>; discordId: string; ids?: string[]; link?: string; name?: string; kind?: string }
+interface RequestBody extends Decision { values: Record<string, SettingValue | null>; discordId: string; ids?: string[]; link?: string; name?: string; kind?: string; presets?: import('../../frontend/src/types').CapturePreset[]; revision?: number }
 interface RecordedCall { path: string; body: RequestBody; headers: Record<string, string> }
 interface ResponseContext { route: Route; path: string; body: RequestBody; config: Config; majestic: MajesticState }
 interface SetupOptions { respond?(context: ResponseContext): Promise<boolean | void> }
@@ -54,6 +54,41 @@ async function navigate(page: Page, key: string, mobile: boolean) {
 	if (mobile) await page.getByRole('button', { name: 'Открыть меню', exact: true }).click()
 	await page.getByRole('navigation').getByRole('link', { name: key, exact: true }).click()
 }
+
+test('capture presets can be created, edited and deleted through the dashboard', async ({ page, isMobile }) => {
+	let presets: import('../../frontend/src/types').CapturePreset[] = []
+	const { calls, errors } = await setup(page, { respond: async ({ route, path, body, config }) => {
+		if (path !== 'capture-presets') return false
+		if (body) { presets = body.presets!; config.revision++ }
+		await route.fulfill({ json: { presets, revision: config.revision } }); return true
+	} })
+	await page.goto('/')
+	await navigate(page, 'Сборы', isMobile)
+	await page.getByRole('button', { name: 'Руководство по разделу', exact: true }).click()
+	await expect(page.getByRole('heading', { name: 'Как настроить сборы', exact: true })).toBeVisible()
+	await page.keyboard.press('Escape')
+	await page.getByRole('button', { name: 'Добавить предустановку', exact: true }).click()
+	await page.getByLabel('Команда', { exact: true }).fill('сбор-тренировка')
+	await page.getByLabel('Цель сбора', { exact: true }).fill('Тренировка')
+	await page.getByLabel('Канал публикации', { exact: true }).selectOption(channelId)
+	await page.getByLabel('Роль доступа к команде', { exact: true }).selectOption(resources.roles[0].id)
+	await page.getByLabel('Количество участников', { exact: true }).fill('15')
+	await page.getByRole('button', { name: 'Сохранить сборы', exact: true }).click()
+	await expect(page.getByRole('status').filter({ hasText: 'Предустановки сохранены' })).toBeVisible()
+	expect(presets[0]).toMatchObject({ command: 'сбор-тренировка', target: 'Тренировка', channelId, accessRoleId: resources.roles[0].id, maxMain: 15 })
+	expect(calls.find(call => call.path === 'capture-presets' && call.body)?.headers['x-csrf-token']).toBe('test-csrf')
+	await navigate(page, 'Настройки', isMobile)
+	await navigate(page, 'Сборы', isMobile)
+	await expect(page.getByLabel('Количество участников', { exact: true })).toHaveValue('15')
+	await page.getByLabel('Количество участников', { exact: true }).fill('12')
+	await page.getByRole('button', { name: 'Сохранить сборы', exact: true }).click()
+	await expect.poll(() => presets[0]?.maxMain).toBe(12)
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+	await page.getByRole('button', { name: 'Удалить сбор 1', exact: true }).click()
+	await page.getByRole('button', { name: 'Сохранить сборы', exact: true }).click()
+	await expect.poll(() => presets.length).toBe(0)
+	expect(errors).toEqual([])
+})
 
 test('shell keeps the palette, removes the standalone message editor and fits the viewport', async ({ page, isMobile }) => {
 	const { errors } = await setup(page)

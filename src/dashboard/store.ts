@@ -3,7 +3,7 @@ import type * as D from 'discord.js'
 import type * as T from '../types'
 import type * as E from 'express'
 import type * as Pg from 'pg'
-import type { Actor, Binding, DashboardState, MclList, RolePrefix, SettingDefinition, SettingValue, TemplateField } from '../types'
+import type { Actor, Binding, CapturePreset, DashboardState, MclList, RolePrefix, SettingDefinition, SettingValue, TemplateField } from '../types'
 import type { Pool } from 'pg'
 import type { ContainerBuilder, Message } from 'discord.js'
 import rawCatalog = require('./templates.json')
@@ -71,6 +71,7 @@ function createStore() {
 		getSetting,
 		get bindings() { return structuredClone(state.bindings || {}) },
 		get mclLists() { return structuredClone(state.mclLists || {}) },
+		get capturePresets() { return structuredClone(state.capturePresets || {}) },
 		roleIds(key: string) { return String(getSetting(key)).split(',').map(id => id.trim()).filter(Boolean) },
 		decorate(key: string, container: ContainerBuilder) {
 			return container.clearAccentColor()
@@ -110,6 +111,7 @@ function createStore() {
 			);
 			CREATE TABLE IF NOT EXISTS mcl_messages (guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, message_id TEXT NOT NULL, PRIMARY KEY (guild_id, channel_id));
 			CREATE TABLE IF NOT EXISTS mcl_commands (guild_id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY (guild_id, name));
+			CREATE TABLE IF NOT EXISTS capture_preset_commands (guild_id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY (guild_id, name));
 			CREATE TABLE IF NOT EXISTS dashboard_state (
 				id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL DEFAULT 0,
 				value JSONB NOT NULL DEFAULT '{"templates":{},"settings":{}}'
@@ -136,7 +138,7 @@ function createStore() {
 		async forgetNavigation(messageId: string) {
 			await pool.query('DELETE FROM dashboard_navigation_messages WHERE message_id = $1', [messageId])
 		},
-		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | null>, expectedRevision: number, actor?: Actor | string) {
+		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | CapturePreset | null>, expectedRevision: number, actor?: Actor | string) {
 			const db = await pool.connect()
 			try {
 				await db.query('BEGIN')

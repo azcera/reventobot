@@ -97,6 +97,10 @@ export = (client: import('discord.js').Client) => {
 		if (!guild) return
 
 		const customId = interaction.customId
+		if (interaction.isModalSubmit() && customId.startsWith('modal_capture_preset_')) {
+			if (!client.capturePresets) return interaction.reply({ content: 'Сборы временно недоступны.', flags: MessageFlags.Ephemeral })
+			return await client.capturePresets.submit(interaction)
+		}
 		if (interaction.isButton() && customId === 'archive_show_notice') {
 			if (!await authorize(interaction, dashboard)) return
 			return (require('../features/archive/archiveContextCommands') as typeof import('../features/archive/archiveContextCommands')).showNotice(interaction, interaction.message.content)

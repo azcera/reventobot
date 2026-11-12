@@ -144,6 +144,12 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
  respondError(res, error) }
 	})
 	client.mclLists ||= (require('../services/mclLists') as typeof import('../services/mclLists')).createMclLists({ client, pool, store })
+	client.capturePresets ||= (require('../features/capture/capturePresets') as typeof import('../features/capture/capturePresets')).createCapturePresets({ client, pool, store })
+	app.get('/api/capture-presets', (req: E.Request, res: E.Response) => res.json({ presets: Object.values(store.capturePresets), revision: store.revision }))
+	app.post('/api/capture-presets', async (req: E.Request, res: E.Response) => {
+		try { res.json(await client.capturePresets!.save(req.guild, req.body.presets, req.body.revision, req.dashboardUser)) }
+		catch (caught) { respondError(res, getError(caught)) }
+	})
 	app.get('/api/mcl-lists', (req: E.Request, res: E.Response) => res.json({ lists: Object.values(store.mclLists), revision: store.revision }))
 	app.post('/api/mcl-lists', async (req: E.Request, res: E.Response) => {
 		try {

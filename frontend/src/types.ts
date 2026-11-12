@@ -19,6 +19,7 @@ export type Run = (work: () => Promise<unknown>) => Promise<unknown>
 export interface Guild { id: string; name: string }
 export interface Session { csrf: string; guild: Guild; user: Resource }
 export interface MclList { id: string; title: string; channelId: string; roleId: string; accessRoleId?: string; addName: string; removeName: string }
+export interface CapturePreset { id: string; command: string; target: string; channelId: string; accessRoleId: string; maxMain: number }
 export interface SourceMessage { url: string; channelId: string; canEdit: boolean; revision: string }
 export type ComponentItem = { type: 'text' | 'image' | 'section'; value: string; btnLabel?: string; btnLink?: string } | { type: 'separator'; spacing?: string; divider?: boolean; large?: boolean }
 export interface ComponentParser { parse(source: string): ComponentItem[]; stringify(items: ComponentItem[]): string }
@@ -33,6 +34,7 @@ export interface Overview { ready: boolean; ping: number; database: boolean; upt
 export interface ApiRoutes {
   config: Config; resources: Resources; session: Session; overview: Overview; history: HistoryEntry[];
   'mcl-lists': { lists: MclList[]; revision: number }; majestic: MajesticState;
+  'capture-presets': { presets: CapturePreset[]; revision: number };
   templates: Config; 'templates/create': Config; settings: Config; 'permanent-message': Config; 'permanent-message/publish': Config; 'permanent-message/sync': Config; 'navigation/sync': Config;
   'role-prefixes/sync': { updated: number; unchanged: number; skipped: number; failed: number };
   'send-container': { success: boolean; error?: string; logError?: string }; 'edit-container': ApiRoutes['send-container'] & { source: SourceMessage };

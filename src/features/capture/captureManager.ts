@@ -358,10 +358,11 @@ async function sendCollection(
 	discordTimestamp: string,
 	target: string = 'капт',
 	maxMain: number = 20,
-	sendReminders = true
+	sendReminders = true,
+	channelId?: string
 ) {
 	const guild = interaction.guild
-	const channel = guild.channels.cache.get(dashboard.getSetting('PLUS_CHANNEL_ID'))
+	const channel = channelId ? await guild.channels.fetch(channelId) : guild.channels.cache.get(dashboard.getSetting('PLUS_CHANNEL_ID'))
  if (!channel?.isSendable()) throw new Error('Канал регистрации недоступен')
 
 	const mainList: string[] = []
