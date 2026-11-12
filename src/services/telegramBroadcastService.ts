@@ -134,7 +134,7 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 		}
 	}
 
-	const majesticSession = createTelegramMajesticSession({ send: (chatId, text) => api('sendMessage', { chat_id: chatId, text }).then(() => {}) })
+	const majesticSession = createTelegramMajesticSession({ pool, send: (chatId, text) => api('sendMessage', { chat_id: chatId, text }).then(() => {}) })
 
 	async function poll() {
 		let { rows: [state] } = await pool.query('SELECT update_offset FROM telegram_broadcast_state WHERE id = 1')

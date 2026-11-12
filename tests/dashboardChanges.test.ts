@@ -73,6 +73,15 @@ test('editor tokens preserve source and ignore inline and fenced code', () => {
 	assert.deepEqual(editorTokens(source, false).map(token => token.kind), ['link'])
 })
 
+test('editor mentions resolve names, preserve IDs and leave code literal', () => {
+	const channel = '<#1570143084304539740>', role = '<@&1570143084304539741>'
+	const resources = { channels: [{ id: '1570143084304539740', name: 'общий' }], roles: [{ id: '1570143084304539741', name: 'Участники' }] }
+	const source = `${channel} ${role} \`${channel}\`\n\`\`\`md\n${channel}\n\`\`\` <#1570143084304539742>`
+	const tokens = editorTokens(source, false, resources)
+	assert.deepEqual(tokens.map(token => token.label), ['#общий', '@Участники', '#1570143084304539742'])
+	for (const token of tokens) { assert.equal(token.kind, 'mention'); assert.equal(source.slice(token.start, token.end), token.source) }
+})
+
 test('capture role validation supports old single and comma-separated roles', () => {
 	const guild = { id: 'guild', roles: { cache: new Map([['one', {}], ['two', {}], ['guild', {}]]) }, channels: { cache: new Map([['channel', { type: 0, permissionsFor: () => ({ has: () => true }) }]]) }, members: { me: {} } } as unknown as Guild
 	const preset = { id: '12345678-1234-1234-1234-123456789012', command: 'test', target: 'target', channelId: 'channel', accessRoleId: '', maxMain: 10 }

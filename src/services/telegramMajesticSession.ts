@@ -3,25 +3,46 @@ import { writeFile, rename, unlink } from 'node:fs/promises'
 import path = require('node:path')
 import { ROOT_PATH } from '../config/path'
 import { readConfig, fetchMembers } from './majesticClient'
+import type { Pool } from 'pg'
 
 const sessionPath = path.join(ROOT_PATH, '.majestic-session')
 
-function loadSavedMajesticSession() {
+async function loadSavedMajesticSession(pool: Pool, env = process.env, savedPath = sessionPath) {
+	await pool.query(`CREATE TABLE IF NOT EXISTS majestic_session (
+		id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id), value TEXT NOT NULL
+	)`)
+	const result = await pool.query<{ value: string }>('SELECT value FROM majestic_session WHERE id = TRUE')
+	if (result.rows[0]?.value) {
+		env.MAJESTIC_SESSION_ID = result.rows[0].value
+		return
+	}
+	let value
 	try {
-		const value = readFileSync(sessionPath, 'utf8').trim()
-		if (value && !/[;\s\x00-\x1f\x7f]/.test(value)) process.env.MAJESTIC_SESSION_ID = value
+		value = readFileSync(savedPath, 'utf8').trim()
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.error('[Majestic] Не удалось прочитать сохранённую сессию.')
 	}
+	if (value && !/[;\s\x00-\x1f\x7f]/.test(value)) {
+		await pool.query('INSERT INTO majestic_session (id, value) VALUES (TRUE, $1) ON CONFLICT (id) DO NOTHING', [value])
+		const saved = await pool.query<{ value: string }>('SELECT value FROM majestic_session WHERE id = TRUE')
+		env.MAJESTIC_SESSION_ID = saved.rows[0]?.value || value
+	}
 }
 
-function createTelegramMajesticSession({ send, env = process.env, validate = fetchMembers,
+function createTelegramMajesticSession({ send, pool, env = process.env, validate = fetchMembers,
 	save = async (value: string) => {
+		if (pool) {
+			await pool.query(`CREATE TABLE IF NOT EXISTS majestic_session (
+				id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id), value TEXT NOT NULL
+			)`)
+			await pool.query('INSERT INTO majestic_session (id, value) VALUES (TRUE, $1) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value', [value])
+			return
+		}
 		const temporary = `${sessionPath}.tmp`
 		try { await writeFile(temporary, value, { mode: 0o600 }); await rename(temporary, sessionPath) }
 		catch (error) { await unlink(temporary).catch(() => {}); throw error }
 	}, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout }: {
-	send: (chatId: string, text: string) => Promise<void>; env?: NodeJS.ProcessEnv;
+	send: (chatId: string, text: string) => Promise<void>; pool?: Pool; env?: NodeJS.ProcessEnv;
 	validate?: typeof fetchMembers; save?: (value: string) => Promise<void>; now?: () => number;
 	setTimer?: typeof setTimeout; clearTimer?: typeof clearTimeout
 }) {

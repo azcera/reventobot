@@ -45,7 +45,7 @@ function setCaret(root: HTMLElement, start: number, end: number) {
 	root.focus({ preventScroll: true }); window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range)
 }
 
-function TagForm({ token, selected, onSubmit, close }: { token: Pick<EditorToken, 'kind' | 'source'>; selected: string; onSubmit(value: string | null): void; close(): void }) {
+function TagForm({ token, selected, resources, onSubmit, close }: { token: Pick<EditorToken, 'kind' | 'source'>; selected: string; resources: Resources; onSubmit(value: string | null): void; close(): void }) {
 	let initialText = selected, initialUrl = '', initialLabel = 'Открыть'
 	if (token.source) {
 		if (token.kind === 'link') { const match = /^\[([^\]]*)\]\((.*)\)$/.exec(token.source); initialText = match?.[1] || ''; initialUrl = match?.[2] || '' }
@@ -55,6 +55,7 @@ function TagForm({ token, selected, onSubmit, close }: { token: Pick<EditorToken
 	return <form className="mt-5 grid gap-4" onSubmit={event => {
 		event.preventDefault()
 		try {
+			if (token.kind === 'section' && !text) throw new Error('Заполни текст секции.')
 			const parsed = new URL(url); if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error('Укажи HTTP(S)-ссылку без логина и пароля.')
 			let source: string
 			if (token.kind === 'link') { if (/[\]\n]/.test(text) || /[\s)]/.test(url)) throw new Error('Проверь подпись и ссылку.'); source = `[${text}](${url})` }
@@ -62,7 +63,7 @@ function TagForm({ token, selected, onSubmit, close }: { token: Pick<EditorToken
 			onSubmit(source); close()
 		} catch (error) { setError(errorMessage(error)) }
 	}}>
-		{token.kind !== 'image' && <Field label={token.kind === 'section' ? 'Текст секции' : 'Текст ссылки'}><textarea required value={text} rows={4} onChange={event => setText(event.target.value)} /></Field>}
+		{token.kind !== 'image' && <Field label={token.kind === 'section' ? 'Текст секции' : 'Текст ссылки'}>{token.kind === 'section' ? <MarkdownEditor aria-label="Текст секции" value={text} onChange={setText} resources={resources} components={false} /> : <textarea required value={text} rows={4} onChange={event => setText(event.target.value)} />}</Field>}
 		{token.kind === 'section' && <Field label="Название кнопки"><input required value={label} maxLength={80} onChange={event => setLabel(event.target.value)} /></Field>}
 		<Field label={token.kind === 'image' ? 'Ссылка на изображение' : token.kind === 'section' ? 'Ссылка кнопки' : 'Адрес ссылки'}><input required type="url" value={url} onChange={event => setUrl(event.target.value)} /></Field>
 		{error && <p role="alert" className="text-danger">{error}</p>}
@@ -101,7 +102,7 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 	function openTag(kind: EditorToken['kind'], token?: EditorToken) {
 		const [start, end] = token ? [token.start, token.end] : lastSelection.current
 		modal({ title: (token ? 'Редактировать: ' : 'Добавить: ') + ({ image: 'изображение', section: 'секция', link: 'ссылка' })[kind], hideFooter: true,
-			content: ({ close }) => <TagForm token={{ kind, source: token?.source || '' }} selected={token ? '' : value.slice(start, end)} close={close} onSubmit={source => {
+			content: ({ close }) => <TagForm token={{ kind, source: token?.source || '' }} selected={token ? '' : value.slice(start, end)} resources={resources} close={close} onSubmit={source => {
 				const block = kind !== 'link' && source !== null
 				replace(start, end, (block && start && value[start - 1] !== '\n' ? '\n' : '') + (source || '') + (block && value[end] !== '\n' ? '\n' : ''))
 			}} /> })
@@ -111,8 +112,13 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 		if (stack.current[position.current].value !== value) { stack.current = [{ value, start: 0, end: 0 }]; position.current = 0 }
 		const focused = document.activeElement === root, caret = selection.current || (focused ? caretRange(root) : null)
 		const nodes: Node[] = []; let offset = 0
-		for (const token of editorTokens(value, components)) {
+		for (const token of editorTokens(value, components, resources)) {
 			nodes.push(document.createTextNode(value.slice(offset, token.start)))
+			if (token.kind === 'mention') {
+				const mention = document.createElement('span'); mention.contentEditable = 'false'; mention.dataset.source = token.source; mention.className = 'discord-mention font-sans'; mention.textContent = token.label; mention.title = token.source
+				nodes.push(mention); offset = token.end
+				continue
+			}
 			const chip = document.createElement('span'); chip.contentEditable = 'false'; chip.dataset.source = token.source; chip.className = 'editor-chip'; chip.role = 'button'; chip.tabIndex = 0; chip.textContent = token.label; chip.setAttribute('aria-label', 'Редактировать: ' + token.label)
 			chip.onclick = () => openTag(token.kind, token)
 			chip.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); openTag(token.kind, token) } }
@@ -128,7 +134,7 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 			if (rect && rect.height) { const top = Math.max(0, toolbar?.bottom || 0) + 16; if (rect.top < top) window.scrollBy(0, rect.top - top); else if (rect.bottom > window.innerHeight - 32) window.scrollBy(0, rect.bottom - window.innerHeight + 32) }
 		}
 		selection.current = null
-	}, [value, components, renderVersion])
+	}, [value, components, resources, renderVersion])
 	function refresh() { const [start, end] = caretRange(ref.current!); lastSelection.current = [start, end]; setQuery(queryAt(value, start, end)); setSelected(0) }
 	function choose(index: number) {
 		const item = found[index]; if (!query || !item) return
@@ -149,6 +155,8 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 			onMouseUp={refresh} onClick={refresh} onKeyUp={event => { if (!event.ctrlKey && !event.metaKey && !(found.length && ['ArrowUp', 'ArrowDown'].includes(event.key))) refresh() }} onBlur={() => setQuery(null)}
 			onCompositionEnd={() => { const root = ref.current!, [start, end] = caretRange(root); change(rawText(root), start, end) }}
 			onPaste={event => { event.preventDefault(); remember(); const [start, end] = lastSelection.current; replace(start, end, event.clipboardData.getData('text/plain').replace(/\r\n?/g, '\n')) }}
+			onCopy={event => { const [start, end] = caretRange(ref.current!); if (start !== end) { event.preventDefault(); event.clipboardData.setData('text/plain', value.slice(start, end)) } }}
+			onCut={event => { if (props.disabled || ref.current?.closest('fieldset')?.disabled) { event.preventDefault(); return }; const [start, end] = caretRange(ref.current!); if (start !== end) { event.preventDefault(); event.clipboardData.setData('text/plain', value.slice(start, end)); remember(); replace(start, end, '') } }}
 			onKeyDown={event => {
 				if (ref.current?.closest('fieldset')?.disabled) { event.preventDefault(); return }
 				if (event.nativeEvent.isComposing) return

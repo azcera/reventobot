@@ -24,7 +24,7 @@ const describe = (row: Partial<T.PreviewRow>) => JSON.stringify([row.status, row
 
 function createMajesticSync({ pool, store, env = process.env, readFamily, readDismissals, now = Date.now, logger = console, sleep = delay }: SyncOptions) {
 	loadEnvironment({ path: path.join(ROOT_PATH, '.env.majestic.local'), quiet: true })
-	if (env === process.env) loadSavedMajesticSession()
+	let sessionReady: Promise<void> | null = null
 	const entries = new Map<string, Promise<SyncEntry>>()
 	function safeText(value: unknown) {
 		let text = String(value ?? '')
@@ -61,6 +61,10 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, readDi
 		() => store.audit(actor, action, target, details))
 	let ready: Promise<unknown> | null = null
 	async function entry(guildId: string) {
+		if (!readFamily) {
+			sessionReady ||= loadSavedMajesticSession(pool, env).catch(error => { sessionReady = null; throw error })
+			await sessionReady
+		}
 		if (!ready) ready = pool.query(`CREATE TABLE IF NOT EXISTS majestic_sync_state (
 			guild_id TEXT PRIMARY KEY, value JSONB NOT NULL
 		)`).catch(error => { ready = null; throw error })
@@ -206,6 +210,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, readDi
 		},
 		async autoNicknames(guild: D.Guild) {
 			const item = await entry(guild.id)
+			if (!readFamily && !env.MAJESTIC_SESSION_ID) return null
 			if (item.busy || !store.getSetting('MAJESTIC_AUTO_NICKNAMES')) return null
 			const actor = { id: 'majestic-auto', name: 'Автосинхронизация Majestic' }
 			return start(guild, actor, 'sync', async current => {

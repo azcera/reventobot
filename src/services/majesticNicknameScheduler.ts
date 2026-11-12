@@ -22,7 +22,7 @@ function createMajesticNicknameScheduler({ client, sync, store, env = process.en
 		let stage = 'settings'
 		active = (async () => {
 			if (!store.ready || !store.getSetting('MAJESTIC_AUTO_NICKNAMES')) return
-			if (!env.MAJESTIC_SESSION_ID || !env.MAJESTIC_SERVER || !env.MAJESTIC_CHARACTER_ID) return
+			if (!env.MAJESTIC_SERVER || !env.MAJESTIC_CHARACTER_ID) return
 			stage = 'discord.guild.fetch'
 			const guild = await client.guilds.fetch(env.GUILD_ID!)
 			if (stopped) return
