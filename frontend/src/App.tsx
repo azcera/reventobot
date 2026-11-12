@@ -26,7 +26,7 @@ const pages = {
 	history: { title: 'История изменений', label: 'История изменений', description: 'Последние 100 действий администраторов. Время — московское.', icon: History }
 }
 
-function currentPage() { const page = location.hash.slice(1); return Object.hasOwn(pages, page) ? page as keyof typeof pages : 'overview' }
+function currentPage() { const page = location.hash.slice(1).split('?')[0]; return Object.hasOwn(pages, page) ? page as keyof typeof pages : 'overview' }
 
 function Login({ loading, configured, status, retry }: { loading: boolean; configured: boolean; status: string; retry(): void }) {
 	return <main className="login-screen"><div className="login-decoration" aria-hidden="true" /><div className="login-card"><img src="/revento-logo.png" className="mb-8 size-16 rounded-2xl" alt="Логотип Revento" /><p className="eyebrow mb-4">REVENTO / CONTROL ROOM</p><h1 className="text-4xl font-semibold leading-tight tracking-[-1.5px] sm:text-5xl">Всё под<br /><span className="text-brand">контролем.</span></h1><p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">Сообщения, компоненты и настройки твоего сервера в одном месте.</p>
@@ -118,7 +118,7 @@ export function App() {
 		start()
 		const change = () => { setPage(currentPage()); setMenu(false); setToast('') }
 		window.addEventListener('hashchange', change)
-		if (!Object.hasOwn(pages, location.hash.slice(1)) && location.hash) history.replaceState(null, '', '/#overview')
+		if (!Object.hasOwn(pages, location.hash.slice(1).split('?')[0]) && location.hash) history.replaceState(null, '', '/#overview')
 		return () => window.removeEventListener('hashchange', change)
 	}, [])
 	useEffect(() => {

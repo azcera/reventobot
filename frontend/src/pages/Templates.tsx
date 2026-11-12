@@ -1,6 +1,6 @@
 import { replaceTemplateVariables } from '../../../shared/templateVariables'
 import type { Config, Resources, Drafts, Setter, PageServices } from '../types'
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, Link, Pencil, Plus, RefreshCw, RotateCcw, Save, Send, Trash2, Unlink } from 'lucide-react'
 import { Button, Field, IconButton, Panel, useModal } from '../components/ui'
 import { TemplateVariables } from './Variables'
@@ -29,6 +29,22 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 	const groups = [...new Set(config.templates.map(field => field.group))]
 	const [selectedGroup, setSelectedGroup] = useState(groups[0])
 	const [generation, setGeneration] = useState(0)
+	const variablesRef = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		let frame = 0
+		function openTarget() {
+			cancelAnimationFrame(frame)
+			const [page, query] = location.hash.slice(1).split('?')
+			if (page !== 'templates') return
+			const params = new URLSearchParams(query), target = params.get('group')
+			if (!target) return
+			setSelectedGroup(target)
+			if (params.get('section') === 'variables') frame = requestAnimationFrame(() => variablesRef.current?.scrollIntoView({ block: 'start' }))
+		}
+		openTarget()
+		window.addEventListener('hashchange', openTarget)
+		return () => { window.removeEventListener('hashchange', openTarget); cancelAnimationFrame(frame) }
+	}, [])
 	const modal = useModal()
 	const group = groups.includes(selectedGroup) ? selectedGroup : groups[0]
 	const fields = editorFields(config, group)
@@ -91,7 +107,7 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 				</form>
 			</Panel>
 		</EditorWorkspace>
-		<TemplateVariables key={group} group={group} config={config} setConfig={setConfig} api={api} run={run} notify={notify} />
+		<div ref={variablesRef} className="scroll-mt-6"><TemplateVariables key={group} group={group} config={config} setConfig={setConfig} api={api} run={run} notify={notify} /></div>
 		{group === 'Навигация' && <div className="binding-strip"><div className="min-w-0 flex-1"><h2 className="text-sm font-medium">Навигация в архивах</h2><p className="mt-1 text-xs text-muted">Обновление всех копий с сохранением приветствия и кнопки поиска.</p></div><IconButton icon={RefreshCw} label="Обновить навигацию во всех архивах" onClick={() => {
 			if (dirtyGroup(config, drafts, group)) return notify('Сначала сохрани изменения навигации.', true)
 			run(async () => { notify('Обновляется навигация в архивах…'); const next = await api('navigation/sync', {}); result(next, 'Навигация обновлена. Сообщений: ' + (next.syncResults?.[0]?.updated || 0) + '.') })
