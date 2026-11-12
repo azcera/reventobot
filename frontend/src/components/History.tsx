@@ -5,7 +5,7 @@ import { Empty, IconButton, useModal } from './ui'
 import { permanentGroups } from '../lib/templates'
 
 const actions: Record<string, string> = {
-	templates: 'Обновление шаблона', settings: 'Обновление настроек', bindings: 'Привязка сообщения',
+	templates: 'Обновление шаблона', settings: 'Обновление настроек', bindings: 'Привязка сообщения', templateVariables: 'Изменение переменной',
 	'message.edit': 'Сообщение изменено', 'message.edit.request': 'Запрос изменения',
 	'container.send': 'Публикация контейнера', 'container.send.request': 'Запрос публикации',
 	'container.edit': 'Контейнер изменён', 'container.edit.request': 'Запрос изменения контейнера',
@@ -31,9 +31,23 @@ export function HistoryRows({ entries, config, guild, compact = false }: { entri
 			try { if (typeof entry.details === 'string') details = JSON.parse(entry.details) as HistoryDetails } catch { details = { error: 'Не удалось прочитать подробности записи.' } }
 			details ||= {}
 			const failed = entry.action.endsWith('.failed') || details.error
-			const title = entry.action.endsWith('.failed') ? 'Не удалось выполнить действие' : actions[entry.action] || entry.action
+			let title = entry.action.endsWith('.failed') ? 'Не удалось выполнить действие' : actions[entry.action] || entry.action
 			const fields = { ...(Array.isArray(details.fields) ? {} : details.fields || {}) }
 			for (const [key, after] of Object.entries(details.changes || {})) fields[key] = { label: label(key), before: details.before?.[key], after }
+			if (entry.action === 'templateVariables') {
+				const names = new Set<string>()
+				for (const [key, change] of Object.entries(fields)) {
+					const group = key.endsWith('.labels') ? key.slice(0, -7) : key
+					const before = change.before && typeof change.before === 'object' ? change.before as Record<string, unknown> : {}
+					const after = change.after && typeof change.after === 'object' ? change.after as Record<string, unknown> : {}
+					const labels = fields[group + '.labels']
+					const savedLabels = { ...(labels?.before as Record<string, string>), ...(labels?.after as Record<string, string>) }
+					for (const variable of new Set([...Object.keys(before), ...Object.keys(after)])) {
+						if (before[variable] !== after[variable]) names.add(savedLabels[variable] || config.templateVariableLabels?.[group]?.[variable] || variable)
+					}
+				}
+				if (names.size) title += ' · ' + [...names].join(', ')
+			}
 			const link = /^https:\/\/discord.com\/channels\/\d+\/\d+\/\d+$/.test(entry.target)
 			return <article key={entry.id} className="history-row">
 				<div className={`history-mark ${failed ? 'text-danger' : 'text-brand'}`}><FileClock aria-hidden="true" /></div>

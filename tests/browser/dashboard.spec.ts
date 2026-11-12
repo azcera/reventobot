@@ -25,6 +25,21 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 	return requests
 }
 
+test('variable history shows changed variable names instead of the internal action', async ({ page }) => {
+	await setup(page, 'settings')
+	const group = 'Система повышения'
+	await page.route('**/api/history', route => route.fulfill({ json: [
+		{ id: 1, action: 'templateVariables', target: group, actor: 'u', created_at: '2026-01-01T12:00:00Z', details: { fields: { [group]: { before: { price: '100', unchanged: 'same' }, after: { price: '200', unchanged: 'same' } }, [group + '.labels']: { after: { price: 'Цена пулемёта' } } } } },
+		{ id: 2, action: 'templateVariables', target: group, actor: 'u', created_at: '2026-01-01T12:00:00Z', details: JSON.stringify({ fields: { [group]: { before: { removed: '100' }, after: {} } } }) },
+		{ id: 3, action: 'templateVariables', target: group, actor: 'u', created_at: '2026-01-01T12:00:00Z', details: { fields: { [group + '.labels']: { before: { price: 'Цена' }, after: { price: 'Новая цена' } } } } }
+	] }))
+	await page.goto('/#history')
+	await expect(page.getByRole('heading', { name: 'Изменение переменной · Цена пулемёта', exact: true })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Изменение переменной · removed', exact: true })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Изменение переменной · Новая цена', exact: true })).toBeVisible()
+	await expect(page.locator('.history-row').filter({ hasText: /templateVariables|unchanged/ })).toHaveCount(0)
+})
+
 test('settings categories start collapsed and search opens matches', async ({ page }) => {
 	await setup(page, 'settings')
 	const category = page.locator('details').filter({ hasText: 'Заявки и принятие' })
