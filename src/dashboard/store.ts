@@ -32,6 +32,7 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 	PARENT_CHANNEL_ID: { label: 'Канал архивов', type: 'channel', channelTypes: [0] },
 	ARCHIVE_SETTINGS_CHANNEL: { label: 'Канал списков архивов', type: 'channel', channelTypes: [0] },
 	PLUS_CHANNEL_ID: { label: 'Канал регистрации на капт', type: 'channel', channelTypes: [0] },
+	PING_CHANNEL_ID: { label: 'Канал уведомлений о группах', type: 'channel', channelTypes: [0, 5] },
 	CAPT_INFO_CHANNEL_ID: { label: 'Канал объявлений каптов из Telegram', type: 'channel', channelTypes: [0] },
 	ADMIN_ROLES: { label: 'Роли модераторов бота (не дают доступ в дашборд)', type: 'roles' },
 	ACCESS_GROUP_ROLES: { label: 'Создание групп: расписание и /group', type: 'roles' },
@@ -54,7 +55,7 @@ function refreshBoundFields(state: DashboardState) {
 	for (const binding of Object.values(state.bindings || {})) for (const field of binding.fields || []) catalog[field.key] = field
 }
 
-function createStore() {
+function createStore(env = process.env) {
 	let state: DashboardState = { templates: {}, settings: {} }
 	let revision = 0
 	let pool: Pool
@@ -63,7 +64,7 @@ function createStore() {
 	function getSetting<K extends string>(key: K): SettingFor<K> {
 		if (key === 'ROLE_PREFIXES') return structuredClone(state.settings[key] ?? defaultRolePrefixes(String(getSetting('ADMIN_ROLES')).split(',').map(id => id.trim()).filter(Boolean))) as SettingFor<K>
 		const value = Object.hasOwn(state.settings, key) ? state.settings[key]
-			: process.env[key] ?? settingDefinitions[key]?.default ?? ''
+			: settingDefinitions[key]?.default ?? ''
 		return (settingDefinitions[key]?.type === 'boolean' ? value === true || value === 'true' : value) as SettingFor<K>
 	}
 	return {
@@ -128,10 +129,32 @@ function createStore() {
 				actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, details JSONB NOT NULL
 			);
 			INSERT INTO dashboard_state (id) VALUES (1) ON CONFLICT DO NOTHING`)
-			const result = await pool.query('SELECT revision, value FROM dashboard_state WHERE id = 1')
-			state = result.rows[0].value
+			const db = await pool.connect()
+			try {
+				await db.query('BEGIN')
+				const result = await db.query('SELECT revision, value FROM dashboard_state WHERE id = 1 FOR UPDATE')
+				state = result.rows[0].value
+				revision = result.rows[0].revision
+				if (!state.settingsEnvMigrated) {
+					const imported: string[] = []
+					for (const [key, field] of Object.entries(settingDefinitions)) {
+						const value = env[key]?.trim()
+						if (Object.hasOwn(state.settings, key) || !value || field.type === 'rolePrefixes') continue
+						state.settings[key] = field.type === 'boolean' ? value === 'true' : value
+						imported.push(key)
+					}
+					state.settingsEnvMigrated = true
+					await db.query('UPDATE dashboard_state SET value = $1::jsonb, revision = revision + 1 WHERE id = 1', [JSON.stringify(state)])
+					await db.query('INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',
+						['env-migration', 'settings.migrate', imported.join(', '), JSON.stringify({ imported })])
+					revision++
+				}
+				await db.query('COMMIT')
+			} catch (error) {
+				await db.query('ROLLBACK')
+				throw error
+			} finally { db.release() }
 			refreshBoundFields(state)
-			revision = result.rows[0].revision
 			ready = true
 		},
 		async trackNavigation(message: Message, location: { containerIndex: number; prefixLength: number }) {
@@ -177,7 +200,7 @@ function createStore() {
 				const changes: Record<string, unknown> = {}
 				for (const key of Object.keys(values)) {
 					const definition = section === 'templates' ? templateDefinition(key) : settingDefinitions[key]
-					const fallback = section === 'settings' ? process.env[key] ?? definition?.default ?? '' : definition?.default
+					const fallback = section === 'settings' ? definition?.default ?? '' : definition?.default
 					const before = current.value[section]?.[key] ?? fallback
 					const after = next[section]?.[key] ?? fallback
 					if (JSON.stringify(before) !== JSON.stringify(after)) changes[key] = section === 'bindings'

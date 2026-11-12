@@ -17,6 +17,10 @@ require('dotenv').config()
  * @param {Guild} guild
  */
 async function updateLists(guild: import('discord.js').Guild) {
+	if (['PARENT_CHANNEL_ID', 'ARCHIVE_SETTINGS_CHANNEL', 'AUTO_ROLE', 'ARCHIVE_GROUP_ROLES'].some(key => !dashboard.getSetting(key).trim())) {
+		console.warn('⚠️ Обновление списков архивов пропущено: заполните настройки архивов в дашборде.')
+		return
+	}
 	/**
 	 * @type {ContainerBuilder[]}
 	 */

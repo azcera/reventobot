@@ -6,6 +6,60 @@ import { editorTokens } from '../frontend/src/lib/editorTokens'
 import { createStore } from '../src/dashboard/store'
 import { validatePresets } from '../src/features/capture/capturePresets'
 import { validateLists } from '../src/services/mclLists'
+import { updateLists } from '../src/features/archive/updateLists'
+import type { DashboardState } from '../src/types'
+
+test('settings migrate once from env without overwriting DB values and remain in DB after restart', async () => {
+	let row = { revision: 4, value: { templates: {}, settings: { AUTO_ROLE: 'saved', ADMIN_ROLES: '' } } as DashboardState }
+	const query = async (sql: string, params?: unknown[]) => {
+		if (sql.startsWith('SELECT revision')) return { rows: [structuredClone(row)] }
+		if (sql.startsWith('UPDATE dashboard_state')) row = { revision: row.revision + 1, value: JSON.parse(params![0] as string) }
+		return { rows: [] }
+	}
+	const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool
+	const store = createStore({ AUTO_ROLE: 'old', ADMIN_ROLES: 'old-admin', PING_CHANNEL_ID: ' channel ', MAJESTIC_AUTO_KICK: 'false', TOKEN: 'secret', PLUS_CHANNEL_ID: ' ' })
+	assert.equal(store.getSetting('PING_CHANNEL_ID'), '')
+	await store.init(pool)
+	assert.equal(store.getSetting('AUTO_ROLE'), 'saved')
+	assert.equal(store.getSetting('ADMIN_ROLES'), '')
+	assert.equal(store.getSetting('PING_CHANNEL_ID'), 'channel')
+	assert.equal(store.getSetting('MAJESTIC_AUTO_KICK'), false)
+	assert.equal(store.getSetting('PLUS_CHANNEL_ID'), '')
+	assert.equal(Object.hasOwn(row.value.settings, 'TOKEN'), false)
+	assert.equal(row.revision, 5)
+	const restarted = createStore({ PING_CHANNEL_ID: 'changed', PLUS_CHANNEL_ID: 'late-env-value' })
+	await restarted.init(pool)
+	assert.equal(restarted.getSetting('PING_CHANNEL_ID'), 'channel')
+	assert.equal(restarted.getSetting('PLUS_CHANNEL_ID'), '')
+	assert.equal(row.revision, 5)
+	await restarted.save('settings', { PING_CHANNEL_ID: 'new-channel' }, 5, 'tester')
+	const withoutEnv = createStore({})
+	await withoutEnv.init(pool)
+	assert.equal(withoutEnv.getSetting('PING_CHANNEL_ID'), 'new-channel')
+	await withoutEnv.save('settings', { PING_CHANNEL_ID: null }, 6, 'tester')
+	assert.equal(withoutEnv.getSetting('PING_CHANNEL_ID'), '')
+	assert.equal(withoutEnv.getSetting('TELEGRAM_BROADCAST_ENABLED'), true)
+})
+
+test('failed settings migration rolls back and does not mark store ready', async () => {
+	const statements: string[] = []
+	const query = async (sql: string) => {
+		statements.push(sql)
+		if (sql.startsWith('SELECT revision')) return { rows: [{ revision: 0, value: { templates: {}, settings: {} } }] }
+		if (sql.startsWith('UPDATE dashboard_state')) throw new Error('database unavailable')
+		return { rows: [] }
+	}
+	const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool
+	const store = createStore({ AUTO_ROLE: 'role' })
+	await assert.rejects(store.init(pool), /database unavailable/)
+	assert.equal(store.ready, false)
+	assert.equal(statements.at(-1), 'ROLLBACK')
+})
+
+test('empty archive settings skip Discord requests and preserve existing messages', async () => {
+	const guild = { get channels() { throw new Error('Discord must not be accessed') } } as unknown as Guild
+	await updateLists(guild)
+})
 
 test('editor tokens preserve source and ignore inline and fenced code', () => {
 	const source = '`[skip](https://example.com)`\n```md\n<img src="https://skip">\n```\n[link](https://example.com) <img src="https://img"> <section title="a">body</section>'
@@ -30,7 +84,7 @@ test('list role validation supports single and multiple roles and rejects missin
 })
 
 test('variables save, replace at runtime, preserve snapshot source and reject stale revisions', async () => {
-	let row = { revision: 0, value: { templates: { 'promotion.document': 'Hello {name}' }, settings: {} } as Record<string, unknown> }
+	let row = { revision: 0, value: { templates: { 'promotion.document': 'Hello {name}' }, settings: {}, settingsEnvMigrated: true } as Record<string, unknown> }
 	const audit: unknown[][] = []
 	const query = async (sql: string, params?: unknown[]) => {
 		if (sql.startsWith('SELECT revision')) return { rows: [structuredClone(row)] }
@@ -39,7 +93,7 @@ test('variables save, replace at runtime, preserve snapshot source and reject st
 		return { rows: [] }
 	}
 	const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool
-	const store = createStore()
+	const store = createStore({})
 	await store.init(pool)
 	await store.save('templateVariables', { 'Система повышения': { name: 'World' } }, 0, 'tester')
 	assert.equal(store.text('promotion.document'), 'Hello World')

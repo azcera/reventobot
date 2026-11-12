@@ -9,8 +9,12 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 		const path = new URL(route.request().url()).pathname.slice(5)
 		const body = route.request().postDataJSON()
 		requests.push({ path, body })
+		if (path === 'settings' && body?.values) {
+			for (const field of config.settings) if (Object.hasOwn(body.values, field.key)) field.value = body.values[field.key]
+			config.revision++
+		}
 		const data: Record<string, unknown> = { session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'mcl-lists': { revision: 3, lists: body?.lists || [list] }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
-		await route.fulfill({ json: data[path] ?? {} })
+		await route.fulfill({ json: path === 'settings' ? config : data[path] ?? {} })
 	})
 	await page.goto('/#' + hash)
 	await expect(page.getByRole('heading', { name: ({ settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', mcl: 'Списки' } as Record<string, string>)[hash], exact: true })).toBeVisible()
@@ -24,6 +28,23 @@ test('settings categories start collapsed and search opens matches', async ({ pa
 	await page.getByRole('searchbox', { name: 'Поиск настроек' }).fill('Категория заявок')
 	await expect(category).toHaveAttribute('open', '')
 	await expect(page.getByLabel('Категория заявок')).toBeVisible()
+})
+
+test('missing DB settings can be opened, saved and remain configured after reload', async ({ page }) => {
+	const requests = await setup(page, 'settings')
+	await expect(page.getByText('Не заполнено в БД:', { exact: false })).toBeVisible()
+	await page.getByRole('button', { name: 'Категория заявок', exact: true }).click()
+	await expect(page.getByLabel('Категория заявок')).toBeVisible()
+	// The fixture supplies a text channel; make it an allowed category for this test.
+	await page.route('**/api/resources', route => route.fulfill({ json: { roles: [], channels: [{ id: 'category', name: 'Заявки', type: 4 }] } }))
+	await page.reload()
+	await page.getByRole('button', { name: 'Категория заявок', exact: true }).click()
+	await page.getByLabel('Категория заявок').selectOption('category')
+	await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
+	await expect.poll(() => requests.find(r => r.path === 'settings')?.body).toEqual({ revision: 3, values: { INVITE_CATEGORY_ID: 'category' } })
+	await expect(page.getByText('Не заполнено в БД:', { exact: false })).toHaveCount(0)
+	await page.reload()
+	await expect(page.getByText('Не заполнено в БД:', { exact: false })).toHaveCount(0)
 })
 
 test('thread picker loads lazily and publishes selected thread', async ({ page }) => {

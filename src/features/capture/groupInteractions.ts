@@ -100,10 +100,10 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 	})
 
 	try {
-		const pingChannelId = process.env.PING_CHANNEL_ID
+		const pingChannelId = dashboard.getSetting('PING_CHANNEL_ID')
 		const mentionedRoleId = dashboard.getSetting('AUTO_ROLE')
 		if (!pingChannelId)
-			return console.log('❌ В файле .env не указан PING_CHANNEL_ID')
+			return console.log('❌ Укажите канал уведомлений о группах в настройках дашборда (PING_CHANNEL_ID)')
 
 		const pingChannel =
 			interaction.client.channels.cache.get(pingChannelId) ||

@@ -22,7 +22,7 @@ require('dotenv').config()
  */
 async function getArchivesLists(guild: import('discord.js').Guild) {
 	if (!dashboard.roleIds('ARCHIVE_GROUP_ROLES').length || !dashboard.getSetting('AUTO_ROLE')) {
-		console.error('❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в .env')
+		console.error('❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в настройках дашборда')
 		return
 	}
 

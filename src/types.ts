@@ -80,6 +80,7 @@ export interface DashboardState {
 	templates: Record<string, string>
 	templateVariables?: Record<string, Record<string, string>>
 	settings: Record<string, SettingValue>
+	settingsEnvMigrated?: boolean
 	bindings?: Record<string, Binding>
 	mclLists?: Record<string, MclList>
 	capturePresets?: Record<string, CapturePreset>
