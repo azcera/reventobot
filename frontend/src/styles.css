@@ -23,9 +23,9 @@
 	button:disabled, fieldset:disabled button { @apply cursor-not-allowed opacity-40; }
 	[hidden] { display: none !important; }
 	button, a, input, textarea, select, summary, [role='button'] { @apply focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-brand; }
-	input:not([type='checkbox']):not([type='color']), select, textarea { @apply w-full min-w-0 rounded-lg border border-line bg-input px-3.5 py-3 text-sm text-text transition-colors placeholder:text-muted/60 hover:border-muted/50 focus:border-brand; }
+	input:not([type='checkbox']):not([type='radio']):not([type='color']), select, textarea { @apply w-full min-w-0 rounded-lg border border-line bg-input px-3.5 py-3 text-sm text-text transition-colors placeholder:text-muted/60 hover:border-muted/50 focus:border-brand; }
 	select { @apply pr-8; }
-	input[type='checkbox'] { @apply size-4 shrink-0 cursor-pointer accent-brand; }
+	input[type='checkbox'], input[type='radio'] { @apply size-4 shrink-0 cursor-pointer accent-brand; }
 	input:disabled, select:disabled, textarea:disabled { @apply opacity-50; }
 	fieldset { @apply m-0 min-w-0 border-0 p-0; }
 	svg { @apply shrink-0; }
@@ -207,7 +207,7 @@
 }
 
 @media (max-width: 639px) {
-	input:not([type='checkbox']), select, .markdown-source { font-size: 16px; }
+	input:not([type='checkbox']):not([type='radio']), select, .markdown-source { font-size: 16px; }
 	.discord-message { grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 18px 10px 24px; }
 	.discord-avatar { width: 28px; height: 28px; }
 	.discord-container { padding: 12px; }

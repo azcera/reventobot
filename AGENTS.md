@@ -38,6 +38,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | HTTP API дашборда | `src/dashboard/routes.ts`; часть API контейнеров подключена в `index.ts` |
 | Вход, права, сессии | `src/dashboard/auth.ts`, `src/dashboard/sessions.ts` |
 | Настройки и каталог шаблонов | `src/dashboard/store.ts`, `src/dashboard/templates.json` |
+| Переменные шаблонов | `shared/templateVariables.ts`, `frontend/src/pages/Variables.tsx`, `src/dashboard/routes.ts`, `src/dashboard/store.ts` |
 | Редактирование и публикация сообщений | `src/dashboard/messageEditor.ts`, `src/dashboard/permanentMessages.ts`, `src/dashboard/navigationMessages.ts`, `src/services/containerMessageService.ts` |
 | База и схема | `src/services/database.ts`; SQL также ищи в сервисе соответствующей функции |
 | Оболочка и навигация UI | `frontend/src/App.tsx`, `frontend/src/main.tsx` |

@@ -10,7 +10,7 @@ export interface TemplateField { key: string; group: string; label: string; type
 export type PreviewField = Pick<TemplateField, 'type' | 'value'> & Partial<TemplateField>
 export interface Binding { link: string; fields?: TemplateField[] }
 export interface SyncResult { kind: string; ok: boolean; error?: string; logError?: string; updated?: number }
-export interface Config { revision: number; templateVariables?: Record<string, Record<string, string>>; templates: TemplateField[]; settings: SettingField[]; bindings: Record<string, Binding>; syncResults?: SyncResult[] }
+export interface Config { revision: number; templateVariables?: Record<string, Record<string, string>>; templateVariableLabels?: Record<string, Record<string, string>>; templates: TemplateField[]; settings: SettingField[]; bindings: Record<string, Binding>; syncResults?: SyncResult[] }
 export type Drafts = Record<string, Record<string, string>>
 export type SettingsDraft = Record<string, SettingValue>
 export type Setter<T> = Dispatch<SetStateAction<T>>

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
-async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец') {
-	const config = { revision: 3, bindings: {}, templateVariables: {}, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] }
+async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец', templateVariables: Record<string, Record<string, string>> = {}) {
+	const config = { revision: 3, bindings: {}, templateVariables, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] }
 	const preset = { id: '12345678-1234-1234-1234-123456789012', command: 'test', target: 'Сбор', channelId: 'parent', accessRoleId: 'one', maxMain: 10 }
 	const list = { id: preset.id, title: 'Список', channelId: 'parent', roleId: 'one', accessRoleId: 'one', addName: 'Добавить', removeName: 'Убрать' }
 	const requests: { path: string; body: any }[] = []
@@ -13,8 +13,12 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 			for (const field of config.settings) if (Object.hasOwn(body.values, field.key)) field.value = body.values[field.key]
 			config.revision++
 		}
+		if (path === 'template-variables' && body?.values) {
+			Object.assign(config, { templateVariables: { [body.group]: body.values }, templateVariableLabels: { [body.group]: body.labels } })
+			config.revision++
+		}
 		const data: Record<string, unknown> = { session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'mcl-lists': { revision: 3, lists: body?.lists || [list] }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
-		await route.fulfill({ json: path === 'settings' ? config : data[path] ?? {} })
+		await route.fulfill({ json: ['settings', 'template-variables'].includes(path) ? config : data[path] ?? {} })
 	})
 	await page.goto('/#' + hash)
 	await expect(page.getByRole('heading', { name: ({ settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', mcl: 'Списки' } as Record<string, string>)[hash], exact: true })).toBeVisible()
@@ -59,13 +63,31 @@ test('thread picker loads lazily and publishes selected thread', async ({ page }
 })
 
 test('variable changes save', async ({ page }) => {
-	const requests = await setup(page, 'variables')
+	const source = '<section buttonLabel="Открыть" buttonLink="https://example.com">Цена {цена-пулик}</section>'
+	const requests = await setup(page, 'variables', source)
 	await page.getByRole('button', { name: 'Добавить переменную' }).click()
-	await page.getByLabel('Имя переменной 1').fill('name')
-	await page.getByLabel('Значение name').fill('Alice')
+	await page.getByLabel('Название переменной 1').fill('Цена пулемёта')
+	await page.getByLabel('Ключ в тексте 1').fill('цена-пулик')
+	await page.getByLabel('Значение Цена пулемёта').fill('100')
 	await page.getByRole('button', { name: 'Сохранить переменные' }).click()
-	await expect.poll(() => requests.find(r => r.path === 'template-variables')?.body).toEqual({ group: 'Система повышения', values: { name: 'Alice' }, revision: 3 })
+	await expect.poll(() => requests.find(r => r.path === 'template-variables')?.body).toEqual({ group: 'Система повышения', values: { 'цена-пулик': '100' }, labels: { 'цена-пулик': 'Цена пулемёта' }, revision: 3 })
 	await expect(page.getByText('Переменные сохранены. Публикации обновлены.')).toBeVisible()
+	await page.reload()
+	await expect(page.getByRole('textbox', { name: 'Название переменной 1' })).toHaveValue('Цена пулемёта')
+	await page.getByRole('searchbox', { name: 'Поиск переменных' }).fill('пулемёта')
+	await expect(page.getByRole('textbox', { name: 'Ключ в тексте 1' })).toHaveValue('цена-пулик')
+	await page.goto('/#templates')
+	await expect(page.getByRole('textbox', { name: 'Название переменной 1' })).toHaveValue('Цена пулемёта')
+	await page.getByRole('tab', { name: 'Предпросмотр' }).click()
+	await expect(page.getByLabel('Предпросмотр сообщения в Discord')).toContainText('Цена 100')
+	await expect(page.getByLabel('Предпросмотр сообщения в Discord')).not.toContainText('{цена-пулик}')
+})
+
+test('variable without saved label displays its existing key', async ({ page }) => {
+	await setup(page, 'variables', undefined, { 'Система повышения': { old_key: 'old value' } })
+	await expect(page.getByRole('textbox', { name: 'Название переменной 1' })).toHaveValue('old_key')
+	await expect(page.getByRole('textbox', { name: 'Ключ в тексте 1' })).toHaveValue('old_key')
+	await expect(page.getByRole('textbox', { name: 'Значение old_key' })).toHaveValue('old value')
 })
 
 test('link dialog cancel, edit and undo preserve Markdown source', async ({ page }) => {

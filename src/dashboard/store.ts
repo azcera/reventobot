@@ -1,3 +1,4 @@
+import { replaceTemplateVariables } from '../../shared/templateVariables'
 import { getError } from '../utils/errors'
 import type * as D from 'discord.js'
 import type * as T from '../types'
@@ -71,6 +72,7 @@ function createStore(env = process.env) {
 		get ready() { return ready },
 		get revision() { return revision },
 		get templateVariables() { return structuredClone(state.templateVariables || {}) },
+		get templateVariableLabels() { return structuredClone(state.templateVariableLabels || {}) },
 		getSetting,
 		get bindings() { return structuredClone(state.bindings || {}) },
 		get mclLists() { return structuredClone(state.mclLists || {}) },
@@ -93,14 +95,13 @@ function createStore(env = process.env) {
 			}
 			if (typeof source !== 'string') throw new Error(`Unknown template: ${key}`)
 			const custom = raw ? {} : state.templateVariables?.[catalog[key]?.group || templateDefinition(key)?.group || ''] || {}
-			return source.replace(/\{([a-zA-Zа-яА-ЯёЁ][a-zA-Zа-яА-ЯёЁ0-9_]*)\}/g, (match, name: string) =>
-				Object.hasOwn(variables, name) ? String(variables[name]) : Object.hasOwn(custom, name) ? custom[name] : match)
+			return replaceTemplateVariables(source, custom, variables)
 		},
 		snapshot() {
 			const fields = { ...catalog }
 			for (const kind of ['promotion', 'recruit']) if (!state.bindings?.[kind]) fields[kind + '.document'] = templateDefinition(kind + '.document')!
 			for (const key of Object.keys(state.templates)) if (templateDefinition(key)) fields[key] = templateDefinition(key)!
-			return { revision, templateVariables: this.templateVariables, bindings: this.bindings, templates: Object.entries(fields).sort(([a], [b]) => {
+			return { revision, templateVariables: this.templateVariables, templateVariableLabels: this.templateVariableLabels, bindings: this.bindings, templates: Object.entries(fields).sort(([a], [b]) => {
 				if (a.startsWith('rules.') !== b.startsWith('rules.')) return a.startsWith('rules.') ? -1 : 1
 				if (a === 'rules.1' || b === 'rules.1') return a === b ? 0 : a === 'rules.1' ? -1 : 1
 				const order = (key: string) => { const parts = key.split('.'); return [Number(parts[2]), parts[1] === 'heading' ? 0 : Number(parts[3])] }
@@ -168,7 +169,7 @@ function createStore(env = process.env) {
 		async forgetNavigation(messageId: string) {
 			await pool.query('DELETE FROM dashboard_navigation_messages WHERE message_id = $1', [messageId])
 		},
-		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | CapturePreset | Record<string, string> | null>, expectedRevision: number, actor?: Actor | string) {
+		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | CapturePreset | Record<string, string> | null>, expectedRevision: number, actor?: Actor | string, variableLabels?: Record<string, Record<string, string>>) {
 			const db = await pool.connect()
 			try {
 				await db.query('BEGIN')
@@ -181,6 +182,7 @@ function createStore(env = process.env) {
 					throw Object.assign(new Error('Настройки изменены другим пользователем. Обновите страницу.'), { status: 409 })
 				}
 				const next = { ...current.value, [section]: { ...current.value[section] } }
+				if (section === 'templateVariables' && variableLabels) next.templateVariableLabels = { ...current.value.templateVariableLabels, ...variableLabels }
 				if (section === 'bindings') {
 					next.templates = { ...current.value.templates }
 					for (const [kind, binding] of Object.entries(values)) {
@@ -206,6 +208,10 @@ function createStore(env = process.env) {
 					if (JSON.stringify(before) !== JSON.stringify(after)) changes[key] = section === 'bindings'
 						? { label: ({ rules: 'Привязка правил', invite: 'Привязка приглашения', promotion: 'Привязка системы повышения', recruit: 'Привязка памятки рекрута' } as Record<string, string>)[key] || key, before: before?.link || null, after: after?.link || null }
 						: { label: definition?.label || key, before, after }
+				}
+				if (section === 'templateVariables' && variableLabels) for (const [group, labels] of Object.entries(variableLabels)) {
+					const before = current.value.templateVariableLabels?.[group] || {}
+					if (JSON.stringify(before) !== JSON.stringify(labels)) changes[group + '.labels'] = { label: 'Названия переменных · ' + group, before, after: labels }
 				}
 				await db.query('UPDATE dashboard_state SET value = $1::jsonb, revision = revision + 1 WHERE id = 1', [JSON.stringify(next)])
 				await db.query('INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',

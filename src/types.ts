@@ -79,6 +79,7 @@ export interface EditableField { path: string; label: string; value: string; max
 export interface DashboardState {
 	templates: Record<string, string>
 	templateVariables?: Record<string, Record<string, string>>
+	templateVariableLabels?: Record<string, Record<string, string>>
 	settings: Record<string, SettingValue>
 	settingsEnvMigrated?: boolean
 	bindings?: Record<string, Binding>

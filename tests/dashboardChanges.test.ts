@@ -3,7 +3,11 @@ import assert from 'node:assert/strict'
 import type { Pool } from 'pg'
 import type { Guild } from 'discord.js'
 import { editorTokens } from '../frontend/src/lib/editorTokens'
-import { createStore } from '../src/dashboard/store'
+import { createStore, store as dashboardStore } from '../src/dashboard/store'
+import { registerDashboard } from '../src/dashboard/routes'
+import type { Express, Request, Response } from 'express'
+import type { Client } from 'discord.js'
+import { parse } from '../public/component-markdown'
 import { validatePresets } from '../src/features/capture/capturePresets'
 import { validateLists } from '../src/services/mclLists'
 import { updateLists } from '../src/features/archive/updateLists'
@@ -103,4 +107,48 @@ test('variables save, replace at runtime, preserve snapshot source and reject st
 	await assert.rejects(store.save('templateVariables', { 'Система повышения': {} }, 0), { status: 409 })
 	await store.save('templateVariables', { 'Система повышения': {} }, 1)
 	assert.equal(store.text('promotion.document'), 'Hello {name}')
+})
+
+test('variable endpoint validates keys and labels and persists section substitutions', async () => {
+	const source = '<section buttonLabel="Открыть" buttonLink="https://example.com">Цена: {цена-пулик}, {цена-спешик}</section>'
+	let row = { revision: 0, value: { templates: { 'promotion.document': source }, settings: {}, settingsEnvMigrated: true } as DashboardState }
+	const audit: unknown[][] = []
+	const query = async (sql: string, params?: unknown[]) => {
+		if (sql.startsWith('SELECT revision')) return { rows: [structuredClone(row)] }
+		if (sql.startsWith('UPDATE dashboard_state')) row = { revision: row.revision + 1, value: JSON.parse(params![0] as string) }
+		if (sql.startsWith('INSERT INTO dashboard_audit')) audit.push(params!)
+		return { rows: [] }
+	}
+	const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool
+	await dashboardStore.init(pool)
+	const handlers: Record<string, (req: Request, res: Response) => Promise<void>> = {}
+	const app = { use() {}, get() {}, post(path: string, handler: typeof handlers[string]) { handlers[path] = handler } } as unknown as Express
+	const auth = { register() {}, middleware() {}, logout() {} }
+	registerDashboard(app, { majesticSync: {} } as unknown as Client, pool, { auth: auth as never })
+	async function request(body: unknown) {
+		let status = 200, json: any
+		const res = { status(code: number) { status = code; return this }, json(value: unknown) { json = value; return this } }
+		await handlers['/api/template-variables']({ body, guild: {}, dashboardUser: { id: 'tester' } } as Request, res as unknown as Response)
+		return { status, json }
+	}
+	const group = 'Система повышения', values = { 'цена-пулик': '100', 'цена-спешик': '200' }, labels = { 'цена-пулик': 'Цена пулемёта', 'цена-спешик': 'Цена спешика' }
+	assert.equal((await request({ group, values, labels, revision: 0 })).status, 200)
+	assert.deepEqual(dashboardStore.snapshot().templateVariableLabels[group], labels)
+	assert.equal(dashboardStore.snapshot().templates.find(field => field.key === 'promotion.document')?.value, source)
+	const section = parse(dashboardStore.text('promotion.document'))[0]
+	assert.equal(section.type, 'section'); assert.equal(section.value, 'Цена: 100, 200')
+	assert.match(String(audit[0][3]), /Цена пулемёта/)
+	const reloaded = createStore({}); await reloaded.init(pool)
+	assert.deepEqual(reloaded.templateVariableLabels[group], labels)
+	assert.equal(reloaded.text('promotion.document'), dashboardStore.text('promotion.document'))
+	const reservedField = dashboardStore.snapshot().templates.find(field => field.variables?.length)!
+	for (const body of [
+		{ group, values: { 'плохой ключ': 'x' }, revision: 1 },
+		{ group: reservedField.group, values: { [reservedField.variables![0]]: 'x' }, revision: 1 },
+		{ group, values, labels: { missing: 'Чужой ключ' }, revision: 1 },
+		{ group, values, labels: { 'цена-пулик': 'x'.repeat(101) }, revision: 1 }
+	]) assert.equal((await request(body)).status, 400)
+	assert.equal(row.revision, 1)
+	assert.equal((await request({ group, values, revision: 1 })).status, 200)
+	assert.deepEqual(dashboardStore.templateVariableLabels[group], labels)
 })

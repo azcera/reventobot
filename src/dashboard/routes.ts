@@ -1,3 +1,4 @@
+import { replaceTemplateVariables, templateVariableName } from '../../shared/templateVariables'
 import { getError } from '../utils/errors'
 import type * as D from 'discord.js'
 import type * as T from '../types'
@@ -30,7 +31,7 @@ function validateTemplates(values: Record<string, string | null>, custom = store
 		if (field.type === 'url' && value !== field.default && !isHttpsUrl(value)) throw problem(400, 'Нужна HTTPS-ссылка.')
 		if (field.type === 'text') {
 			try {
-				const expanded = value.replace(/\{([^{}]+)\}/g, (match, name: string) => Object.hasOwn(custom[field.group] || {}, name) ? custom[field.group][name] : match)
+				const expanded = replaceTemplateVariables(value, custom[field.group] || {})
 				if (expanded.length > (field.maxLength ?? 4000)) throw new Error('Текст с переменными превышает допустимую длину.')
 				const items = (require('../../public/component-markdown') as typeof import('../../public/component-markdown')).parse(expanded)
 				const components = field.components ?? !(/^navigation\.item\./.test(key) || /^panel\.row\./.test(key) || key === 'invite.3')
@@ -41,7 +42,7 @@ function validateTemplates(values: Record<string, string | null>, custom = store
  const error = getError(caughtError)
  throw problem(400, `Поле «${field.label}»: ${error.message}`) }
 		}
-		const variables = [...value.matchAll(/\{([a-zA-Zа-яА-ЯёЁ][a-zA-Zа-яА-ЯёЁ0-9_]*)\}/g)].map(match => match[1])
+		const variables = [...value.matchAll(/\{([a-zA-Zа-яА-ЯёЁ][a-zA-Zа-яА-ЯёЁ0-9_-]*)\}/g)].map(match => match[1])
 		if (!key.startsWith('permanent.') && (variables.some((name: string) => !(field.variables || []).includes(name) && !Object.hasOwn(custom[field.group] || {}, name)) || (field.variables || []).some((name: string) => !variables.includes(name)))) throw problem(400, 'Сохраните все переменные шаблона без изменения их названий.')
 	}
 	const fields = new Map(store.snapshot().templates.map(field => [field.key, field]))
@@ -225,13 +226,18 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 	})
 	app.post('/api/template-variables', async (req: E.Request, res: E.Response) => {
 		try {
-			const { group, values, revision } = req.body
+			const { group, values, labels, revision } = req.body
 			const fields = store.snapshot().templates.filter(field => field.group === group)
 			if (!fields.length || !Number.isSafeInteger(revision) || !values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length > 50) throw problem(400, 'Проверьте шаблон и список переменных (до 50).')
 			const reserved = new Set(fields.flatMap(field => field.variables || []))
-			for (const [name, value] of Object.entries(values)) if (!/^[a-zA-Zа-яА-ЯёЁ][a-zA-Zа-яА-ЯёЁ0-9_]{0,63}$/.test(name) || reserved.has(name) || typeof value !== 'string' || value.length > 4000 || /\{[^{}]+\}/.test(value)) throw problem(400, 'Используйте уникальное имя без пробелов и значение до 4000 символов без вложенных переменных. Системные имена зарезервированы.')
+			for (const [name, value] of Object.entries(values)) {
+				if (!templateVariableName.test(name)) throw problem(400, `Ключ «${name}»: начните с буквы, используйте до 64 букв, цифр, дефисов или подчёркиваний без пробелов.`)
+				if (reserved.has(name)) throw problem(400, `Ключ «${name}» занят системной переменной.`)
+				if (typeof value !== 'string' || value.length > 4000 || /\{[^{}]+\}/.test(value)) throw problem(400, `Значение «${name}»: до 4000 символов без вложенных переменных.`)
+			}
+			if (labels !== undefined && (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.entries(labels).some(([name, label]) => !Object.hasOwn(values, name) || typeof label !== 'string' || !label.trim() || label.length > 100))) throw problem(400, 'Название переменной: от 1 до 100 символов. Для каждого названия нужен существующий ключ.')
 			validateTemplates(Object.fromEntries(fields.map(field => [field.key, field.value])), { ...store.templateVariables, [group]: values })
-			await store.save('templateVariables', { [group]: values }, revision, req.dashboardUser)
+			await store.save('templateVariables', { [group]: values }, revision, req.dashboardUser, labels === undefined ? undefined : { [group]: labels })
 			const keys = fields.map(field => field.key)
 			const syncResults: T.SyncResult[] = await permanent.syncMessages(keys, client, req.guild, undefined, req.dashboardUser)
 			if (keys.some(key => key.startsWith('navigation.'))) syncResults.push(...await navigation.sync(client, req.guild))
