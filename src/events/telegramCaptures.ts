@@ -1,3 +1,4 @@
+import { templateText } from '../dashboard/templateText'
 import { getError } from '../utils/errors'
 import {
 	Events,
@@ -5,7 +6,6 @@ import {
 	ButtonBuilder,
 	ButtonStyle,
 	TextDisplayBuilder,
-	SeparatorBuilder,
 	MessageFlags
 } from 'discord.js'
 import { NewMessage } from 'teleproto/events'
@@ -107,27 +107,18 @@ export = (client: import('discord.js').Client) => {
 						new ButtonBuilder()
 							.setCustomId(`capt_tg_${enemyFaction}_${cleanTime}`)
 							.setLabel(
-								store.text('announcement.button', { icon: isAttack ? '⚔️' : '🛡️', target: isAttack ? 'АТАКУ' : 'ЗАЩИТУ' })
+								templateText('announcement.button', { icon: isAttack ? '⚔️' : '🛡️', target: isAttack ? 'АТАКУ' : 'ЗАЩИТУ' })
 							)
 							.setStyle(isAttack ? ButtonStyle.Success : ButtonStyle.Primary)
 					)
 
 					const container = new ContainerBuilder()
 						.setAccentColor(isAttack ? 0x57f287 : 0x5865f2)
-					const banner = store.text('announcement.banner')
-					if (banner) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(banner))
-					container
-						.addTextDisplayComponents(
-							new TextDisplayBuilder().setContent(
-								store.text('announcement.title', { icon: isAttack ? '⚔️' : '🛡️', title: isAttack ? 'АТАКА' : 'ЗАЩИТА' })
-							)
-						)
-						.addSeparatorComponents(new SeparatorBuilder())
-						.addTextDisplayComponents(
-							new TextDisplayBuilder().setContent(
-								store.text('announcement.details', { enemy: '`' + (isAttack ? defender : attacker) + '`', time: '`' + startTime + '`', zone: '`' + zoneName + ' (' + zoneNum + ')`', count: '`' + count + '`' }) + '\n' + store.text('announcement.mention')
-							)
-						)
+					container.addTextDisplayComponents(new TextDisplayBuilder().setContent(store.text('announcement.document', {
+						icon: isAttack ? '⚔️' : '🛡️', title: isAttack ? 'АТАКА' : 'ЗАЩИТА',
+						enemy: '`' + (isAttack ? defender : attacker) + '`', time: '`' + startTime + '`',
+						zone: '`' + zoneName + ' (' + zoneNum + ')`', count: '`' + count + '`'
+					})))
 						.addActionRowComponents(actionRow)
 
 					await channel.send({

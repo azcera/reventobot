@@ -10,10 +10,9 @@
   },
   "schedule.banner": {
     "group": "Расписание",
-    "label": "Изображение расписания (тег img)",
-    "default": "<img src=\"https://i.imgur.com/7dBrrO0.png\" />",
-    "type": "text",
-    "components": true,
+    "label": "Ссылка на картинку расписания",
+    "default": "https://i.imgur.com/7dBrrO0.png",
+    "type": "url",
     "variables": [],
     "maxLength": 512
   },
@@ -1097,5 +1096,21 @@
     "components": false,
     "variables": [],
     "maxLength": 200
+  },
+  "announcement.document": {
+    "group": "Объявление капта",
+    "label": "Текст объявления капта",
+    "default": "<img src=\"https://i.imgur.com/hD6ep5D.png\" />\n\n---\n\n# {icon} КАПТ {title} {icon}\n\n---\n\n> ### 🆚 Против: {enemy}\n> ### ⏰ Начало: {time}\n> ### 🗺️ Квадрат: {zone}\n> ### 👥 Кол-во врагов: {count}\n> ### ||@everyone||",
+    "type": "text",
+    "components": true,
+    "variables": [
+      "icon",
+      "title",
+      "enemy",
+      "time",
+      "zone",
+      "count"
+    ],
+    "maxLength": 4000
   }
 }

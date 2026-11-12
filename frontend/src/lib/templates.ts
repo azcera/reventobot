@@ -9,7 +9,7 @@ export function editorFields(config: Config, group: string): TemplateField[] {
 		key: 'rules.document', group, type: 'text', label: 'Правила целиком', components: true,
 		value: fields.filter(field => /^rules\.(heading|rule)\./.test(field.key)).map(field => field.value).join('\n\n---\n\n'), variables: []
 	}]
-	const order = group === 'Расписание' ? ['schedule.banner', 'schedule.title', 'schedule.nearest', 'schedule.button', 'schedule.next', 'schedule.special', 'schedule.footer'] : group === 'Объявление капта' ? ['announcement.banner', 'announcement.title', 'announcement.details', 'announcement.game', 'announcement.button', 'announcement.mention', 'announcement.mvp'] : group === 'Приглашение' ? ['invite.document', 'invite.3', 'invite.4'] : group === 'Регистрация на капт' ? ['capture.title', 'capture.time', 'capture.info', 'capture.sort', 'capture.confirmed', 'capture.waiting', 'capture.2', 'capture.3', 'capture.sortTime', 'capture.sortPriority'] : []
+	const order = group === 'Приглашение' ? ['invite.document', 'invite.3', 'invite.4'] : group === 'Регистрация на капт' ? ['capture.title', 'capture.time', 'capture.info', 'capture.sort', 'capture.confirmed', 'capture.waiting', 'capture.2', 'capture.3', 'capture.sortTime', 'capture.sortPriority'] : []
 	return fields.sort((a, b) => order.length ? order.indexOf(a.key) - order.indexOf(b.key) : Number(b.key.includes('.document')) - Number(a.key.includes('.document')))
 }
 

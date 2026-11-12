@@ -144,6 +144,12 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
  respondError(res, error) }
 	})
 	client.mclLists ||= (require('../services/mclLists') as typeof import('../services/mclLists')).createMclLists({ client, pool, store })
+	client.capturePresets ||= (require('../features/capture/capturePresets') as typeof import('../features/capture/capturePresets')).createCapturePresets({ client, pool, store })
+	app.get('/api/capture-presets', (req: E.Request, res: E.Response) => res.json({ presets: Object.values(store.capturePresets), revision: store.revision }))
+	app.post('/api/capture-presets', async (req: E.Request, res: E.Response) => {
+		try { res.json(await client.capturePresets!.save(req.guild, req.body.presets, req.body.revision, req.dashboardUser)) }
+		catch (caught) { respondError(res, getError(caught)) }
+	})
 	app.get('/api/mcl-lists', (req: E.Request, res: E.Response) => res.json({ lists: Object.values(store.mclLists), revision: store.revision }))
 	app.post('/api/mcl-lists', async (req: E.Request, res: E.Response) => {
 		try {
@@ -200,6 +206,14 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 			if (store.snapshot().templates.some(field => field.group === name.trim())) throw problem(400, 'Раздел с таким названием уже существует.')
 			const kind = 'custom-' + randomUUID()
 			await store.save('bindings', { [kind]: { link: '', markdown: true, fields: [{ key: 'permanent.' + kind + '.document', path: 'markdown', group: name.trim(), label: 'Текст сообщения', type: 'text', components: true, maxLength: 16000, default: '# Новое сообщение', variables: [] }] } }, revision, req.dashboardUser)
+			res.json(store.snapshot())
+		} catch (caught) { respondError(res, getError(caught)) }
+	})
+	app.post('/api/templates/delete', async (req: E.Request, res: E.Response) => {
+		try {
+			const { kind, revision } = req.body
+			if (typeof kind !== 'string' || !/^custom-[a-f0-9-]{36}$/.test(kind) || !store.bindings[kind] || !Number.isSafeInteger(revision)) throw problem(400, 'Выберите пользовательский шаблон и обновите данные.')
+			await store.save('bindings', { [kind]: null }, revision, req.dashboardUser)
 			res.json(store.snapshot())
 		} catch (caught) { respondError(res, getError(caught)) }
 	})

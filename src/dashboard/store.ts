@@ -3,7 +3,7 @@ import type * as D from 'discord.js'
 import type * as T from '../types'
 import type * as E from 'express'
 import type * as Pg from 'pg'
-import type { Actor, Binding, DashboardState, MclList, RolePrefix, SettingDefinition, SettingValue, TemplateField } from '../types'
+import type { Actor, Binding, CapturePreset, DashboardState, MclList, RolePrefix, SettingDefinition, SettingValue, TemplateField } from '../types'
 import type { Pool } from 'pg'
 import type { ContainerBuilder, Message } from 'discord.js'
 import rawCatalog = require('./templates.json')
@@ -11,11 +11,12 @@ const catalog: Record<string, TemplateField> = rawCatalog
 import layout = require('../../public/template-layout')
 const legacyFields = () => Object.entries(catalog).filter(([key]) => !key.includes('.document')).map(([key, field]) => ({ ...field, key, value: field.default ?? '' }))
 for (const field of layout.documents(legacyFields())) catalog[field.key!] = field as TemplateField
-const hiddenTemplate = (key: string) => /^(panel|archives|unanswered)\./.test(key) || (/^(invite|navigation|application|dm)\./.test(key) && !key.includes('.document') && !['invite.3', 'invite.4', 'application.1', 'application.2', 'application.3'].includes(key)) || /^capture\.(1|4|5|6|queue|main|reserve|left)$/.test(key)
+const retiredEventField = (key: string) => key.startsWith('schedule.') && key !== 'schedule.banner' || key.startsWith('announcement.') && key !== 'announcement.document'
+const hiddenTemplate = (key: string) => retiredEventField(key) || /^(panel|archives|unanswered)\./.test(key) || (/^(invite|navigation|application|dm)\./.test(key) && !key.includes('.document') && !['invite.3', 'invite.4', 'application.1', 'application.2', 'application.3'].includes(key)) || /^capture\.(1|4|5|6|queue|main|reserve|left)$/.test(key)
 import { defaultRolePrefixes } from '../utils/adminPrefix'
 
 function templateDefinition(key: string): TemplateField | null {
-	if (/^(panel|archives|unanswered)\./.test(key)) return null
+	if (retiredEventField(key) || /^(panel|archives|unanswered)\./.test(key)) return null
 	if (Object.hasOwn(catalog, key)) return catalog[key]
 	if (key === 'rules.document') return { group: 'Правила', label: 'Правила целиком', type: 'text', maxLength: 4000, variables: [] }
 	if (['promotion.document', 'recruit.document'].includes(key)) return { group: key.startsWith('promotion.') ? 'Система повышения' : 'Памятка рекрута', label: 'Текст сообщения (Markdown)', type: 'text', components: true, maxLength: 16000, variables: [], default: key.startsWith('promotion.') ? '# Система повышения' : '# Памятка рекрута' }
@@ -71,6 +72,7 @@ function createStore() {
 		getSetting,
 		get bindings() { return structuredClone(state.bindings || {}) },
 		get mclLists() { return structuredClone(state.mclLists || {}) },
+		get capturePresets() { return structuredClone(state.capturePresets || {}) },
 		roleIds(key: string) { return String(getSetting(key)).split(',').map(id => id.trim()).filter(Boolean) },
 		decorate(key: string, container: ContainerBuilder) {
 			return container.clearAccentColor()
@@ -78,6 +80,10 @@ function createStore() {
 		text(key: string, variables: Record<string, unknown> = {}, fallback?: string) {
 			const generated = key.includes('.document') ? layout.documents([...legacyFields().map(field => ({ ...field, value: state.templates[field.key] ?? field.value })), ...Object.entries(state.templates).filter(([key]) => !catalog[key] && /^rules\.(heading|rule)\./.test(key)).map(([key, value]) => ({ ...templateDefinition(key)!, key, value }))]).find(field => field.key === key)?.value : undefined
 			let source = (/^(archives|unanswered)\./.test(key) ? undefined : state.templates[key]) ?? generated ?? catalog[key]?.default ?? fallback
+			if (key === 'schedule.banner' && typeof source === 'string' && source.trim().startsWith('<img')) {
+				const parsed = (require('../../public/component-markdown') as typeof import('../../public/component-markdown')).parse(source)
+				source = parsed.find(item => item.type === 'image')?.value || ''
+			}
 			if ((key.includes('.document') || key.startsWith('permanent.')) && typeof source === 'string' && source.includes('<separator')) {
 				const markdown: typeof import('../../public/component-markdown') = (require('../../public/component-markdown') as typeof import('../../public/component-markdown'))
 				const visibleSeparators = /^(promotion|recruit)\.document$|^permanent\.(promotion|recruit)\./.test(key)
@@ -110,6 +116,7 @@ function createStore() {
 			);
 			CREATE TABLE IF NOT EXISTS mcl_messages (guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, message_id TEXT NOT NULL, PRIMARY KEY (guild_id, channel_id));
 			CREATE TABLE IF NOT EXISTS mcl_commands (guild_id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY (guild_id, name));
+			CREATE TABLE IF NOT EXISTS capture_preset_commands (guild_id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY (guild_id, name));
 			CREATE TABLE IF NOT EXISTS dashboard_state (
 				id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL DEFAULT 0,
 				value JSONB NOT NULL DEFAULT '{"templates":{},"settings":{}}'
@@ -136,7 +143,7 @@ function createStore() {
 		async forgetNavigation(messageId: string) {
 			await pool.query('DELETE FROM dashboard_navigation_messages WHERE message_id = $1', [messageId])
 		},
-		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | null>, expectedRevision: number, actor?: Actor | string) {
+		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | CapturePreset | null>, expectedRevision: number, actor?: Actor | string) {
 			const db = await pool.connect()
 			try {
 				await db.query('BEGIN')

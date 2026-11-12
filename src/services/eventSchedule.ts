@@ -15,7 +15,7 @@ import {
 	escapeMarkdown
 } from 'discord.js'
 import { ContainerBuilder } from './markdownContainer'
-import { templateText, type TemplateText } from '../dashboard/templateText'
+import { templateText } from '../dashboard/templateText'
 import events = require('../config/eventSchedule')
 
 const UPDATE_INTERVAL = 15 * 60000
@@ -94,7 +94,8 @@ function getSchedule(now = Date.now()) {
 	}
 }
 
-function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolean, now = Date.now(), emojis?: D.Collection<string, D.GuildEmoji>, banner = '', render: TemplateText = templateText): D.MessageCreateOptions & D.MessageEditOptions {
+function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolean, now = Date.now(), emojis?: D.Collection<string, D.GuildEmoji>, banner = ''): D.MessageCreateOptions & D.MessageEditOptions {
+	const render = templateText
 	const eventEmoji = (label: string) =>
 		emojis
 			?.find(
@@ -106,7 +107,7 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
 	const container = new ContainerBuilder({ accent_color: null })
-	if (banner) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(banner))
+	if (banner) container.addTextDisplayComponents(new TextDisplayBuilder().setContent('<img src="' + banner + '" />'))
 	container
 		.addTextDisplayComponents(
 			new TextDisplayBuilder().setContent(render('schedule.title'))
@@ -203,7 +204,7 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 			false,
 			snapshot.generatedAt,
 			channel.guild?.emojis.cache,
-			store.text('schedule.banner'), store.text.bind(store)
+			store.text('schedule.banner')
 		)
 		if (messageId) {
 			try {

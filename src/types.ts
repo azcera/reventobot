@@ -24,6 +24,14 @@ export interface Binding {
 	fields: (TemplateField & { key: string; path?: string })[]
 	[key: string]: unknown
 }
+export interface CapturePreset {
+	id: string
+	command: string
+	target: string
+	channelId: string
+	accessRoleId: string
+	maxMain: number
+}
 export interface MclList {
 	id: string
 	title: string
@@ -73,6 +81,7 @@ export interface DashboardState {
 	settings: Record<string, SettingValue>
 	bindings?: Record<string, Binding>
 	mclLists?: Record<string, MclList>
+	capturePresets?: Record<string, CapturePreset>
 }
 export interface SettingDefinition {
 	label: string
@@ -116,6 +125,7 @@ declare module 'discord.js' {
 	interface Client<Ready extends boolean = boolean> {
 		commands: Collection<string, BotCommand>
 		mclLists?: ReturnType<typeof import('./services/mclLists').createMclLists>
+		capturePresets?: ReturnType<typeof import('./features/capture/capturePresets').createCapturePresets>
 		familyWars?: ReturnType<typeof import('./services/familyWars').createFamilyWars> | null
 		majesticSync?: ReturnType<typeof import('./services/majesticSync').createMajesticSync>
 		majesticNicknames?: ReturnType<typeof import('./services/majesticNicknameScheduler').createMajesticNicknameScheduler>
