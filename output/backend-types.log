@@ -1,4 +1,0 @@
-public/component-markdown.ts(29,257): error TS2322: Type 'string' is not assignable to type '"small" | "large" | undefined'.
-src/dashboard/navigationMessages.ts(96,132): error TS18048: 'container.components' is possibly 'undefined'.
-src/features/capture/groupOptions.ts(48,10): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
-src/features/capture/groupOptions.ts(48,22): error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.

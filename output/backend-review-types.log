@@ -1,6 +1,0 @@
-src/services/adminApplicationCommands.ts(9,242): error TS2345: Argument of type 'ChatInputCommandInteraction<"cached">' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
-  Type 'ChatInputCommandInteraction<"cached">' is missing the following properties from type 'ButtonInteraction<"cached">': componentType, component, customId, message, and 2 more.
-src/services/adminApplicationCommands.ts(10,231): error TS2345: Argument of type 'ChatInputCommandInteraction<"cached">' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
-  Type 'ChatInputCommandInteraction<"cached">' is missing the following properties from type 'ButtonInteraction<"cached">': componentType, component, customId, message, and 2 more.
-src/services/adminApplicationCommands.ts(11,258): error TS2345: Argument of type 'ChatInputCommandInteraction<"cached">' is not assignable to parameter of type 'ButtonInteraction<"cached">'.
-  Type 'ChatInputCommandInteraction<"cached">' is missing the following properties from type 'ButtonInteraction<"cached">': componentType, component, customId, message, and 2 more.
