@@ -12,6 +12,8 @@ import { parseDateTime, getMskTimeString } from '../../utils/dateUtils'
 import { optionsMap } from '../../features/capture/groupOptions'
 import { sendEphemeralWithAutoDelete } from '../../utils/autoDelete'
 import { attackEventAt } from '../../services/eventSchedule'
+import pool = require('../../services/database')
+import { publishCollectionOnce, collectionCreationError } from './collectionCreation'
 
 /**
  * Показывает модалку (время/цель/код) в зависимости от выбранного значения.
@@ -108,22 +110,18 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 	const mskTimeStr = groupKind === 'supply' ? '' : getMskTimeString(parsedDate!, groupKind === 'attendance' ? -300 : -600)
 	const mskTimeWith5MinStr = groupKind === 'supply' ? '' : getMskTimeString(parsedDate!, groupKind === 'attendance' ? 0 : -300)
 
-	await sendEphemeralWithAutoDelete(interaction, {
-		content: `✅ Группа создана!${mskTimeStr ? `\nВремя: ${mskTimeStr}` : ''}\nЦель: ${target}${code ? `\nКод: ${code}` : ''}`
-	})
-
 	try {
 		const pingChannelId = dashboard.getSetting('PING_CHANNEL_ID')
 		const mentionedRoleId = dashboard.getSetting('AUTO_ROLE')
 		if (!pingChannelId)
-			return console.log('❌ Укажите канал уведомлений о группах в настройках дашборда (PING_CHANNEL_ID)')
+			return sendEphemeralWithAutoDelete(interaction, { content: '❌ Канал уведомлений о группах не настроен. Группа не опубликована.' })
 
 		const pingChannel =
 			interaction.client.channels.cache.get(pingChannelId) ||
 			(await interaction.client.channels.fetch(pingChannelId).catch(() => null))
 
 		if (!pingChannel?.isSendable())
-			return console.log(`❌ Канал с ID ${pingChannelId} не найден.`)
+			return sendEphemeralWithAutoDelete(interaction, { content: '❌ Канал уведомлений недоступен. Группа не опубликована.' })
 
 		const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : ''
 
@@ -134,12 +132,25 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 			code: code ? ` 🔑 Код группы: \`${code}\`` : ''
 		})
 
-		for (let i = 0; i < 3; i++) {
-			await pingChannel.send(msgContent)
+		const url = await publishCollectionOnce(pool,
+			['group', interaction.guildId, pingChannelId, target.trim().toLocaleLowerCase(), groupKind === 'supply' ? code : parsedDate!.getTime()],
+			groupKind === 'supply' ? Date.now() + 10 * 60000 : parsedDate!.getTime() + 3600000,
+			async () => (await pingChannel.send(msgContent)).url)
+		let warning = ''
+		try {
+			for (let i = 0; i < 2; i++) await pingChannel.send(msgContent)
+		} catch (error) {
+			console.error('Не удалось отправить повторные уведомления о группе:', error)
+			warning = '\n⚠️ Не все повторные уведомления отправлены.'
 		}
+		await sendEphemeralWithAutoDelete(interaction, {
+			content: `✅ Группа создана!${mskTimeStr ? `\nВремя: ${mskTimeStr}` : ''}\nЦель: ${target}${code ? `\nКод: ${code}` : ''}\n${url}${warning}`,
+			allowedMentions: { parse: [] }
+		})
 	} catch (caught) {
  const error = getError(caught);
 		console.error('❌ Не удалось отправить сообщения в пинг-канал:', error)
+		await sendEphemeralWithAutoDelete(interaction, { content: collectionCreationError(caught) })
 	}
 }
 

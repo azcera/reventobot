@@ -12,6 +12,7 @@ import { parseDateTime, getDiscordTimestamp } from '../../utils/dateUtils'
 import { sendEphemeralWithAutoDelete } from '../../utils/autoDelete'
 import captureManager = require('./captureManager')
 import db = require('../../services/database')
+import { collectionCreationError } from './collectionCreation'
 
 /**
  * Показывает модалку ручного создания реги (время, цель, maxMain).
@@ -89,20 +90,20 @@ async function submitCaptModal(interaction: import('discord.js').ModalSubmitInte
 		}
 	}
 
-	await sendEphemeralWithAutoDelete(interaction, {
-		content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}`
-	})
-
 	try {
-		await captureManager.sendCollection(
+		const url = await captureManager.sendCollection(
 			interaction,
 			discordTimestamp,
 			target,
 			maxMain
 		)
+		await sendEphemeralWithAutoDelete(interaction, {
+			content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}\n${url}`
+		})
 	} catch (caught) {
  const error = getError(caught);
 		console.error('Ошибка при отправке набора:', error)
+		await sendEphemeralWithAutoDelete(interaction, { content: collectionCreationError(caught) })
 	}
 }
 
@@ -190,7 +191,7 @@ async function handleAutoCaptButton(interaction: import('discord.js').ButtonInte
 
 		await interaction.editReply({
 			content:
-				'❌ Произошла ошибка при сохранении набора в базу данных. Попробуйте позже.'
+				collectionCreationError(caught)
 		})
 	}
 }

@@ -7,7 +7,6 @@ import { parseDisplayName } from '../src/utils/parseDisplayName'
 import { buildPreview, parseNickname } from '../src/features/majestic/syncPreview'
 import { syncRolePrefixes } from '../src/services/rolePrefixSync'
 import { attackEventAt, buildSchedule, createEventSchedule, getSchedule } from '../src/services/eventSchedule'
-import { showScheduledGroupModal, submitGroupModal } from '../src/features/capture/groupInteractions'
 import { captureExpired } from '../src/features/capture/captureExpiry'
 import { createCaptureExpiry, disableCaptureControls } from '../src/services/captureExpiry'
 import { validateSettings, validateTemplates } from '../src/dashboard/routes'
@@ -17,10 +16,11 @@ const previousDatabase = require.cache[databasePath]
 const queries: string[] = []
 let databaseRow: Record<string, unknown> | undefined
 require.cache[databasePath] = { exports: {
-	async query(sql: string) { queries.push(sql); return { rows: databaseRow ? [databaseRow] : [] } },
+	async query(sql: string) { queries.push(sql); return { rows: sql.startsWith('INSERT INTO collection_creations') ? [{ creation_key: 'key' }] : databaseRow ? [databaseRow] : [] } },
 	async connect() { return { async query(sql: string) { queries.push(sql); return { rows: databaseRow ? [databaseRow] : [] } }, release() {} } }
 } } as NodeModule
 const captures = require('../src/features/capture/captureManager') as typeof import('../src/features/capture/captureManager')
+const { showScheduledGroupModal, submitGroupModal } = require('../src/features/capture/groupInteractions') as typeof import('../src/features/capture/groupInteractions')
 const edits = require('../src/features/capture/captureInteractions') as typeof import('../src/features/capture/captureInteractions')
 const invite = require('../src/features/invite/inviteApplication') as typeof import('../src/features/invite/inviteApplication')
 if (previousDatabase) require.cache[databasePath] = previousDatabase
@@ -145,7 +145,7 @@ test('schedule buttons have icons, optional codes and event-specific fields; gro
 	const member = { permissions: { has: () => true } }
 	const sent: string[] = []
 	const interaction = { customId: 'schedule_group_supply', member, client: { eventSchedule: schedule,
-		channels: { cache: new Collection([['ping', { isSendable: () => true, send: async (content: string) => { sent.push(content) } }]]) } },
+		channels: { cache: new Collection([['ping', { isSendable: () => true, send: async (content: string) => { sent.push(content); return { url: 'https://discord.com/channels/guild/ping/message' } } }]]) } },
 		showModal: async (value: any) => { modal = value.toJSON() }, reply: async () => {}, deleteReply: async () => {},
 		async deferReply() { (this as { deferred?: boolean }).deferred = true }, editReply: async () => {} }
 	await showScheduledGroupModal(interaction as unknown as ButtonInteraction<'cached'>)

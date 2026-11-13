@@ -1,5 +1,6 @@
 import { ApplicationCommandType, LabelBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, SlashCommandBuilder, TextInputBuilder, TextInputStyle } from 'discord.js'
 import type { Guild, ModalSubmitInteraction } from 'discord.js'
+import { collectionCreationError } from './collectionCreation'
 import type { Actor, CapturePreset, GuildInteraction, ServiceOptions, Store } from '../../types'
 import { problem } from '../../dashboard/auth'
 import { parseDateTime, getDiscordTimestamp } from '../../utils/dateUtils'
@@ -89,8 +90,13 @@ export function createCapturePresets({ client, pool, store }: ServiceOptions) {
 			if (!date || !Number.isFinite(date.getTime()) || !parts || Number(parts[4]) > 23 || Number(parts[5]) > 59 || parts[1] && (msk!.getUTCDate() !== Number(parts[1]) || msk!.getUTCMonth() + 1 !== Number(parts[2]) || msk!.getUTCFullYear() !== Number(parts[3]))) return interaction.reply({ content: 'Укажите ЧЧ:ММ или ДД.ММ.ГГГГ ЧЧ:ММ (МСК).', flags: MessageFlags.Ephemeral })
 			await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 			const captureManager = require('./captureManager') as typeof import('./captureManager')
-			await captureManager.sendCollection(interaction, getDiscordTimestamp(date), preset.target, preset.maxMain, true, preset.channelId)
-			return interaction.editReply(`Сбор создан в <#${preset.channelId}>. Время: ${getDiscordTimestamp(date)}`)
+			try {
+				const url = await captureManager.sendCollection(interaction, getDiscordTimestamp(date), preset.target, preset.maxMain, true, preset.channelId)
+				return interaction.editReply(`Сбор создан в <#${preset.channelId}>. Время: ${getDiscordTimestamp(date)}\n${url}`)
+			} catch (error) {
+				console.error('[Capture preset creation]', error)
+				return interaction.editReply(collectionCreationError(error))
+			}
 		}
 	}
 }

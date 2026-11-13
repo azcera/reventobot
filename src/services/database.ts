@@ -24,6 +24,7 @@ pool
 
 const initDb = async () => {
 	try {
+		await pool.query((require('../features/capture/collectionCreation') as typeof import('../features/capture/collectionCreation')).COLLECTION_CREATION_SCHEMA)
 		await pool.query((require('./familyWars') as typeof import('./familyWars')).FAMILY_WAR_SCHEMA)
 		await pool.query(`
             CREATE TABLE IF NOT EXISTS family_applications (

@@ -21,6 +21,7 @@ import {
 } from 'discord.js'
 import { createHash } from 'node:crypto'
 import { captureExpired } from './captureExpiry'
+import { publishCollectionOnce } from './collectionCreation'
 require('dotenv').config()
 
 import pool = require('../../services/database.js')
@@ -388,36 +389,87 @@ async function sendCollection(
 		mainListMeta,
 		reserveListMeta
 	)
-	const message = await channel.send(messageData)
+	const url = await publishCollectionOnce(pool,
+		['capture', guild.id, channel.id, target.trim().toLocaleLowerCase(), discordTimestamp.replace(/:[A-Za-z]>/, '>')],
+		Number(/<t:(\d+)/.exec(discordTimestamp)?.[1] || 0) * 1000 + 3600000,
+		async () => {
+			const message = await channel.send(messageData)
+			await pool.query(
+				`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, main_list_meta, reserve_list_meta, target, max_main, channel_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+				[
+					message.id,
+					discordTimestamp,
+					JSON.stringify(mainList),
+					JSON.stringify(reserveList),
+					JSON.stringify(leftList),
+					JSON.stringify(mainListMeta),
+					JSON.stringify(reserveListMeta),
+					target,
+					maxMain,
+					channel.id
+				]
+			)
+			return message.url
+		})
 	if (sendReminders) {
-		for (let i = 0; i < 3; i++) {
-			await channel.send({
-				content: `<@&${dashboard.getSetting('AUTO_ROLE')}> рега выше`
-			})
+		try {
+			for (let i = 0; i < 3; i++) {
+				await channel.send({ content: `<@&${dashboard.getSetting('AUTO_ROLE')}> рега выше` })
+			}
+		} catch (error) {
+			console.error('Не удалось отправить напоминания о наборе:', error)
 		}
 	}
+	return url
+}
 
-	try {
-		await pool.query(
-			`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, main_list_meta, reserve_list_meta, target, max_main, channel_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			[
-				message.id,
-				discordTimestamp,
-				JSON.stringify(mainList),
-				JSON.stringify(reserveList),
-				JSON.stringify(leftList),
-				JSON.stringify(mainListMeta),
-				JSON.stringify(reserveListMeta),
-				target,
-				maxMain,
-				channel.id
-			]
-		)
-	} catch (caught) {
- const err = getError(caught);
-		console.error('Не удалось сохранить набор в БД:', err)
+type CaptureInteraction = import('discord.js').ButtonInteraction<'cached'> | import('discord.js').StringSelectMenuInteraction<'cached'>
+const captureRefreshes = new Map<string, { revision: number; promise: Promise<void> }>()
+
+// Serialize Discord writes, reading the latest committed state inside the queue.
+async function refreshCapture(interaction: CaptureInteraction) {
+	const id = interaction.message.id
+	const pending = captureRefreshes.get(id)
+	if (pending) {
+		pending.revision++
+		return pending.promise
 	}
+	const refresh = async () => {
+		const { rows } = await pool.query('SELECT * FROM active_captures WHERE message_id = $1', [id])
+		const row = rows[0]
+		if (!row) return
+		await interaction.editReply(buildCaptureMessage(row.discord_timestamp,
+			readIds(row.main_list), readIds(row.reserve_list), readIds(row.left_list), row.target,
+			row.max_main || 20, interaction.guild, readMeta(row.main_list_meta), readMeta(row.reserve_list_meta),
+			readIds(row.approved_users), row.approval_page || 0, row.sort_mode))
+	}
+	const state = { revision: 0, promise: Promise.resolve() }
+	state.promise = Promise.resolve().then(async () => {
+		let revision
+		do {
+			revision = state.revision
+			try { await refresh() } catch { await refresh() }
+		} while (revision !== state.revision)
+	}).finally(() => { captureRefreshes.delete(id) })
+	captureRefreshes.set(id, state)
+	return state.promise
+}
+
+async function completeCaptureChange(interaction: CaptureInteraction, promoted: string[], content?: string) {
+	await Promise.all([
+		refreshCapture(interaction).catch(async error => {
+			console.error('[Capture refresh]', error)
+			await interaction.followUp({ content: 'Запись сохранена, но обновить общий список пока не удалось.', flags: MessageFlags.Ephemeral }).catch(console.error)
+		}),
+		content ? interaction.followUp({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } }).catch(console.error) : Promise.resolve(),
+		...promoted.map(async id => {
+			try {
+				const user = await interaction.client.users.fetch(id)
+				await user.send({ content: `✅ Вы переведены из резерва в основной состав!\n${interaction.message.url}`, allowedMentions: { parse: [] } })
+			} catch (error) { console.error('[Capture promotion DM]', id, getError(error).message) }
+		})
+	])
 }
 
 async function handleButton(interaction: import('discord.js').ButtonInteraction<'cached'>) {
@@ -462,7 +514,6 @@ async function handleButton(interaction: import('discord.js').ButtonInteraction<
 			await client.query('ROLLBACK')
 			return interaction.followUp({ content: '❌ Сбор завершён: с его начала прошёл час.', flags: MessageFlags.Ephemeral })
 		}
-		const target = row.target
 		const maxMain = row.max_main || 20
 
 		let mainList = readIds(row.main_list)
@@ -558,22 +609,14 @@ async function handleButton(interaction: import('discord.js').ButtonInteraction<
 			]
 		)
 
-		const updatedMessageData = buildCaptureMessage(
-			discordTimestamp,
-			mainList,
-			reserveList,
-			leftList,
-			target,
-			maxMain,
-			interaction.guild,
-			mainListMeta,
-			reserveListMeta,
-			approvedUsers,
-			row.approval_page || 0,
-			row.sort_mode
-		)
-		await interaction.editReply(updatedMessageData)
 		await client.query('COMMIT')
+		client.release()
+		client = undefined
+		const promoted = mainList.filter(id => readIds(row.reserve_list).includes(id))
+		const content = interaction.customId === 'capt_leave' ? '✅ Вы отменили запись на мероприятие.'
+			: mainList.includes(userId) ? '✅ Вы записаны в основной состав.'
+				: `✅ Вы записаны в резерв. Позиция в очереди: ${reserveList.indexOf(userId) + 1}.`
+		await completeCaptureChange(interaction, promoted, content)
 	} catch (caught) {
  const err = getError(caught);
 		if (client) await client.query('ROLLBACK').catch(() => {})
@@ -709,23 +752,10 @@ async function handleApproval(interaction: import('discord.js').ButtonInteractio
 				sortMode
 			]
 		)
-		await interaction.editReply(
-			buildCaptureMessage(
-				row.discord_timestamp,
-				main,
-				reserve,
-				readIds(row.left_list),
-				row.target,
-				row.max_main || 20,
-				interaction.guild,
-				mainMeta,
-				reserveMeta,
-				approved,
-				page,
-				sortMode
-			)
-		)
 		await client.query('COMMIT')
+		client.release()
+		client = undefined
+		await completeCaptureChange(interaction, main.filter(id => readIds(row.reserve_list).includes(id)))
 	} catch (caught) {
  const err = getError(caught);
 		if (client) await client.query('ROLLBACK').catch(() => {})
