@@ -18,11 +18,11 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 			Object.assign(config, { templateVariables: { [body.group]: body.values }, templateVariableLabels: { [body.group]: body.labels } })
 			config.revision++
 		}
-		const data: Record<string, unknown> = { session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'role-curators': { revision: 3, curators }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
+		const data: Record<string, unknown> = { overview: { ready: true, ping: 42, database: true, uptime: 3600, history: [] }, history: [], session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'role-curators': { revision: 3, curators }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
 		await route.fulfill({ json: ['settings', 'template-variables'].includes(path) ? config : data[path] ?? {} })
 	})
 	await page.goto('/#' + hash)
-	await expect(page.getByRole('heading', { name: ({ settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', curators: 'Кураторы ролей' } as Record<string, string>)[hash], exact: true })).toBeVisible()
+	await expect(page.getByRole('heading', { name: ({ overview: 'Обзор', settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', curators: 'Кураторы ролей' } as Record<string, string>)[hash], exact: true })).toBeVisible()
 	return requests
 }
 
@@ -232,7 +232,8 @@ test('image and section dialogs keep independent fields and source when edited o
 
 test('multiple access roles are sent for captures', async ({ page }) => {
 	const captures = await setup(page, 'captures')
-	await page.getByRole('combobox', { name: 'Роль доступа к команде' }).selectOption('two')
+	await page.getByRole('combobox', { name: 'Роль доступа к команде' }).fill('Вторая')
+	await page.getByRole('option', { name: 'Вторая', exact: true }).click()
 	await page.getByRole('button', { name: 'Сохранить сборы' }).click()
 	await expect.poll(() => captures.find(r => r.path === 'capture-presets' && r.body)?.body.presets[0].accessRoleId).toBe('one,two')
 })
@@ -240,14 +241,16 @@ test('multiple access roles are sent for captures', async ({ page }) => {
 test('role curators configure managed roles, persist after reload and can be removed', async ({ page }) => {
 	const requests = await setup(page, 'curators')
 	await expect(page.getByRole('link', { name: 'Списки', exact: true })).toHaveCount(0)
-	await page.getByRole('combobox', { name: 'Доступные для управления роли' }).selectOption('two')
+	await page.getByRole('combobox', { name: 'Доступные для управления роли' }).fill('Вторая')
+	await page.getByRole('option', { name: 'Вторая', exact: true }).click()
 	await page.getByRole('button', { name: 'Сохранить кураторов' }).click()
 	await expect.poll(() => requests.find(r => r.path === 'role-curators' && r.body)?.body.curators).toEqual([{ roleId: 'one', managedRoleIds: ['one', 'two'] }])
 	await page.reload()
-	await expect(page.getByRole('checkbox')).toHaveCount(2)
+	await expect(page.getByRole('button', { name: /^Убрать роль / })).toHaveCount(2)
 	await page.getByRole('button', { name: 'Добавить куратора' }).click()
 	await page.getByRole('combobox', { name: 'Роль куратора', exact: true }).nth(1).selectOption('two')
-	await page.getByRole('combobox', { name: 'Доступные для управления роли' }).nth(1).selectOption('one')
+	await page.getByRole('combobox', { name: 'Доступные для управления роли' }).nth(1).fill('Первая')
+	await page.getByRole('option', { name: 'Первая', exact: true }).click()
 	await page.getByRole('button', { name: 'Сохранить кураторов' }).click()
 	await expect.poll(() => requests.filter(r => r.path === 'role-curators' && r.body).at(-1)?.body.curators).toHaveLength(2)
 	await page.getByRole('button', { name: 'Удалить куратора', exact: true }).nth(1).click()
@@ -260,20 +263,20 @@ test('role curators configure managed roles, persist after reload and can be rem
 test('appearance follows system, persists choices and keeps Discord colors', async ({ page }) => {
 	await page.emulateMedia({ colorScheme: 'light' })
 	await setup(page, 'templates')
-	const theme = page.getByRole('combobox', { name: 'Тема оформления' })
+	const theme = page.getByRole('group', { name: 'Тема оформления' })
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
 	await page.emulateMedia({ colorScheme: 'dark' })
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-	await theme.selectOption('light')
+	await theme.getByRole('radio', { name: 'Светлая', exact: true }).check()
 	await page.reload()
-	await expect(theme).toHaveValue('light')
+	await expect(theme.getByRole('radio', { name: 'Светлая', exact: true })).toBeChecked()
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
 	await page.getByRole('tab', { name: 'Просмотр', exact: true }).click()
 	await expect(page.locator('.discord-preview')).toHaveCSS('background-color', 'rgb(49, 51, 56)')
-	await theme.selectOption('dark')
+	await theme.getByRole('radio', { name: 'Тёмная', exact: true }).check()
 	await expect(page.locator('.discord-preview')).toHaveCSS('background-color', 'rgb(49, 51, 56)')
-	await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#151720')
-	await theme.selectOption('system')
+	await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#0c0d16')
+	await theme.getByRole('radio', { name: 'Системная', exact: true }).check()
 	await page.emulateMedia({ colorScheme: 'light' })
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
 })
@@ -308,12 +311,12 @@ test('appearance works with unavailable storage and on login', async ({ page }, 
 	await page.route('**/api/session', route => route.fulfill({ status: 401, json: { error: 'Войди' } }))
 	await page.goto('/')
 	await expect(page.getByRole('link', { name: 'Войти через Discord' })).toBeVisible()
-	await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-light-login.png`, fullPage: true })
-	await page.getByRole('combobox', { name: 'Тема оформления' }).selectOption('dark')
+	await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-light-login.png`, fullPage: true, animations: 'disabled' })
+	await page.getByRole('radio', { name: 'Тёмная', exact: true }).check()
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
 	await page.getByRole('button', { name: 'Декоративные эффекты' }).click()
 	await expect(page.locator('html')).toHaveAttribute('data-effects', 'off')
-	await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-dark-login.png`, fullPage: true })
+	await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-dark-login.png`, fullPage: true, animations: 'disabled' })
 })
 
 test('editor modes preserve draft, undo and do not send requests', async ({ page }) => {
@@ -360,11 +363,16 @@ test('all sections fit both themes and capture review images', async ({ page }, 
 	await page.route('**/api/history', route => route.fulfill({ json: [] }))
 	await page.route('**/api/majestic', route => route.fulfill({ json: { configured: true, busy: false, decisions: {}, rankRoles: {}, preview: null, run: null } }))
 	for (const theme of ['light', 'dark']) {
-		await page.getByRole('combobox', { name: 'Тема оформления' }).selectOption(theme)
+		await page.getByRole('radio', { name: theme === 'light' ? 'Светлая' : 'Тёмная', exact: true }).check()
 		for (const section of ['overview', 'templates', 'variables', 'captures', 'curators', 'access', 'majestic', 'settings', 'history']) {
 			await page.goto('/#' + section)
+			await expect(page.locator(`.sidebar nav a[href="#${section}"]`)).toHaveAttribute('aria-current', 'page')
 			await expect(page.locator('.page-heading h1')).toBeVisible()
 			await page.waitForLoadState('networkidle')
+			await page.locator('.page-view:not([hidden])').evaluate(async el => {
+				await Promise.all(el.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})))
+			})
+			await expect(page.locator('.page-view:not([hidden])')).toHaveCSS('opacity', '1')
 			await page.evaluate(() => scrollTo(0, 0))
 			if (section === 'templates') {
 				const actions = await page.locator('.editor-footer').boundingBox()
@@ -374,12 +382,12 @@ test('all sections fit both themes and capture review images', async ({ page }, 
 			await expect(page.getByRole('dialog')).toHaveCount(0)
 			await expect(page.locator('body')).toHaveCSS('color', theme === 'light' ? 'rgb(37, 40, 61)' : 'rgb(243, 242, 250)')
 			await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-			await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-${theme}-${section}.png`, fullPage: true })
+			await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-${theme}-${section}.png`, fullPage: true, animations: 'disabled' })
 		}
 		await page.goto('/#templates')
 		await page.getByRole('button', { name: 'Восстановить исходный шаблон' }).click()
 		await expect(page.getByRole('dialog')).toBeVisible()
-		await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-${theme}-dialog.png`, fullPage: true })
+		await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-${theme}-dialog.png`, fullPage: true, animations: 'disabled' })
 		await page.getByRole('button', { name: 'Отмена', exact: true }).click()
 	}
 	expect(errors).toEqual([])
@@ -426,4 +434,133 @@ test('invalid variable key shows an inline error and preserves input', async ({ 
 	expect(requests.filter(request => request.path === 'template-variables')).toHaveLength(0)
 	await key.fill('правильный-ключ')
 	await expect(key).toHaveAttribute('aria-invalid', 'false')
+})
+
+
+test('cursor produces a visible perspective tilt and resets it', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await setup(page, 'overview')
+	const card = page.locator('.metric').first()
+	await expect(card).toBeVisible()
+	const bounds = await card.boundingBox()
+	await page.mouse.move(bounds!.x + bounds!.width * .85, bounds!.y + bounds!.height * .8)
+	await expect(card).toHaveClass(/is-lit/)
+	await expect.poll(() => card.evaluate(el => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))))).toBeGreaterThan(3)
+	await expect(card).toHaveCSS('transform', /matrix3d/)
+	await page.screenshot({ path: `output/dashboard-review/motion/${testInfo.project.name}-perspective.png` })
+	await page.mouse.move(900, 35)
+	await expect(card).not.toHaveClass(/is-lit/)
+	await expect.poll(() => card.evaluate(el => el.style.getPropertyValue('--tilt-y'))).toBe('')
+	await page.getByRole('button', { name: 'Декоративные эффекты' }).click()
+	await page.mouse.move(bounds!.x + bounds!.width * .8, bounds!.y + bounds!.height * .8)
+	await expect(card).not.toHaveClass(/is-lit/)
+	await expect(page.locator('html')).toHaveAttribute('data-motion', 'off')
+})
+
+test('glass panels track light without moving the editor', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await setup(page, 'templates')
+	const panel = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Содержимое сообщения', exact: true }) })
+	await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).hover({ position: { x: 180, y: 100 } })
+	await expect(panel).toHaveClass(/is-lit/)
+	await expect.poll(() => panel.evaluate(el => parseFloat(el.style.getPropertyValue('--light-x')))).toBeGreaterThan(0)
+	await expect(panel).toHaveCSS('backdrop-filter', /blur/)
+	await expect(panel).toHaveCSS('transform', 'none')
+	await expect.poll(() => panel.evaluate(el => getComputedStyle(el, '::before').opacity)).toBe('1')
+})
+
+test('smooth scrolling is progressive and stops with reduced motion', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await setup(page, 'templates', Array.from({ length: 120 }, (_, i) => `Строка ${i}`).join('\n'))
+	await expect(page.locator('html')).toHaveClass(/lenis/)
+	await page.mouse.move(1350, 200)
+	await page.mouse.wheel(0, 700)
+	const positions = await page.evaluate(() => new Promise<number[]>(resolve => {
+		const samples: number[] = []
+		function sample() { samples.push(scrollY); if (samples.length === 24) resolve(samples); else requestAnimationFrame(sample) }
+		requestAnimationFrame(sample)
+	}))
+	expect(new Set(positions.map(Math.round)).size).toBeGreaterThan(4)
+	expect(positions.at(-1)!).toBeGreaterThan(positions[0])
+	await page.emulateMedia({ reducedMotion: 'reduce' })
+	await expect(page.locator('html')).not.toHaveClass(/lenis/)
+	await expect(page.locator('html')).toHaveAttribute('data-motion', 'off')
+})
+
+test('page and editor transitions preserve drafts and respect motion preference', async ({ page }) => {
+	await setup(page, 'templates')
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	await editor.fill('Сохранённый в памяти черновик')
+	await page.evaluate(() => { location.hash = 'settings' })
+	await expect(page.locator('.page-view:not([hidden])')).toHaveCSS('animation-name', 'panel-enter')
+	await page.evaluate(() => { location.hash = 'templates' })
+	await expect(editor).toHaveText('Сохранённый в памяти черновик')
+	await page.getByRole('tab', { name: 'Просмотр', exact: true }).click()
+	await expect(page.getByRole('tabpanel')).toHaveCSS('animation-name', 'panel-enter')
+	await page.emulateMedia({ reducedMotion: 'reduce' })
+	await expect(page.getByRole('tabpanel')).toHaveCSS('animation-name', 'none')
+	await page.getByRole('tab', { name: 'Редактирование', exact: true }).click()
+	await expect(editor).toHaveText('Сохранённый в памяти черновик')
+})
+
+test('custom role picker supports search, keyboard, chips and explicit save', async ({ page }) => {
+	const requests = await setup(page, 'curators')
+	const picker = page.getByRole('combobox', { name: 'Доступные для управления роли' })
+	await picker.fill('Вторая')
+	await expect(page.getByRole('option', { name: 'Вторая', exact: true })).toBeVisible()
+	await picker.press('Escape')
+	await expect(picker).toHaveAttribute('aria-expanded', 'false')
+	await picker.press('ArrowDown'); await picker.press('Enter')
+	await expect(page.getByRole('button', { name: 'Убрать роль Вторая', exact: true })).toBeVisible()
+	expect(requests.filter(request => request.path === 'role-curators' && request.body)).toHaveLength(0)
+	await page.getByRole('button', { name: 'Убрать роль Вторая', exact: true }).click()
+	await expect(page.getByRole('button', { name: 'Убрать роль Вторая', exact: true })).toHaveCount(0)
+	await picker.fill('Нет такой роли')
+	await expect(page.getByText('Роли не найдены', { exact: true })).toBeVisible()
+	await picker.press('Escape')
+})
+
+
+test('glass transmits the scene and actually blurs the backdrop', async ({ page }) => {
+	await setup(page, 'templates')
+	const panel = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Содержимое сообщения', exact: true }) })
+	for (const theme of ['Тёмная', 'Светлая']) {
+		await page.getByRole('radio', { name: theme, exact: true }).check()
+		const alpha = await panel.evaluate(el => { const color = getComputedStyle(el).backgroundColor; return color.startsWith('rgba') ? Number(color.match(/([.\d]+)\)$/)?.[1]) : 1 })
+		expect(alpha).toBeLessThan(.25)
+		await page.locator('.ambient-scene').evaluate(el => {
+			el.style.backgroundImage = 'repeating-linear-gradient(90deg, #21324f 0 12px, #b6c0d8 12px 24px)'
+			for (const child of Array.from(el.children)) (child as HTMLElement).style.visibility = 'hidden'
+		})
+		const frosted = await panel.screenshot({ animations: 'disabled' })
+		await panel.evaluate(el => { el.style.backdropFilter = 'none' })
+		const clear = await panel.screenshot({ animations: 'disabled' })
+		expect(frosted.equals(clear)).toBe(false)
+		await panel.evaluate(el => { el.style.removeProperty('backdrop-filter') })
+	}
+})
+
+test('glass reflections follow the pointer while its aura stays subtle', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await setup(page, 'templates')
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	const panel = page.locator('.panel').filter({ has: editor })
+	await editor.hover({ position: { x: 50, y: 100 } })
+	await expect(panel).toHaveClass(/is-lit/)
+	const editorBounds = await editor.boundingBox()
+	const panelBounds = await panel.boundingBox()
+	const target = editorBounds!.x + 50 - panelBounds!.x
+	await page.mouse.move(editorBounds!.x + 50, editorBounds!.y + 100)
+	await expect.poll(() => panel.evaluate((el, expected) => Math.abs(parseFloat(el.style.getPropertyValue('--light-x')) - expected), target)).toBeLessThan(2)
+	await expect.poll(() => panel.evaluate(el => parseFloat(el.style.getPropertyValue('--light-angle')))).toBeGreaterThan(0)
+	const angle = await panel.evaluate(el => parseFloat(el.style.getPropertyValue('--light-angle')))
+	await page.mouse.move(editorBounds!.x + 300, editorBounds!.y + 100)
+	await expect.poll(() => panel.evaluate(el => parseFloat(el.style.getPropertyValue('--light-angle')))).toBeGreaterThan(angle + 2)
+	await expect(panel).toHaveCSS('transform', 'none')
+	await expect.poll(() => page.locator('.cursor-aura').evaluate(el => Number(getComputedStyle(el).opacity))).toBeGreaterThan(0)
+	const opacity = await page.locator('.cursor-aura').evaluate(el => Number(getComputedStyle(el).opacity))
+	expect(opacity).toBeLessThanOrEqual(.2)
+	await page.getByRole('button', { name: 'Декоративные эффекты' }).click()
+	await expect(panel).not.toHaveClass(/is-lit/)
+	await expect.poll(() => panel.evaluate(el => el.style.getPropertyValue('--light-angle'))).toBe('')
 })

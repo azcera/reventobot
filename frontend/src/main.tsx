@@ -11,4 +11,4 @@ import './styles.css'
 import { App } from './App'
 import { ModalProvider } from './components/ui'
 
-createRoot(document.getElementById('root')!).render(<ModalProvider><App /></ModalProvider>)
+createRoot(document.getElementById('root')!).render(<ModalProvider><div className="ambient-scene" aria-hidden="true"><div className="ambient-orb ambient-orb-pink" /><div className="ambient-orb ambient-orb-blue" /><div className="ambient-ribbon" /><div className="ambient-ribbon ambient-ribbon-secondary" /><div className="ambient-grid" /><div className="cursor-aura" /></div><App /></ModalProvider>)

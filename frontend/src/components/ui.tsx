@@ -29,7 +29,7 @@ export function Panel({ title, action, children, className = '', ...props }: Omi
 
 export function Field({ label, hint, children, className = '' }: { label: React.ReactNode; hint?: string; children: React.ReactElement<{ id?: string; 'aria-describedby'?: string }>; className?: string }) {
 	const id = useId()
-	return <div className={`grid min-w-0 gap-2 ${className}`}><label htmlFor={id} className="field-label">{label}</label>
+	return <div className={`grid min-w-0 content-start gap-2 ${className}`}><label htmlFor={id} className="field-label">{label}</label>
 		{React.cloneElement(children, { id, 'aria-describedby': hint ? id + '-hint' : undefined })}
 		{hint && <p id={id + '-hint'} className="field-hint">{hint}</p>}
 	</div>
