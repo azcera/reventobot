@@ -3,7 +3,10 @@
  * @param {string} memberNickname
  * @returns {{memberName: string, memberStatic: string} | null}
  */
-function parseDisplayName(memberNickname: string) {
+import { store } from '../dashboard/store'
+import { stripRolePrefix } from './adminPrefix'
+
+function parseDisplayName(memberNickname: string, rolePrefixes = store.getSetting('ROLE_PREFIXES')) {
 	if (!memberNickname || !memberNickname.includes('|')) {
 		return null
 	}
@@ -20,7 +23,7 @@ function parseDisplayName(memberNickname: string) {
 	const memberStatic = staticMatch[1]
 
 	// Убираем префикс вида [что угодно] (включая юникод)
-	memberName = memberName.replace(/^\[.*?\]\s*/, '').trim()
+	memberName = stripRolePrefix(memberName, rolePrefixes)
 
 	// Разрешаем латиницу, символ @ и опционально " / " между словами
 	const nameRegex = /^[A-Za-z]+(?:\s*\/\s*[@A-Za-z]+)*$/

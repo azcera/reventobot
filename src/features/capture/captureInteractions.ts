@@ -12,6 +12,7 @@ import { parseDateTime, getDiscordTimestamp } from '../../utils/dateUtils'
 import { sendEphemeralWithAutoDelete } from '../../utils/autoDelete'
 import captureManager = require('./captureManager')
 import db = require('../../services/database')
+import { captureExpired } from './captureExpiry'
 
 /**
  * Показывает модалку ручного создания реги (время, цель, maxMain).
@@ -213,6 +214,10 @@ async function handleInlineEditTimeButton(interaction: import('discord.js').Butt
 	}
 
 	const messageId = interaction.message.id
+	const { rows } = await db.query('SELECT discord_timestamp FROM active_captures WHERE message_id = $1', [messageId])
+	if (!rows[0] || captureExpired(rows[0].discord_timestamp)) {
+		return sendEphemeralWithAutoDelete(interaction, { content: '❌ Сбор завершён или больше недоступен.' })
+	}
 	const modal = new ModalBuilder()
 		.setCustomId(`modal_inline_edit_time_${messageId}`)
 		.setTitle('Изменение времени капта')
@@ -236,6 +241,9 @@ async function handleInlineEditTimeButton(interaction: import('discord.js').Butt
  * @param {ModalSubmitInteraction} interaction
  */
 async function submitInlineEditTimeModal(interaction: import('discord.js').ModalSubmitInteraction<'cached'>) {
+	if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))) {
+		return sendEphemeralWithAutoDelete(interaction, { content: '❌ У вас нет прав для изменения времени регистрации.' })
+	}
 	const newTimeInput = interaction.fields
 		.getTextInputValue('capt_new_time')
 		.trim()
@@ -265,10 +273,14 @@ async function submitInlineEditTimeModal(interaction: import('discord.js').Modal
 
 	try {
 		// Обновляем время в базе данных
-		await db.query(
-			'UPDATE active_captures SET discord_timestamp = $1 WHERE message_id = $2',
-			[newDiscordTimestamp, messageId]
+		const updated = await db.query(
+			`UPDATE active_captures SET discord_timestamp = $1
+			 WHERE message_id = $2 AND controls_closed = FALSE
+			 AND substring(discord_timestamp from '<t:([0-9]+)')::bigint * 1000 + 3600000 > $3
+			 RETURNING message_id`,
+			[newDiscordTimestamp, messageId, Date.now()]
 		)
+		if (!updated.rows.length) return interaction.editReply({ content: '❌ Сбор завершён или больше недоступен.' })
 
 		// ✅ Передаем client более надежно
 		const client = interaction.client

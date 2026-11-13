@@ -4,7 +4,7 @@ import { Collection, MessageFlags, type ButtonInteraction } from 'discord.js'
 import { store, settingDefinitions } from '../src/dashboard/store'
 
 const queries: { sql: string; values: unknown[] }[] = []
-let applicationRows: Record<string, unknown>[] = [{ channel_id: 'application-channel', full_name: 'Test', age: 20, about_and_expectations: 'Test', previous_experience: 'Test' }]
+let applicationRows: Record<string, unknown>[] = [{ channel_id: 'application-channel', full_name: 'Tony | 123', age: 20, about_and_expectations: 'Test', previous_experience: 'Test' }]
 let databaseError: Error | null = null
 const databasePath = require.resolve('../src/services/database')
 const previousDatabase = require.cache[databasePath]
@@ -40,8 +40,10 @@ test('accepted applications close five seconds after confirmation without additi
 			customId: 'invite_accept_candidate', user: { id: 'moderator' },
 			member: { roles: { cache: new Collection() }, permissions: { has: () => true } },
 			guild: {
-				name: 'Test', channels: { cache: new Collection() },
-				members: { async fetch() { return memberPresent ? { roles: { async add(id: string) { roles.push(id) } } } : null } }
+				name: 'Test', channels: { cache: new Collection([['archive', {
+					id: 'archive', name: 'archive tony 123', parentId: store.getSetting('PARENT_CHANNEL_ID'), isThread: () => true
+				}]]) },
+				members: { async fetch() { return memberPresent ? { displayName: 'Tony | 123', roles: { async add(id: string) { roles.push(id) } } } : null } }
 			},
 			client: { users: { async fetch() { return null } } },
 			channel: { async delete() { deleted = true } },

@@ -22,7 +22,7 @@ const UPDATE_INTERVAL = 15 * 60000
 const DAY = 86400000
 const MSK = 3 * 3600000
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
-interface ScheduleEvent { id: string; label: string; time: string; days: string[]; is247?: boolean; window?: boolean; note?: string }
+interface ScheduleEvent { id: string; label: string; time: string; days: string[]; is247?: boolean; window?: boolean; note?: string; groupKind?: 'supply' | 'attendance' }
 type UpcomingEvent = ScheduleEvent & { timestamp: number }
 const EVENT_EMOJI: Record<string, string> = {
 	Дроп: '📍',
@@ -32,6 +32,8 @@ const EVENT_EMOJI: Record<string, string> = {
 	Поставки: '🚚',
 	Контрабанда: '🛡️',
 	'Остров | ФЗ': '💀',
+	Остров: '🏝️',
+	ФЗ: '🏭',
 	Капты: '⚔️'
 }
 const SERVER_EMOJI: Record<string, string> = {
@@ -41,6 +43,7 @@ const SERVER_EMOJI: Record<string, string> = {
 	Цеха: 'ceha',
 	Поставки: 'postavka',
 	'Остров | ФЗ': 'ostrov',
+	Остров: 'ostrov',
 	Капты: 'capts'
 }
 
@@ -84,6 +87,20 @@ function selectionId(event: UpcomingEvent) {
 	return `${event.id}_${Math.floor(event.timestamp / 1000)}`
 }
 
+function attackEventAt(now = Date.now()) {
+	const moscow = new Date(now + MSK)
+	const minutes = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
+	if (!(minutes >= 16 * 60 && minutes < 19 * 60 || minutes >= 20 * 60 && minutes < 23 * 60)) return null
+	return (events as ScheduleEvent[]).find(event => ['island', 'fz'].includes(event.id) && event.days.includes(WEEKDAYS[moscow.getUTCDay()])) || null
+}
+
+function specialGroupEvents(now = Date.now()): UpcomingEvent[] {
+	const supply = events.find(event => event.id === 'supply')!
+	const attack = (events as ScheduleEvent[]).find(event => ['island', 'fz'].includes(event.id) && event.days.includes(WEEKDAYS[new Date(now + MSK).getUTCDay()]))
+	return [{ ...supply, timestamp: now, groupKind: 'supply' },
+		...(attack ? [{ ...attack, timestamp: now, groupKind: 'attendance' as const }] : [])]
+}
+
 function getSchedule(now = Date.now()) {
 	return {
 		project: 'MAJESTIC',
@@ -124,6 +141,7 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 					new ButtonBuilder()
 						.setCustomId(`schedule_group_${selectionId(nearest)}`)
 						.setLabel(render('schedule.button'))
+						.setEmoji(eventEmoji(nearest.label))
 						.setStyle(ButtonStyle.Primary)
 						.setDisabled(stale)
 				)
@@ -144,6 +162,7 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 		)
 		.map(event => {
 			let status = ''
+			if (['island', 'fz'].includes(event.id)) status = `\nНападение ${attackEventAt(now)?.id === event.id ? 'разрешено' : 'запрещено'}`
 			if (event.id === 'captures') {
 				const moscow = new Date(now + MSK)
 				const minutes = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
@@ -157,7 +176,7 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 					minutes < end
 				status = `\nКапты ${active ? 'активны' : 'не активны'}`
 			}
-			return render('schedule.special', { emoji: eventEmoji(event.label), event: escapeMarkdown(event.label), time: escapeMarkdown(event.time), days: event.days?.length ? ` · ${event.days.join(', ')}` : '', note: event.note ? `\n${escapeMarkdown(event.note)}` : '', status })
+			return { event, text: render('schedule.special', { emoji: eventEmoji(event.label), event: escapeMarkdown(event.label), time: escapeMarkdown(event.time), days: event.days?.length ? ` · ${event.days.join(', ')}` : '', note: event.note ? `\n${escapeMarkdown(event.note)}` : '', status }) }
 		})
 	if (rows.length)
 		container
@@ -167,14 +186,20 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(rows.join('\n'))
 			)
-	for (const row of special)
+	for (const { event, text } of special) {
 		container
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(row.slice(0, 3000))
-			)
+		const content = new TextDisplayBuilder().setContent(text.slice(0, 3000))
+		if (event.id === 'supply' || ['island', 'fz'].includes(event.id) && event.days.includes(WEEKDAYS[new Date(now + MSK).getUTCDay()])) {
+			container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(content).setButtonAccessory(
+				new ButtonBuilder().setCustomId(`schedule_group_${event.id}`).setLabel(render('schedule.button'))
+					.setEmoji(eventEmoji(event.label)).setStyle(ButtonStyle.Primary)
+					.setDisabled(stale)
+			))
+		} else container.addTextDisplayComponents(content)
+	}
 	container.addTextDisplayComponents(
 		new TextDisplayBuilder().setContent(
 			render('schedule.footer', { relative: `<t:${Math.floor(updatedAt / 1000)}:R>`, warning: stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : '' })
@@ -269,6 +294,7 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 		},
 		resolveSelection(id: string) {
 			return (
+				specialGroupEvents(now()).find(event => event.id === id) ||
 				upcomingEvents(events, now()).find(
 					event => selectionId(event) === id
 				) || null
@@ -292,5 +318,6 @@ export {
 	buildSchedule,
 	canCreateGroup,
 	selectionId,
-	getSchedule
+	getSchedule,
+	attackEventAt
 }

@@ -4,6 +4,7 @@ import type * as E from 'express'
 import type * as Pg from 'pg'
 import { loadDiscordMembers } from './discordMembers'
 import { adminPrefix } from '../utils/adminPrefix'
+import { parseDisplayName } from '../utils/parseDisplayName'
 
 async function syncRolePrefixes(guild: D.Guild, rolePrefixes: T.RolePrefix[]) {
 	const members = await loadDiscordMembers(guild)
@@ -11,7 +12,11 @@ async function syncRolePrefixes(guild: D.Guild, rolePrefixes: T.RolePrefix[]) {
 	for (const member of members!.values()) {
 		const prefix = adminPrefix([...member.roles.cache.keys()], [], rolePrefixes)
 		if (!prefix) continue
-		const cleanName = member.displayName.replace(/^\[[^\]]*\]\s*/, '').trim()
+		const parsed = parseDisplayName(member.displayName, rolePrefixes)
+		// Recover the name from an older tag when its dashboard value has changed.
+		const cleanName = parsed ? `${parsed.memberName} | ${parsed.memberStatic}${member.displayName.split('|')[1].replace(/^\s*\d+/, '')}`
+			: member.displayName.match(/([A-Za-z]+\s*\|\s*\d+(?:\s*\/.*)?)$/)?.[1]
+		if (!cleanName) { result.skipped++; continue }
 		const nickname = `${prefix}${cleanName}`
 		if (nickname === member.displayName) { result.unchanged++; continue }
 		if (!member.manageable || nickname.length > 32) { result.skipped++; continue }

@@ -2,7 +2,8 @@ import type { FamilyCharacter, MemberDecision, PreviewRow, RolePrefix } from '..
 export interface PlannedRow extends PreviewRow { currentRoleIds: string[]; addRoles: string[]; removeRoles: string[] }
 export interface PreviewMember { id: string; nickname: string | null; bot: boolean; roleIds: string[] }
 export interface PreviewOptions { decisions?: Record<string, MemberDecision>; adminRoleIds?: string[]; rolePrefixes?: RolePrefix[]; nicknamesOnly?: boolean }
-import { adminPrefix } from '../../utils/adminPrefix'
+import { adminPrefix, stripRolePrefix } from '../../utils/adminPrefix'
+import { store } from '../../dashboard/store'
 
 const rankRoles: Readonly<Record<string, string>> = Object.freeze({
 	Dep: '1445808131832676558',
@@ -20,17 +21,18 @@ const tierRoles = new Set(['Tier 1', 'Tier 2', 'Tier 3'].map(rank => rankRoles[r
 const adminRanks = new Set(['Dep', 'High', 'Recruit'])
 const ignoredRanks = new Set(['Leader', 'Own.dep'])
 
-function parseNickname(nickname: unknown) {
+function parseNickname(nickname: unknown, rolePrefixes = store.getSetting('ROLE_PREFIXES')) {
 	if (typeof nickname !== 'string') return null
-	const match = /^(\[[^\]\r\n]+\]\s*)?([^|\r\n]+?)\s*\|\s*([1-9]\d*)(\s*\/[^\r\n]*)?$/.exec(nickname)
+	const clean = stripRolePrefix(nickname, rolePrefixes)
+	const match = /^([^|\r\n]+?)\s*\|\s*([1-9]\d*)(\s*\/[^\r\n]*)?$/.exec(clean)
 	if (!match) return null
-	return { prefix: match[1] || '', static: match[3], suffix: match[4] || '' }
+	return { prefix: nickname.slice(0, nickname.indexOf(clean)), static: match[2], suffix: match[3] || '' }
 }
 
 function buildPreview(characters: FamilyCharacter[], members: PreviewMember[], { decisions = {}, adminRoleIds = [], rolePrefixes, nicknamesOnly = false }: PreviewOptions = {}): PlannedRow[] {
 	const byStatic = new Map(characters.map(character => [String(character.id), character]))
 	const parsedMembers = members.filter(member => !member.bot).map(member => ({
-		...member, parsed: parseNickname(member.nickname), decision: decisions[member.id] || {}
+		...member, parsed: parseNickname(member.nickname, rolePrefixes), decision: decisions[member.id] || {}
 	}))
 	for (const member of parsedMembers) {
 		if (member.decision.static) member.parsed = {
@@ -62,7 +64,7 @@ function buildPreview(characters: FamilyCharacter[], members: PreviewMember[], {
 			return { ...row, status: 'conflict', reason: 'Неизвестный игровой ранг.' }
 		}
 		const name = character.login.trim().split(/\s+/)[0]
-		let nickname = `${prefix}${name} | ${staticId}${suffix}`
+		let nickname = `${rolePrefixes ? adminPrefix(member.roleIds, adminRoleIds, rolePrefixes) : prefix}${name} | ${staticId}${suffix}`
 		if (nickname.length > 32) return { ...row, status: 'conflict', reason: 'Новый ник длиннее 32 символов; префикс, static и текст не обрезаем.' }
 		row.nickname = nickname === member.nickname ? null : nickname
 		row.addRoles = []

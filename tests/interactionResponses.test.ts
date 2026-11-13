@@ -108,3 +108,17 @@ test('stale Family Wars buttons reply without accessing the database', async () 
 		assert.equal(f.responses[0].payload.flags, MessageFlags.Ephemeral)
 	}
 })
+
+test('archive search returns an explicit response when Discord stops responding', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	t.mock.method(console, 'error', () => {})
+	const f = fixture('archive_find')
+	Object.assign(f.interaction.guild, { channels: { cache: new Collection(), fetch: () => new Promise(() => {}) } })
+	const pending = f.dispatch()
+	await new Promise(resolve => setImmediate(resolve))
+	assert.equal(f.responses[0].method, 'deferReply')
+	t.mock.timers.tick(20000)
+	await pending
+	assert.equal(f.responses.at(-1)?.method, 'editReply')
+	assert.match(f.responses.at(-1)?.payload.content, /Discord слишком долго/)
+})

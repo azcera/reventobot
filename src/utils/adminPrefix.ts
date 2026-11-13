@@ -10,4 +10,10 @@ function adminPrefix(roleIds: string[], adminRoleIds: string[], rolePrefixes?: i
 	return entry ? `${entry.prefix.trim()} ` : ''
 }
 
-export { adminPrefix, defaultRolePrefixes }
+function stripRolePrefix(value: string, rolePrefixes: import('../types').RolePrefix[] = []) {
+	const prefix = [...rolePrefixes].sort((a, b) => b.prefix.trim().length - a.prefix.trim().length)
+		.find(entry => value.startsWith(entry.prefix.trim()))?.prefix.trim()
+	return (prefix ? value.slice(prefix.length) : value.replace(/^\[[^\]]*\]\s*/, '')).trim()
+}
+
+export { adminPrefix, defaultRolePrefixes, stripRolePrefix }

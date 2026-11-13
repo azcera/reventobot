@@ -949,6 +949,15 @@
     "variables": [],
     "maxLength": 80
   },
+  "group.message": {
+    "group": "Группа",
+    "label": "Сообщение группы для всех мероприятий",
+    "default": "# 📢 {role} Групп на `{target}`{gathering}{attendance}.{code}",
+    "type": "text",
+    "components": false,
+    "variables": ["role", "target", "gathering", "attendance", "code"],
+    "maxLength": 2000
+  },
   "schedule.title": {
     "group": "Расписание",
     "label": "Заголовок",

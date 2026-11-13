@@ -136,7 +136,7 @@ class InviteCandidate {
 		 * @type {string}
 		 */
 		const name = values.invite_name
-		const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1)
+		const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
 
 		const fullName = `${capitalizedName} | ${values.invite_static}`
 		const age = parseInt(values.invite_age)

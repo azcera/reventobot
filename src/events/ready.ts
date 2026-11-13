@@ -8,10 +8,12 @@ import { store } from '../dashboard/store'
 import pool = require('../services/database')
 import { createEventSchedule } from '../services/eventSchedule'
 import { registerAdminApplicationCommands } from '../services/adminApplicationCommands'
+import { createCaptureExpiry } from '../services/captureExpiry'
 
 export = (client: import('discord.js').Client) => {
 	client.once(Events.ClientReady, async readyClient => {
 		console.log(`✅ Готово! Вход как ${readyClient.user.tag}`)
+		createCaptureExpiry({ client, pool, store }).start()
 		client.eventSchedule = createEventSchedule({ client, pool, store })
 		client.eventSchedule.start().catch(error => {
 			client.eventSchedule = null

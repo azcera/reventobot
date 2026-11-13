@@ -53,6 +53,8 @@ const initDb = async () => {
         `)
 
 		await pool.query(`ALTER TABLE active_captures
+			ADD COLUMN IF NOT EXISTS channel_id TEXT,
+			ADD COLUMN IF NOT EXISTS controls_closed BOOLEAN NOT NULL DEFAULT FALSE,
 			ADD COLUMN IF NOT EXISTS main_list_meta JSONB,
 			ADD COLUMN IF NOT EXISTS reserve_list_meta JSONB,
 			ADD COLUMN IF NOT EXISTS approved_users JSONB NOT NULL DEFAULT '[]'::jsonb,

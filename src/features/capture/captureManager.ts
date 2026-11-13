@@ -20,6 +20,7 @@ import {
 	ChannelType
 } from 'discord.js'
 import { createHash } from 'node:crypto'
+import { captureExpired } from './captureExpiry'
 require('dotenv').config()
 
 import pool = require('../../services/database.js')
@@ -147,6 +148,7 @@ function buildCaptureMessage(
 	sortMode: string = 'priority'
 ) {
 	const approved = new Set(approvedUsers)
+	const expired = captureExpired(discordTimestamp)
 	approvalPage = Math.max(
 		0,
 		Math.min(
@@ -186,14 +188,17 @@ function buildCaptureMessage(
 		new ButtonBuilder()
 			.setCustomId('capt_join')
 			.setLabel(dashboard.text('registration.join'))
+			.setDisabled(expired)
 			.setStyle(ButtonStyle.Success),
 		new ButtonBuilder()
 			.setCustomId('capt_leave')
 			.setLabel(dashboard.text('registration.leave'))
+			.setDisabled(expired)
 			.setStyle(ButtonStyle.Danger),
 		new ButtonBuilder()
 			.setCustomId('capt_edit_time_trigger') // Название кнопки для перехвата админ права
 			.setLabel(dashboard.text('registration.editTime'))
+			.setDisabled(expired)
 			.setStyle(ButtonStyle.Secondary)
 	)
 	const pageCount = Math.ceil(
@@ -394,8 +399,8 @@ async function sendCollection(
 
 	try {
 		await pool.query(
-			`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, main_list_meta, reserve_list_meta, target, max_main)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, main_list_meta, reserve_list_meta, target, max_main, channel_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 			[
 				message.id,
 				discordTimestamp,
@@ -405,7 +410,8 @@ async function sendCollection(
 				JSON.stringify(mainListMeta),
 				JSON.stringify(reserveListMeta),
 				target,
-				maxMain
+				maxMain,
+				channel.id
 			]
 		)
 	} catch (caught) {
@@ -458,6 +464,10 @@ async function handleButton(interaction: import('discord.js').ButtonInteraction<
 		}
 
 		const discordTimestamp = row.discord_timestamp
+		if (captureExpired(discordTimestamp)) {
+			await client.query('ROLLBACK')
+			return interaction.followUp({ content: '❌ Сбор завершён: с его начала прошёл час.', flags: MessageFlags.Ephemeral })
+		}
 		const target = row.target
 		const maxMain = row.max_main || 20
 

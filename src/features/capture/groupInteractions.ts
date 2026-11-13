@@ -10,12 +10,13 @@ import { parseDateTime, getMskTimeString } from '../../utils/dateUtils'
 
 import { optionsMap } from '../../features/capture/groupOptions'
 import { sendEphemeralWithAutoDelete } from '../../utils/autoDelete'
+import { attackEventAt } from '../../services/eventSchedule'
 
 /**
  * Показывает модалку (время/цель/код) в зависимости от выбранного значения.
  * @param {Interaction} interaction
  */
-async function showGroupModal(interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').ChatInputCommandInteraction<'cached'>, selectedTarget = 'other') {
+async function showGroupModal(interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').ChatInputCommandInteraction<'cached'>, selectedTarget = 'other', attendance = false) {
 
 	const modal = new ModalBuilder()
 		.setCustomId(`modal_group_${selectedTarget}`)
@@ -54,6 +55,9 @@ async function showGroupModal(interaction: import('discord.js').ButtonInteractio
 
 	if (selectedTarget === 'other') {
 		modal.addLabelComponents(timeLabel, targetLabel, codeLabel)
+	} else if (attendance) {
+		timeLabel.setLabel('Время проверки явки').setDescription('Сбор будет за 5 минут до проверки явки. Время МСК.')
+		modal.addLabelComponents(timeLabel, codeLabel)
 	} else {
 		modal.addLabelComponents(codeLabel)
 	}
@@ -67,13 +71,17 @@ async function showGroupModal(interaction: import('discord.js').ButtonInteractio
  */
 async function submitGroupModal(interaction: import('discord.js').ModalSubmitInteraction<'cached'>) {
 	const selectedValue = interaction.customId.replace('modal_group_', '')
-	let timeInput, target, scheduledDate
+	let timeInput, target, scheduledDate, groupKind: 'supply' | 'attendance' | undefined
+	let eventId: string | undefined
 
 	if (selectedValue.startsWith('schedule_')) {
 		const event = await scheduledGroupEvent(interaction, selectedValue.slice('schedule_'.length))
 		if (!event) return
 		scheduledDate = new Date(event.timestamp)
 		target = event.label.toUpperCase()
+		groupKind = event.groupKind
+		eventId = event.id
+		if (groupKind === 'attendance') scheduledDate = parseDateTime(interaction.fields.getTextInputValue('group_time').trim()) || undefined
 	} else if (selectedValue !== 'other') {
 		timeInput = optionsMap[selectedValue].time
 		target = optionsMap[selectedValue].target
@@ -85,18 +93,21 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 	const code = interaction.fields.getTextInputValue('group_code').trim().replace(/^groupID:/, '').trim()
 
 	const parsedDate = scheduledDate || parseDateTime(timeInput || '')
-	if (!parsedDate || isNaN(parsedDate.getTime())) {
+	if (groupKind !== 'supply' && (!parsedDate || isNaN(parsedDate.getTime()))) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content:
 				'❌ Неверный формат времени. Используйте `ЧЧ:ММ` или `ДД.ММ.ГГГГ ЧЧ:ММ`.'
 		})
 	}
+	if (groupKind === 'attendance' && (parsedDate!.getTime() <= Date.now() || attackEventAt(parsedDate!.getTime())?.id !== eventId)) {
+		return sendEphemeralWithAutoDelete(interaction, { content: '❌ Проверка явки должна быть в будущем, в разрешённое время этого МП: 16:00–19:00 или 20:00–23:00 МСК в соответствующий день.' })
+	}
 
-	const mskTimeStr = getMskTimeString(parsedDate, -600)
-	const mskTimeWith5MinStr = getMskTimeString(parsedDate, -300)
+	const mskTimeStr = groupKind === 'supply' ? '' : getMskTimeString(parsedDate!, groupKind === 'attendance' ? -300 : -600)
+	const mskTimeWith5MinStr = groupKind === 'supply' ? '' : getMskTimeString(parsedDate!, groupKind === 'attendance' ? 0 : -300)
 
 	await sendEphemeralWithAutoDelete(interaction, {
-		content: `✅ Группа создана!\nВремя: ${mskTimeStr}\nЦель: ${target}${code ? `\nКод: ${code}` : ''}`
+		content: `✅ Группа создана!${mskTimeStr ? `\nВремя: ${mskTimeStr}` : ''}\nЦель: ${target}${code ? `\nКод: ${code}` : ''}`
 	})
 
 	try {
@@ -114,7 +125,12 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 
 		const roleMention = mentionedRoleId ? `<@&${mentionedRoleId}> ` : ''
 
-		const msgContent = `# 📢 ${roleMention} Групп на \`${target}\` в \`${mskTimeStr}\`, проверка явки в \`${mskTimeWith5MinStr}\`.${code ? ` 🔑 Код группы: \`${code}\`` : ''}`
+		const msgContent = dashboard.text('group.message', {
+			role: roleMention, target, time: mskTimeStr, attendanceTime: mskTimeWith5MinStr,
+			gathering: mskTimeStr ? ` в \`${mskTimeStr}\`` : '',
+			attendance: mskTimeWith5MinStr ? `, проверка явки в \`${mskTimeWith5MinStr}\`` : '',
+			code: code ? ` 🔑 Код группы: \`${code}\`` : ''
+		})
 
 		for (let i = 0; i < 3; i++) {
 			await pingChannel.send(msgContent)
@@ -141,8 +157,9 @@ async function scheduledGroupEvent(interaction: import('discord.js').ButtonInter
 
 async function showScheduledGroupModal(interaction: import('discord.js').ButtonInteraction<'cached'>) {
 	const selection = interaction.customId.slice('schedule_group_'.length)
-	if (!await scheduledGroupEvent(interaction, selection)) return
-	return showGroupModal(interaction, `schedule_${selection}`)
+	const event = await scheduledGroupEvent(interaction, selection)
+	if (!event) return
+	return showGroupModal(interaction, `schedule_${selection}`, event.groupKind === 'attendance')
 }
 
 export { showGroupModal, submitGroupModal, showScheduledGroupModal }

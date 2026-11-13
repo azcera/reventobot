@@ -27,7 +27,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | --- | --- |
 | Команды и обработка Discord | `src/commands/`, `src/events/messageCreate.ts`, `src/events/interactionCreate.ts` |
 | Заявки и модерация | `src/features/invite/`, `src/services/adminApplicationCommands.ts` |
-| Капты, регистрация, группы | `src/features/capture/` |
+| Капты, регистрация, группы | `src/features/capture/`, `src/services/captureExpiry.ts` (закрытие кнопок) |
 | Предустановки ручных сборов и их команды | `src/features/capture/capturePresets.ts`, `frontend/src/pages/CapturePresets.tsx` |
 | Архивы | `src/features/archive/` |
 | Расписание событий | `src/services/eventSchedule.ts`, `src/config/eventSchedule.ts`, `src/features/capture/groupOptions.ts` |
