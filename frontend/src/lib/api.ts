@@ -6,7 +6,7 @@ const text = (value: unknown): value is string => typeof value === 'string'
 const number = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 const boolean = (value: unknown): value is boolean => typeof value === 'boolean'
 const array = (value: unknown, valid: (item: unknown) => boolean): boolean => Array.isArray(value) && value.every(valid)
-const resource = (value: unknown): boolean => record(value) && text(value.id) && text(value.name)
+const resource = (value: unknown): boolean => record(value) && text(value.id) && text(value.name) && (value.manageable === undefined || boolean(value.manageable))
 const field = (value: unknown): boolean => record(value) && text(value.key) && text(value.group) && text(value.label) && text(value.type) && text(value.value)
 const settingValue = (value: unknown): boolean => text(value) || boolean(value) || array(value, entry => record(entry) && text(entry.roleId) && text(entry.prefix))
 const setting = (value: unknown): boolean => record(value) && text(value.key) && text(value.label) && text(value.type) && settingValue(value.value)
@@ -15,7 +15,7 @@ const stringGroups = (value: unknown): boolean => record(value) && Object.values
 const config = (value: unknown): boolean => record(value) && number(value.revision) && array(value.templates, field) && array(value.settings, setting) && (value.bindings === undefined || record(value.bindings)) && (value.templateVariables === undefined || stringGroups(value.templateVariables)) && (value.templateVariableLabels === undefined || stringGroups(value.templateVariableLabels))
 const source = (value: unknown): boolean => record(value) && text(value.url) && text(value.channelId) && boolean(value.canEdit) && text(value.revision)
 const item = (value: unknown): boolean => record(value) && (value.type === 'separator' || ['text', 'image', 'section'].includes(String(value.type)) && text(value.value))
-const mclList = (value: unknown): boolean => record(value) && ['id', 'title', 'channelId', 'roleId', 'addName', 'removeName'].every(key => text(value[key])) && (value.accessRoleId === undefined || text(value.accessRoleId))
+const roleCurator = (value: unknown): boolean => record(value) && text(value.roleId) && array(value.managedRoleIds, text)
 const row = (value: unknown): boolean => record(value) && text(value.discordId) && text(value.status) && (value.currentNickname === null || text(value.currentNickname))
 const majestic = (value: unknown): boolean => record(value) && boolean(value.busy) && boolean(value.configured) && record(value.decisions) && record(value.rankRoles) && (value.preview === null || record(value.preview) && text(value.preview.id) && number(value.preview.generatedAt) && number(value.preview.familyTotal) && array(value.preview.rows, row) && record(value.preview.summary)) && (value.run === null || record(value.run) && text(value.run.kind) && text(value.run.status) && number(value.run.completed) && number(value.run.total) && Array.isArray(value.run.results))
 
@@ -26,7 +26,7 @@ function validResponse(path: string, value: unknown): boolean {
   if (path === 'session') return record(value) && text(value.csrf) && resource(value.guild) && resource(value.user)
   if (path === 'history') return array(value, history)
   if (path === 'overview') return record(value) && boolean(value.ready) && number(value.ping) && number(value.uptime) && boolean(value.database) && array(value.history, history)
-  if (path === 'mcl-lists') return record(value) && number(value.revision) && array(value.lists, mclList)
+  if (path === 'role-curators') return record(value) && number(value.revision) && array(value.curators, roleCurator)
   if (path === 'capture-presets') return record(value) && number(value.revision) && array(value.presets, item => record(item) && ['id', 'command', 'target', 'channelId', 'accessRoleId'].every(key => text(item[key])) && number(item.maxMain))
   if (path === 'majestic' || path.startsWith('majestic/')) return majestic(value)
   if (path.startsWith('container-message?')) return record(value) && array(value.items, item) && source(value.source)

@@ -58,8 +58,11 @@ export = (client: import('discord.js').Client) => {
 		}
 
 		if (('customId' in interaction && interaction.customId.startsWith('mcl_')) && (interaction.isButton() || interaction.isUserSelectMenu() || interaction.isStringSelectMenu())) {
-			if (!client.mclLists) return interaction.reply({ content: 'Списки временно недоступны.', flags: MessageFlags.Ephemeral })
-			return await client.mclLists.handle(interaction)
+			return await interaction.reply({ content: 'Списки отключены. Используйте «Приложения → Управление ролями» в меню участника.', flags: MessageFlags.Ephemeral })
+		}
+		if (interaction.isButton() && interaction.customId.startsWith('role_curator_')) {
+			if (!client.roleCurators) return interaction.reply({ content: 'Управление ролями временно недоступно.', flags: MessageFlags.Ephemeral })
+			return await client.roleCurators.handle(interaction)
 		}
 
 		if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('family_cleanup_')) {

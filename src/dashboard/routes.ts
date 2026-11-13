@@ -141,7 +141,7 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 			const channels = await req.guild.channels.fetch()
 			res.json({ channels: [...channels.values()].filter((channel): channel is NonNullable<typeof channel> => Boolean(channel)).map(channel => ({ id: channel.id, name: channel.name, type: channel.type, parentId: channel.parentId,
 				canSend: Boolean(channel.permissionsFor(client.user!)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])) })),
-			roles: [...req.guild.roles.cache.values()].filter(role => role.id !== req.guild.id).sort((a, b) => b.position - a.position).map(role => ({ id: role.id, name: role.name })) })
+			roles: [...req.guild.roles.cache.values()].filter(role => role.id !== req.guild.id).sort((a, b) => b.position - a.position).map(role => ({ id: role.id, name: role.name, manageable: !role.managed && role.editable })) })
 		} catch (caughtError) {
  const error = getError(caughtError)
  respondError(res, error) }
@@ -168,18 +168,18 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 			res.json([...threads.values()].filter(thread => thread.parentId === channel.id && !thread.locked && thread.permissionsFor(client.user!)?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessagesInThreads])).map(thread => ({ id: thread.id, name: thread.name, type: thread.type, parentId: channel.id, canSend: true })))
 		} catch (caught) { respondError(res, getError(caught)) }
 	})
-	client.mclLists ||= (require('../services/mclLists') as typeof import('../services/mclLists')).createMclLists({ client, pool, store })
+	client.roleCurators ||= (require('../services/roleCurators') as typeof import('../services/roleCurators')).createRoleCurators({ client, pool, store })
 	client.capturePresets ||= (require('../features/capture/capturePresets') as typeof import('../features/capture/capturePresets')).createCapturePresets({ client, pool, store })
 	app.get('/api/capture-presets', (req: E.Request, res: E.Response) => res.json({ presets: Object.values(store.capturePresets), revision: store.revision }))
 	app.post('/api/capture-presets', async (req: E.Request, res: E.Response) => {
 		try { res.json(await client.capturePresets!.save(req.guild, req.body.presets, req.body.revision, req.dashboardUser)) }
 		catch (caught) { respondError(res, getError(caught)) }
 	})
-	app.get('/api/mcl-lists', (req: E.Request, res: E.Response) => res.json({ lists: Object.values(store.mclLists), revision: store.revision }))
-	app.post('/api/mcl-lists', async (req: E.Request, res: E.Response) => {
+	app.get('/api/role-curators', (req: E.Request, res: E.Response) => res.json({ curators: Object.values(store.roleCurators), revision: store.revision }))
+	app.post('/api/role-curators', async (req: E.Request, res: E.Response) => {
 		try {
 			if (!Number.isSafeInteger(req.body.revision)) throw problem(400, 'Обновите страницу перед сохранением.')
-			res.json(await client.mclLists!.save(req.guild, req.body.lists, req.body.revision, req.dashboardUser))
+			res.json(await client.roleCurators!.save(req.guild, req.body.curators, req.body.revision, req.dashboardUser))
 		} catch (caughtError) {
  const error = getError(caughtError)
  respondError(res, error) }

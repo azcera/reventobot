@@ -5,6 +5,7 @@ import { Empty, IconButton, useModal } from './ui'
 import { permanentGroups } from '../lib/templates'
 
 const actions: Record<string, string> = {
+	roleCurators: 'Изменение кураторов ролей', 'roleCurators.migrate': 'Перенос доступа списков в кураторов ролей',
 	templates: 'Обновление шаблона', settings: 'Обновление настроек', bindings: 'Привязка сообщения', templateVariables: 'Изменение переменной',
 	'message.edit': 'Сообщение изменено', 'message.edit.request': 'Запрос изменения',
 	'container.send': 'Публикация контейнера', 'container.send.request': 'Запрос публикации',

@@ -9,7 +9,7 @@ import { Variables } from './pages/Variables'
 import { Templates } from './pages/Templates'
 import { Settings } from './pages/Settings'
 import { Majestic } from './pages/Majestic'
-import { MclLists } from './pages/MclLists'
+import { RoleCurators } from './pages/RoleCurators'
 import { CapturePresets } from './pages/CapturePresets'
 import { dirtyGroup } from './lib/templates'
 import { showGuide } from './guides'
@@ -20,7 +20,7 @@ const pages = {
 	variables: { title: 'Переменные шаблонов', label: 'Переменные', description: 'Значения для быстрой замены в шаблонах.', icon: Braces },
 	settings: { title: 'Настройки', label: 'Настройки', description: 'Каналы, роли и параметры работы бота.', icon: Settings2 },
 	access: { title: 'Доступ к функциям', label: 'Доступ', description: 'Дополнительные роли для функций бота.', icon: ShieldCheck },
-	mcl: { title: 'Списки', label: 'Списки', description: 'Управляй списками участников по ролям.', icon: ListChecks },
+	curators: { title: 'Кураторы ролей', label: 'Кураторы ролей', description: 'Назначай, кто и какими ролями может управлять.', icon: ListChecks },
 	captures: { title: 'Управление сборами', label: 'Сборы', description: 'Предустановки ручной регистрации на мероприятия.', icon: CalendarDays },
 	majestic: { title: 'Majestic — синхронизация', label: 'Majestic', description: 'Сверь состав семьи с Discord перед применением изменений.', icon: RefreshCw },
 	history: { title: 'История изменений', label: 'История изменений', description: 'Последние 100 действий администраторов. Время — московское.', icon: History }
@@ -154,7 +154,7 @@ export function App() {
 						<div hidden={page !== 'variables'}><Variables config={config} setConfig={setConfig} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'settings'}><Settings config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'access'}><Settings access config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
-						<div hidden={page !== 'mcl'}><MclLists active={page === 'mcl'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>
+						<div hidden={page !== 'curators'}><RoleCurators active={page === 'curators'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>
 						<div hidden={page !== 'captures'}><CapturePresets active={page === 'captures'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>
 						<div hidden={page !== 'majestic'}><Majestic active={page === 'majestic'} resources={resources} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'history'}><HistoryPage active={page === 'history'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>

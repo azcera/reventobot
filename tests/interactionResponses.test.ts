@@ -47,7 +47,7 @@ test('unknown buttons with and without underscores receive an ephemeral stale-ac
 test('service rejections are caught and deferred replies are completed', async t => {
 	const errors: unknown[][] = []
 	t.mock.method(console, 'error', (...args: unknown[]) => { errors.push(args) })
-	for (const [service, id] of [['familyWars', 'war_join_RU8_1'], ['familyMembership', 'family_cleanup_open_roles_0'], ['mclLists', 'mcl_remove_invalid']]) {
+	for (const [service, id] of [['familyWars', 'war_join_RU8_1'], ['familyMembership', 'family_cleanup_open_roles_0'], ['roleCurators', 'role_curator_invalid']]) {
 		for (const deferred of [false, true]) {
 			const f = fixture(id, { [service]: { async handle(interaction: typeof f.interaction) {
 				if (deferred) await interaction.deferReply({ flags: MessageFlags.Ephemeral })
@@ -94,6 +94,15 @@ test('retired additional-role menus receive a stale-action reply', async () => {
 	assert.equal(f.responses.length, 1)
 	assert.equal(f.responses[0].payload.flags, MessageFlags.Ephemeral)
 	assert.match(f.responses[0].payload.content, /устарело/)
+})
+
+test('retired list buttons and menus cannot assign roles', async () => {
+	for (const kind of ['button', 'select']) {
+		const f = fixture('mcl_add_12345678-1234-1234-1234-123456789012', {}, kind)
+		await f.dispatch()
+		assert.match(f.responses[0].payload.content, /Списки отключены/)
+		assert.equal(f.responses[0].payload.flags, MessageFlags.Ephemeral)
+	}
 })
 
 test('archive search acknowledges before slow Discord requests and then completes the reply', async () => {

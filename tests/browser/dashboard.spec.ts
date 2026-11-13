@@ -3,12 +3,13 @@ import { test, expect, type Page } from '@playwright/test'
 async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец', templateVariables: Record<string, Record<string, string>> = {}) {
 	const config = { revision: 3, bindings: {}, templateVariables, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] }
 	const preset = { id: '12345678-1234-1234-1234-123456789012', command: 'test', target: 'Сбор', channelId: 'parent', accessRoleId: 'one', maxMain: 10 }
-	const list = { id: preset.id, title: 'Список', channelId: 'parent', roleId: 'one', accessRoleId: 'one', addName: 'Добавить', removeName: 'Убрать' }
+	let curators = [{ roleId: 'one', managedRoleIds: ['one'] }]
 	const requests: { path: string; body: any }[] = []
 	await page.route('**/api/**', async route => {
 		const path = new URL(route.request().url()).pathname.slice(5)
 		const body = route.request().postDataJSON()
 		requests.push({ path, body })
+		if (path === 'role-curators' && body?.curators) curators = body.curators
 		if (path === 'settings' && body?.values) {
 			for (const field of config.settings) if (Object.hasOwn(body.values, field.key)) field.value = body.values[field.key]
 			config.revision++
@@ -17,11 +18,11 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 			Object.assign(config, { templateVariables: { [body.group]: body.values }, templateVariableLabels: { [body.group]: body.labels } })
 			config.revision++
 		}
-		const data: Record<string, unknown> = { session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'mcl-lists': { revision: 3, lists: body?.lists || [list] }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
+		const data: Record<string, unknown> = { session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'role-curators': { revision: 3, curators }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
 		await route.fulfill({ json: ['settings', 'template-variables'].includes(path) ? config : data[path] ?? {} })
 	})
 	await page.goto('/#' + hash)
-	await expect(page.getByRole('heading', { name: ({ settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', mcl: 'Списки' } as Record<string, string>)[hash], exact: true })).toBeVisible()
+	await expect(page.getByRole('heading', { name: ({ settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', curators: 'Кураторы ролей' } as Record<string, string>)[hash], exact: true })).toBeVisible()
 	return requests
 }
 
@@ -229,13 +230,28 @@ test('image and section dialogs keep independent fields and source when edited o
 	expect(saved).toContain('<img'); expect(saved).toContain('https://example.com/two.png'); expect(saved).toContain('Кнопка'); expect(saved).toContain('https://example.com/go')
 })
 
-test('multiple access roles are sent for captures and lists', async ({ page }) => {
+test('multiple access roles are sent for captures', async ({ page }) => {
 	const captures = await setup(page, 'captures')
 	await page.getByRole('combobox', { name: 'Роль доступа к команде' }).selectOption('two')
 	await page.getByRole('button', { name: 'Сохранить сборы' }).click()
 	await expect.poll(() => captures.find(r => r.path === 'capture-presets' && r.body)?.body.presets[0].accessRoleId).toBe('one,two')
-	await page.goto('/#mcl')
-	await page.getByRole('combobox', { name: 'Дополнительная роль доступа' }).selectOption('two')
-	await page.getByRole('button', { name: 'Сохранить и опубликовать' }).click()
-	await expect.poll(() => captures.find(r => r.path === 'mcl-lists' && r.body)?.body.lists[0].accessRoleId).toBe('one,two')
+})
+
+test('role curators configure managed roles, persist after reload and can be removed', async ({ page }) => {
+	const requests = await setup(page, 'curators')
+	await expect(page.getByRole('link', { name: 'Списки', exact: true })).toHaveCount(0)
+	await page.getByRole('combobox', { name: 'Доступные для управления роли' }).selectOption('two')
+	await page.getByRole('button', { name: 'Сохранить кураторов' }).click()
+	await expect.poll(() => requests.find(r => r.path === 'role-curators' && r.body)?.body.curators).toEqual([{ roleId: 'one', managedRoleIds: ['one', 'two'] }])
+	await page.reload()
+	await expect(page.getByRole('checkbox')).toHaveCount(2)
+	await page.getByRole('button', { name: 'Добавить куратора' }).click()
+	await page.getByRole('combobox', { name: 'Роль куратора', exact: true }).nth(1).selectOption('two')
+	await page.getByRole('combobox', { name: 'Доступные для управления роли' }).nth(1).selectOption('one')
+	await page.getByRole('button', { name: 'Сохранить кураторов' }).click()
+	await expect.poll(() => requests.filter(r => r.path === 'role-curators' && r.body).at(-1)?.body.curators).toHaveLength(2)
+	await page.getByRole('button', { name: 'Удалить куратора', exact: true }).nth(1).click()
+	await page.getByRole('button', { name: 'Удалить', exact: true }).click()
+	await page.getByRole('button', { name: 'Сохранить кураторов' }).click()
+	await expect.poll(() => requests.filter(r => r.path === 'role-curators' && r.body).at(-1)?.body.curators).toHaveLength(1)
 })

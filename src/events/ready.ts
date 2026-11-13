@@ -36,9 +36,9 @@ export = (client: import('discord.js').Client) => {
 				console.error('❌ Ошибка регистрации команд приложения:', error)
 			}
 			try {
-				await client.mclLists?.sync(guild)
+				await client.roleCurators?.sync(guild)
 			} catch (caught) {
- const error = getError(caught); console.error('[MCL] Ошибка синхронизации:', error) }
+ const error = getError(caught); console.error('[Role curators] Ошибка синхронизации:', error) }
 			try { await client.capturePresets?.sync(guild) }
 			catch (caught) { console.error('[Capture presets] Ошибка синхронизации:', getError(caught)) }
 			try {

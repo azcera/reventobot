@@ -9,7 +9,7 @@ import type { Express, Request, Response } from 'express'
 import type { Client } from 'discord.js'
 import { parse } from '../public/component-markdown'
 import { validatePresets } from '../src/features/capture/capturePresets'
-import { validateLists } from '../src/services/mclLists'
+import { validateRoleCurators } from '../src/services/roleCurators'
 import { updateLists } from '../src/features/archive/updateLists'
 import type { DashboardState } from '../src/types'
 
@@ -43,6 +43,32 @@ test('settings migrate once from env without overwriting DB values and remain in
 	await withoutEnv.save('settings', { PING_CHANNEL_ID: null }, 6, 'tester')
 	assert.equal(withoutEnv.getSetting('PING_CHANNEL_ID'), '')
 	assert.equal(withoutEnv.getSetting('TELEGRAM_BROADCAST_ENABLED'), true)
+})
+
+test('legacy lists migrate only explicit access roles, preserve original data and never remigrate after saving', async () => {
+	const legacy = {
+		first: { id: 'first', roleId: 'member', accessRoleId: 'curator, second', title: 'Old', channelId: 'channel', addName: 'Add', removeName: 'Remove' },
+		second: { id: 'second', roleId: 'reserve', accessRoleId: 'curator', title: 'Old2', channelId: 'channel', addName: 'Add2', removeName: 'Remove2' },
+		admin: { id: 'admin', roleId: 'admin-only', title: 'Admin', channelId: 'channel', addName: 'Add3', removeName: 'Remove3' }
+	}
+	let row = { revision: 7, value: { settings: { ADMIN_ROLES: 'admin' }, templates: {}, settingsEnvMigrated: true, mclLists: legacy } as DashboardState }
+	const query = async (sql: string, params?: unknown[]) => {
+		if (sql.startsWith('SELECT revision')) return { rows: [structuredClone(row)] }
+		if (sql.startsWith('UPDATE dashboard_state')) row = { revision: row.revision + 1, value: JSON.parse(params![0] as string) }
+		return { rows: [] }
+	}
+	const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool
+	const store = createStore({})
+	await store.init(pool)
+	assert.deepEqual(store.roleCurators, { curator: { roleId: 'curator', managedRoleIds: ['member', 'reserve'] }, second: { roleId: 'second', managedRoleIds: ['member'] } })
+	assert.deepEqual(row.value.mclLists, legacy)
+	assert.equal(row.revision, 8)
+	await store.save('roleCurators', { curator: null, second: null }, 8, 'tester')
+	const restarted = createStore({})
+	await restarted.init(pool)
+	assert.deepEqual(restarted.roleCurators, {})
+	assert.deepEqual(row.value.mclLists, legacy)
+	assert.equal(row.revision, 9)
 })
 
 test('failed settings migration rolls back and does not mark store ready', async () => {
@@ -89,11 +115,12 @@ test('capture role validation supports old single and comma-separated roles', ()
 	for (const accessRoleId of ['one,missing', 'guild']) assert.throws(() => validatePresets([{ ...preset, accessRoleId }], guild))
 })
 
-test('list role validation supports single and multiple roles and rejects missing roles', () => {
-	const guild = { id: 'guild', roles: { cache: new Map([['one', {}], ['two', {}], ['guild', {}]]) }, channels: { cache: new Map([['channel', { type: 0 }]]) } } as unknown as Guild
-	const list = { id: '12345678-1234-1234-1234-123456789012', title: 'List', channelId: 'channel', roleId: 'one', addName: 'Add', removeName: 'Remove' }
-	for (const accessRoleId of [undefined, '', 'one', 'one,two']) assert.doesNotThrow(() => validateLists([{ ...list, accessRoleId }], guild))
-	for (const accessRoleId of ['one,missing', 'guild']) assert.throws(() => validateLists([{ ...list, accessRoleId }], guild))
+test('curators accept only existing unique roles the bot can manage', () => {
+	const guild = { id: 'guild', roles: { cache: new Map([['one', { id: 'one', editable: true }], ['two', { id: 'two', editable: true }], ['managed', { id: 'managed', managed: true, editable: true }], ['high', { id: 'high', editable: false }], ['guild', { id: 'guild' }]]) } } as unknown as Guild
+	assert.doesNotThrow(() => validateRoleCurators([{ roleId: 'one', managedRoleIds: ['one', 'two'] }], guild))
+	for (const managedRoleIds of [[], ['two', 'two'], ['missing'], ['guild'], ['managed'], ['high']]) assert.throws(() => validateRoleCurators([{ roleId: 'one', managedRoleIds }], guild))
+	assert.throws(() => validateRoleCurators([{ roleId: 'guild', managedRoleIds: ['two'] }], guild))
+	assert.throws(() => validateRoleCurators([{ roleId: 'one', managedRoleIds: ['two'] }, { roleId: 'one', managedRoleIds: ['two'] }], guild))
 })
 
 test('variables save, replace at runtime, preserve snapshot source and reject stale revisions', async () => {

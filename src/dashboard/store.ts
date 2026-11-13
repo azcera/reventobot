@@ -4,7 +4,7 @@ import type * as D from 'discord.js'
 import type * as T from '../types'
 import type * as E from 'express'
 import type * as Pg from 'pg'
-import type { Actor, Binding, CapturePreset, DashboardState, MclList, RolePrefix, SettingDefinition, SettingValue, TemplateField } from '../types'
+import type { Actor, Binding, CapturePreset, DashboardState, RoleCurator, RolePrefix, SettingDefinition, SettingValue, TemplateField } from '../types'
 import type { Pool } from 'pg'
 import type { ContainerBuilder, Message } from 'discord.js'
 import rawCatalog = require('./templates.json')
@@ -75,7 +75,7 @@ function createStore(env = process.env) {
 		get templateVariableLabels() { return structuredClone(state.templateVariableLabels || {}) },
 		getSetting,
 		get bindings() { return structuredClone(state.bindings || {}) },
-		get mclLists() { return structuredClone(state.mclLists || {}) },
+		get roleCurators() { return structuredClone(state.roleCurators || {}) },
 		get capturePresets() { return structuredClone(state.capturePresets || {}) },
 		roleIds(key: string) { return String(getSetting(key)).split(',').map(id => id.trim()).filter(Boolean) },
 		decorate(key: string, container: ContainerBuilder) {
@@ -150,6 +150,19 @@ function createStore(env = process.env) {
 						['env-migration', 'settings.migrate', imported.join(', '), JSON.stringify({ imported })])
 					revision++
 				}
+				if (state.roleCurators === undefined && state.mclLists) {
+					state.roleCurators = {}
+					for (const list of Object.values(state.mclLists)) {
+						for (const roleId of (list.accessRoleId || '').split(',').map(id => id.trim()).filter(Boolean)) {
+							const curator = state.roleCurators[roleId] ||= { roleId, managedRoleIds: [] }
+							if (!curator.managedRoleIds.includes(list.roleId)) curator.managedRoleIds.push(list.roleId)
+						}
+					}
+					await db.query('UPDATE dashboard_state SET value = $1::jsonb, revision = revision + 1 WHERE id = 1', [JSON.stringify(state)])
+					await db.query('INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',
+						['role-curators-migration', 'roleCurators.migrate', 'roleCurators', JSON.stringify({ roles: Object.keys(state.roleCurators) })])
+					revision++
+				}
 				await db.query('COMMIT')
 			} catch (error) {
 				await db.query('ROLLBACK')
@@ -169,7 +182,7 @@ function createStore(env = process.env) {
 		async forgetNavigation(messageId: string) {
 			await pool.query('DELETE FROM dashboard_navigation_messages WHERE message_id = $1', [messageId])
 		},
-		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | MclList | CapturePreset | Record<string, string> | null>, expectedRevision: number, actor?: Actor | string, variableLabels?: Record<string, Record<string, string>>) {
+		async save(section: keyof DashboardState, values: Record<string, string | boolean | RolePrefix[] | Binding | RoleCurator | CapturePreset | Record<string, string> | null>, expectedRevision: number, actor?: Actor | string, variableLabels?: Record<string, Record<string, string>>) {
 			const db = await pool.connect()
 			try {
 				await db.query('BEGIN')

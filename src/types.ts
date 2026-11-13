@@ -32,6 +32,7 @@ export interface CapturePreset {
 	accessRoleId: string
 	maxMain: number
 }
+/** Legacy settings retained only for migration and rollback. */
 export interface MclList {
 	id: string
 	title: string
@@ -41,6 +42,7 @@ export interface MclList {
 	addName: string
 	removeName: string
 }
+export interface RoleCurator { roleId: string; managedRoleIds: string[] }
 export type SettingValue = string | boolean | RolePrefix[]
 /** Editable subset of Discord JSON. Unrecognised properties are checked by import validation. */
 export interface RawComponent {
@@ -85,6 +87,7 @@ export interface DashboardState {
 	majesticAutoKickChangedAt?: number
 	bindings?: Record<string, Binding>
 	mclLists?: Record<string, MclList>
+	roleCurators?: Record<string, RoleCurator>
 	capturePresets?: Record<string, CapturePreset>
 }
 export interface SettingDefinition {
@@ -133,7 +136,7 @@ export type BotCommand = PrefixCommand | ApplicationCommand
 declare module 'discord.js' {
 	interface Client<Ready extends boolean = boolean> {
 		commands: Collection<string, BotCommand>
-		mclLists?: ReturnType<typeof import('./services/mclLists').createMclLists>
+		roleCurators?: ReturnType<typeof import('./services/roleCurators').createRoleCurators>
 		capturePresets?: ReturnType<typeof import('./features/capture/capturePresets').createCapturePresets>
 		familyWars?: ReturnType<typeof import('./services/familyWars').createFamilyWars> | null
 		captureResults?: ReturnType<typeof import('./services/captureResults').createCaptureResults>

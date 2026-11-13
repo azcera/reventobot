@@ -36,6 +36,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | Результаты каптов из API в объявлениях Telegram | `src/services/captureResults.ts`, `src/events/telegramCaptures.ts` |
 | Telegram | `src/services/telegram*.ts`, `src/events/telegram*.ts` |
 | Роли и префиксы ников | `src/services/rolePrefixSync.ts`, `src/utils/adminPrefix.ts`, `src/utils/parseDisplayName.ts` |
+| Кураторы ролей и команда ПКМ | `src/services/roleCurators.ts`, `frontend/src/pages/RoleCurators.tsx` |
 | HTTP API дашборда | `src/dashboard/routes.ts`; часть API контейнеров подключена в `index.ts` |
 | Вход, права, сессии | `src/dashboard/auth.ts`, `src/dashboard/sessions.ts` |
 | Настройки и каталог шаблонов | `src/dashboard/store.ts`, `src/dashboard/templates.json` |
