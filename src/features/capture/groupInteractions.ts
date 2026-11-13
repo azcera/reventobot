@@ -4,6 +4,7 @@ import {
 	ModalBuilder,
 	TextInputBuilder,
 	TextInputStyle,
+	MessageFlags,
 	LabelBuilder
 } from 'discord.js'
 import { parseDateTime, getMskTimeString } from '../../utils/dateUtils'
@@ -70,6 +71,7 @@ async function showGroupModal(interaction: import('discord.js').ButtonInteractio
  * @param {ModalSubmitInteraction} interaction
  */
 async function submitGroupModal(interaction: import('discord.js').ModalSubmitInteraction<'cached'>) {
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 	const selectedValue = interaction.customId.replace('modal_group_', '')
 	let timeInput, target, scheduledDate, groupKind: 'supply' | 'attendance' | undefined
 	let eventId: string | undefined

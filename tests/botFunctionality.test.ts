@@ -45,10 +45,47 @@ test('all ordinary collection sources disable controls at exactly one hour; late
 	} as unknown as ButtonInteraction<'cached'>)
 	assert.match(responses[0], /прошёл час/)
 	assert.equal(queries.some(sql => sql.startsWith('UPDATE')), false)
-	await edits.handleInlineEditTimeButton({ member: { permissions: { has: () => true }, roles: { cache: new Collection() } }, message: { id: 'message' },
-		reply: async (value: any) => { responses.push(value.content) }
-	} as unknown as ButtonInteraction<'cached'>)
+	databaseRow = undefined // The conditional UPDATE must reject an expired collection.
+	await edits.submitInlineEditTimeModal({ member: { permissions: { has: () => true }, roles: { cache: new Collection() } },
+		customId: 'modal_inline_edit_time_message', channelId: 'channel', fields: { getTextInputValue: () => '18:00' },
+		deferReply: async () => {}, editReply: async (value: any) => { responses.push(value.content) }
+	} as unknown as ModalSubmitInteraction<'cached'>)
 	assert.match(responses[1], /завершён/)
+})
+
+test('time edit modal opens without waiting for the database', async () => {
+	queries.length = 0
+	let opened = false
+	await edits.handleInlineEditTimeButton({ member: { permissions: { has: () => true }, roles: { cache: new Collection() } }, message: { id: 'message' },
+		showModal: async () => { opened = true }
+	} as unknown as ButtonInteraction<'cached'>)
+	assert.equal(opened, true)
+	assert.deepEqual(queries, [])
+})
+
+test('group and capture submissions await acknowledgement before reading fields or performing work', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	for (const submit of [submitGroupModal, edits.submitCaptModal]) {
+		let release!: () => void
+		let read = false
+		const responses: string[] = []
+		const interaction = {
+			customId: 'modal_group_other', deferred: false,
+			async deferReply(this: { deferred: boolean }) { await new Promise<void>(resolve => { release = resolve }); this.deferred = true },
+			fields: { getTextInputValue() { read = true; return 'invalid' } },
+			async editReply(payload: { content: string }) { responses.push(payload.content) }
+		} as unknown as ModalSubmitInteraction<'cached'>
+		const pending = submit(interaction)
+		assert.equal(read, false)
+		release()
+		await pending
+		assert.equal(read, true)
+		assert.match(responses[0], /Неверный формат времени/)
+		read = false
+		interaction.deferReply = async () => { throw new Error('Acknowledgement failed') }
+		await assert.rejects(submit(interaction), /Acknowledgement failed/)
+		assert.equal(read, false)
+	}
 })
 
 test('closure worker recovers stored collections after restart and rechecks moved times under a lock', async () => {
@@ -109,7 +146,8 @@ test('schedule buttons have icons, optional codes and event-specific fields; gro
 	const sent: string[] = []
 	const interaction = { customId: 'schedule_group_supply', member, client: { eventSchedule: schedule,
 		channels: { cache: new Collection([['ping', { isSendable: () => true, send: async (content: string) => { sent.push(content) } }]]) } },
-		showModal: async (value: any) => { modal = value.toJSON() }, reply: async () => {}, deleteReply: async () => {} }
+		showModal: async (value: any) => { modal = value.toJSON() }, reply: async () => {}, deleteReply: async () => {},
+		async deferReply() { (this as { deferred?: boolean }).deferred = true }, editReply: async () => {} }
 	await showScheduledGroupModal(interaction as unknown as ButtonInteraction<'cached'>)
 	assert.deepEqual(modal.components.map((label: any) => label.component.custom_id), ['group_code'])
 	assert.equal(modal.components[0].component.required, false)

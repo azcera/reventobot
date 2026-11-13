@@ -12,7 +12,6 @@ import { parseDateTime, getDiscordTimestamp } from '../../utils/dateUtils'
 import { sendEphemeralWithAutoDelete } from '../../utils/autoDelete'
 import captureManager = require('./captureManager')
 import db = require('../../services/database')
-import { captureExpired } from './captureExpiry'
 
 /**
  * Показывает модалку ручного создания реги (время, цель, maxMain).
@@ -60,6 +59,7 @@ async function showCaptModal(interaction: import('discord.js').ButtonInteraction
  * @param {ModalSubmitInteraction} interaction
  */
 async function submitCaptModal(interaction: import('discord.js').ModalSubmitInteraction<'cached'>) {
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 	const timeInput = interaction.fields.getTextInputValue('capt_time').trim()
 	const parsedDate = parseDateTime(timeInput)
 
@@ -214,10 +214,8 @@ async function handleInlineEditTimeButton(interaction: import('discord.js').Butt
 	}
 
 	const messageId = interaction.message.id
-	const { rows } = await db.query('SELECT discord_timestamp FROM active_captures WHERE message_id = $1', [messageId])
-	if (!rows[0] || captureExpired(rows[0].discord_timestamp)) {
-		return sendEphemeralWithAutoDelete(interaction, { content: '❌ Сбор завершён или больше недоступен.' })
-	}
+	// The modal must be the initial response. Availability is checked atomically
+	// by submitInlineEditTimeModal when saving, without a database wait here.
 	const modal = new ModalBuilder()
 		.setCustomId(`modal_inline_edit_time_${messageId}`)
 		.setTitle('Изменение времени капта')

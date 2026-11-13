@@ -429,13 +429,7 @@ async function handleButton(interaction: import('discord.js').ButtonInteraction<
 		return
 
 	// Сразу подтверждаем, чтобы Discord не слал "не ответило вовремя"
-	try {
-		await interaction.deferUpdate()
-	} catch (caught) {
- const err = getError(caught);
-		console.error('Не удалось подтвердить кнопку капта:', err)
-		return
-	}
+	await interaction.deferUpdate()
 
 	const messageId = interaction.message.id
 	const userId = interaction.user.id

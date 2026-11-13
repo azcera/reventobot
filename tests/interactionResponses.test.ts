@@ -68,6 +68,26 @@ test('opening an application form remains the initial response', async () => {
 	assert.deepEqual(f.responses.map(response => response.method), ['showModal'])
 })
 
+test('failed capture acknowledgement is logged once and never starts capture processing', async t => {
+	const errors: unknown[][] = []
+	t.mock.method(console, 'error', (...args: unknown[]) => { errors.push(args) })
+	const f = fixture('capt_join')
+	Object.assign(f.interaction, { async deferUpdate() { throw Object.assign(new Error('Unknown interaction'), { code: 10062 }) } })
+	await f.dispatch()
+	assert.deepEqual(f.responses, [])
+	assert.equal(errors.length, 1)
+	assert.equal(errors[0][0], '[Interaction]')
+	assert.equal(typeof (errors[0][1] as { receivedAgeMs: number }).receivedAgeMs, 'number')
+})
+
+test('expired unacknowledged actions do not attempt another initial reply', async t => {
+	t.mock.method(console, 'error', () => {})
+	const f = fixture('war_join_RU8_1', { familyWars: { async handle() { throw new Error('Network failure') } } })
+	f.interaction.createdTimestamp = Date.now() - 4000
+	await f.dispatch()
+	assert.deepEqual(f.responses, [])
+})
+
 test('retired additional-role menus receive a stale-action reply', async () => {
 	const f = fixture('invite_select_additional_123', {}, 'select')
 	await f.dispatch()

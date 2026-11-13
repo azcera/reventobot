@@ -27,6 +27,7 @@ export = (client: import('discord.js').Client) => {
             return
         }
         const startedAt = performance.now()
+		const receivedAgeMs = Date.now() - interaction.createdTimestamp
         try {
 		if (interaction.isChatInputCommand() || interaction.isUserContextMenuCommand()) {
 			const command = client.commands.get(interaction.commandName)
@@ -183,8 +184,9 @@ export = (client: import('discord.js').Client) => {
 		if (!interaction.deferred && !interaction.replied) await interaction.reply({ content: 'Это действие устарело. Откройте актуальное сообщение бота.', flags: MessageFlags.Ephemeral })
 		} catch (caught) {
 			const error = getError(caught)
-			console.error('[Interaction]', { id: interaction.id, customId: 'customId' in interaction ? interaction.customId : undefined, ageMs: Date.now() - interaction.createdTimestamp, elapsedMs: Math.round(performance.now() - startedAt), acknowledged: interaction.deferred || interaction.replied, code: error.code, message: error.message })
+			console.error('[Interaction]', { id: interaction.id, customId: 'customId' in interaction ? interaction.customId : undefined, receivedAgeMs, ageMs: Date.now() - interaction.createdTimestamp, elapsedMs: Math.round(performance.now() - startedAt), acknowledged: interaction.deferred || interaction.replied, code: error.code, message: error.message })
 			if (error.code === 10062 || error.code === 40060) return
+			if (!interaction.deferred && !interaction.replied && Date.now() - interaction.createdTimestamp >= 3000) return
 			try {
 				const payload = { content: 'Не удалось выполнить действие. Попробуйте ещё раз.' }
 				if (interaction.deferred) await interaction.editReply(payload)
