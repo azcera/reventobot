@@ -2,6 +2,12 @@ import type { LucideIcon } from 'lucide-react'
 import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
 import { AlertCircle, BookOpen, Check, CheckCircle2, Info, LoaderCircle, X } from 'lucide-react'
 
+export const BusyContext = createContext(false)
+export function SaveStatus({ dirty }: { dirty: boolean }) {
+	const busy = useContext(BusyContext)
+	return <span role="status" aria-live="polite" className="text-xs text-muted">{busy ? 'Сохраняется…' : dirty ? 'Есть изменения' : 'Сохранено'}</span>
+}
+
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon; variant?: string; loading?: boolean }
 export function Button({ icon: Icon, children, variant = 'secondary', className = '', loading = false, disabled, ...props }: ButtonProps) {
 	return <button type="button" className={`button button-${variant} ${className}`} disabled={disabled || loading} {...props}>

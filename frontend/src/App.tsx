@@ -3,7 +3,7 @@ import type { Api, Config, Resources, Session, Drafts, SettingsDraft, Notify, Ru
 import { errorMessage, errorStatus } from './types'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowRight, ArrowUpRight, ListChecks, CalendarDays, Braces, BookOpen, Check, ChevronRight, Database, Files, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, Wifi, X } from 'lucide-react'
-import { Button, Empty, IconButton, Loading, Panel, useModal } from './components/ui'
+import { BusyContext, Button, Empty, IconButton, Loading, Panel, useModal } from './components/ui'
 import { HistoryRows } from './components/History'
 import { Variables } from './pages/Variables'
 import { Templates } from './pages/Templates'
@@ -13,6 +13,7 @@ import { RoleCurators } from './pages/RoleCurators'
 import { CapturePresets } from './pages/CapturePresets'
 import { dirtyGroup } from './lib/templates'
 import { showGuide } from './guides'
+import { Appearance } from './components/Appearance'
 
 const pages = {
 	overview: { title: 'Обзор', label: 'Обзор', description: 'Твой сервер. Всё под контролем.', icon: LayoutDashboard },
@@ -27,6 +28,14 @@ const pages = {
 }
 
 function currentPage() { const page = location.hash.slice(1).split('?')[0]; return Object.hasOwn(pages, page) ? page as keyof typeof pages : 'overview' }
+
+const navigation = [
+	['Обзор', ['overview']],
+	['Контент', ['templates', 'variables']],
+	['Управление сервером', ['captures', 'curators', 'access']],
+	['Интеграции', ['majestic']],
+	['Система', ['settings', 'history']]
+] satisfies [string, (keyof typeof pages)[]][]
 
 function Login({ loading, configured, status, retry }: { loading: boolean; configured: boolean; status: string; retry(): void }) {
 	return <main className="login-screen"><div className="login-decoration" aria-hidden="true" /><div className="login-card"><img src="/revento-logo.png" className="mb-8 size-16 rounded-2xl" alt="Логотип Revento" /><p className="eyebrow mb-4">REVENTO / CONTROL ROOM</p><h1 className="text-4xl font-semibold leading-tight tracking-[-1.5px] sm:text-5xl">Всё под<br /><span className="text-brand">контролем.</span></h1><p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">Сообщения, компоненты и настройки твоего сервера в одном месте.</p>
@@ -66,6 +75,28 @@ function HistoryPage({ active, api, config, guild, notify, refresh }: DataPagePr
 export function App() {
 	const [page, setPage] = useState(currentPage)
 	const [menu, setMenu] = useState(false)
+	const sidebar = useRef<HTMLElement>(null)
+	useEffect(() => {
+		if (!menu) return
+		const previous = document.activeElement
+		const media = matchMedia('(min-width: 1024px)')
+		const close = () => { if (media.matches) setMenu(false) }
+		const keydown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') { event.preventDefault(); setMenu(false) }
+			if (event.key !== 'Tab') return
+			const targets = sidebar.current?.querySelectorAll<HTMLElement>('a, button:not(:disabled)')
+			if (!targets?.length) return
+			const first = targets[0], last = targets[targets.length - 1]
+			if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+			else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+		}
+		sidebar.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus()
+		document.addEventListener('keydown', keydown); media.addEventListener('change', close)
+		return () => {
+			document.removeEventListener('keydown', keydown); media.removeEventListener('change', close)
+			if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true })
+		}
+	}, [menu])
 	const [session, setSession] = useState<Session | null>(null)
 	const [configured, setConfigured] = useState(false)
 	const [booting, setBooting] = useState(true)
@@ -137,18 +168,18 @@ export function App() {
 		if (!await modal({ title: 'Обновить данные?', message: 'Несохранённые правки шаблонов и настроек будут сброшены.', confirm: 'Обновить' })) return
 		run(async () => { await loadConfig(); notify('Данные обновлены.') })
 	}
-	if (!session) return <Login loading={booting} configured={configured} status={loginStatus} retry={start} />
+	if (!session) return <><div className="login-appearance"><Appearance /></div><Login loading={booting} configured={configured} status={loginStatus} retry={start} /></>
 	const current = pages[page]
 	return <div className="app-shell">
 		{menu && <button className="sidebar-scrim" aria-label="Закрыть меню" onClick={() => setMenu(false)} />}
-		<aside className={`sidebar ${menu ? 'sidebar-open' : ''}`} aria-label="Рабочее пространство"><a href="#overview" className="brand"><img src="/revento-logo.png" alt="" /><span>REVENTO<small>CONTROL ROOM</small></span></a><div><p className="nav-caption">РАБОЧЕЕ ПРОСТРАНСТВО</p><nav aria-label="Разделы дашборда">{Object.entries(pages).map(([key, { label, icon: Icon }]) => <a href={'#' + key} key={key} aria-current={page === key ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span></a>)}</nav></div><div className="sidebar-bottom"><div className="user-avatar">{session.user.avatar ? <img src={session.user.avatar} alt="" className="size-full rounded-full object-cover" /> : session.user.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium" title={session.user.name}>{session.user.name}</p><p className="mt-1 text-[10px] text-muted">Аккаунт Discord</p></div><IconButton icon={LogOut} label="Выйти из аккаунта" disabled={busy} onClick={async () => {
+		<aside ref={sidebar} id="dashboard-navigation" className={`sidebar ${menu ? 'sidebar-open' : ''}`} aria-label="Рабочее пространство"><IconButton className="sidebar-close lg:hidden" icon={X} label="Закрыть меню" onClick={() => setMenu(false)} /><a href="#overview" className="brand"><img src="/revento-logo.png" alt="" /><span>REVENTO<small>CONTROL ROOM</small></span></a><nav aria-label="Разделы дашборда">{navigation.map(([title, keys]) => <div className="nav-group" key={title}><p className="nav-caption">{title}</p>{keys.map(key => { const { label, icon: Icon } = pages[key]; return <a href={'#' + key} key={key} aria-current={page === key ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span></a> })}</div>)}</nav><div className="sidebar-bottom"><div className="user-avatar">{session.user.avatar ? <img src={session.user.avatar} alt="" className="size-full rounded-full object-cover" /> : session.user.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium" title={session.user.name}>{session.user.name}</p><p className="mt-1 text-[10px] text-muted">Аккаунт Discord</p></div><IconButton icon={LogOut} label="Выйти из аккаунта" disabled={busy} onClick={async () => {
 			if (!await modal({ title: 'Выйти из аккаунта?', message: dirty ? 'Несохранённые правки будут потеряны. Для входа потребуется авторизация через Discord.' : 'Для входа потребуется снова авторизоваться через Discord.', confirm: 'Выйти' })) return
 			run(async () => { await api('logout', {}); sessionRef.current = null; setSession(null); setConfig(null); setResources(null); setDrafts({}); setSettings({}); setLoginStatus('Ты вышел из аккаунта.'); setToast('') })
 		}} /></div></aside>
-		<main className="main-content"><header className="topbar"><div className="flex min-w-0 items-center gap-3"><IconButton icon={menu ? X : Menu} label={menu ? 'Закрыть меню' : 'Открыть меню'} className="lg:hidden" onClick={() => setMenu(!menu)} /><p className="flex min-w-0 items-center gap-2 text-xs text-muted"><span className="hidden sm:inline">Рабочее пространство</span><ChevronRight className="hidden size-3 sm:block" aria-hidden="true" /><span className="truncate text-text">{current.label}</span></p></div><span className="admin-badge"><ShieldCheck aria-hidden="true" /><span>Администратор</span></span></header>
+		<main className="main-content" inert={menu}><header className="topbar"><div className="flex min-w-0 items-center gap-3"><div className="lg:hidden"><IconButton aria-expanded={menu} aria-controls="dashboard-navigation" icon={menu ? X : Menu} label={menu ? 'Закрыть меню' : 'Открыть меню'} className="lg:hidden" onClick={() => setMenu(!menu)} /></div><p className="flex min-w-0 items-center gap-2 text-xs text-muted"><span className="hidden sm:inline">Рабочее пространство</span><ChevronRight className="hidden size-3 sm:block" aria-hidden="true" /><span className="truncate text-text">{current.label}</span></p></div><div className="flex items-center gap-3"><Appearance /><span className="admin-badge"><ShieldCheck aria-hidden="true" /><span>Администратор</span></span></div></header>
 			<div className="page-content"><div className="page-heading"><div><p className="eyebrow mb-2 lg:hidden">REVENTO / CONTROL ROOM</p><h1>{current.title}</h1><p>{current.description}</p></div><div className="flex shrink-0 gap-2">{page !== 'majestic' && <IconButton icon={RefreshCw} label="Обновить данные" disabled={busy || booting} onClick={reload} />}<IconButton icon={BookOpen} label="Руководство по разделу" onClick={() => showGuide(modal, page)} /></div></div>
 				{!config || !resources ? booting || busy ? <Loading /> : <Empty title="Не удалось загрузить данные"><Button icon={RefreshCw} onClick={() => run(loadConfig)}>Повторить загрузку</Button></Empty>
-					: <fieldset className="min-w-0" disabled={busy} aria-busy={busy}>
+					: <BusyContext.Provider value={busy}><fieldset className="min-w-0" disabled={busy} aria-busy={busy}>
 						<div hidden={page !== 'overview'}><Overview active={page === 'overview'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
 						<div hidden={page !== 'templates'}><Templates config={config} setConfig={setConfig} resources={resources} drafts={drafts} setDrafts={setDrafts} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'variables'}><Variables config={config} setConfig={setConfig} api={api} run={run} notify={notify} /></div>
@@ -158,7 +189,7 @@ export function App() {
 						<div hidden={page !== 'captures'}><CapturePresets active={page === 'captures'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>
 						<div hidden={page !== 'majestic'}><Majestic active={page === 'majestic'} resources={resources} api={api} run={run} notify={notify} /></div>
 						<div hidden={page !== 'history'}><HistoryPage active={page === 'history'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
-					</fieldset>}
+					</fieldset></BusyContext.Provider>}
 			</div>
 		</main>
 		{busy && <div role="status" className="busy-indicator"><RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />Выполняется действие…</div>}

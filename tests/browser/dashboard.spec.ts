@@ -80,30 +80,30 @@ test('thread picker loads lazily and publishes selected thread', async ({ page }
 
 test('variable changes save', async ({ page }) => {
 	const source = '<section buttonLabel="Открыть" buttonLink="https://example.com">Цена {цена-пулик}</section>'
-	const requests = await setup(page, 'variables', source)
+	const requests = await setup(page, 'templates', source)
 	await page.getByRole('button', { name: 'Добавить переменную' }).click()
-	await page.getByLabel('Название переменной 1').fill('Цена пулемёта')
-	await page.getByLabel('Ключ в тексте 1').fill('цена-пулик')
-	await page.getByLabel('Значение Цена пулемёта').fill('100')
+	await page.getByLabel('Название переменной', { exact: true }).fill('Цена пулемёта')
+	await page.getByLabel('Ключ', { exact: true }).fill('цена-пулик')
+	await page.getByLabel('Значение', { exact: true }).fill('100')
 	await page.getByRole('button', { name: 'Сохранить переменные' }).click()
 	await expect.poll(() => requests.find(r => r.path === 'template-variables')?.body).toEqual({ group: 'Система повышения', values: { 'цена-пулик': '100' }, labels: { 'цена-пулик': 'Цена пулемёта' }, revision: 3 })
 	await expect(page.getByText('Переменные сохранены. Публикации обновлены.')).toBeVisible()
 	await page.reload()
-	await expect(page.getByRole('textbox', { name: 'Название переменной 1' })).toHaveValue('Цена пулемёта')
+	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('Цена пулемёта')
+	await page.goto('/#variables')
 	await page.getByRole('searchbox', { name: 'Поиск переменных' }).fill('пулемёта')
-	await expect(page.getByRole('textbox', { name: 'Ключ в тексте 1' })).toHaveValue('цена-пулик')
+	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('Цена пулемёта')
 	await page.goto('/#templates')
-	await expect(page.getByRole('textbox', { name: 'Название переменной 1' })).toHaveValue('Цена пулемёта')
-	await page.getByRole('tab', { name: 'Предпросмотр' }).click()
+	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('Цена пулемёта')
+	await page.getByRole('tab', { name: 'Просмотр' }).click()
 	await expect(page.getByLabel('Предпросмотр сообщения в Discord')).toContainText('Цена 100')
 	await expect(page.getByLabel('Предпросмотр сообщения в Discord')).not.toContainText('{цена-пулик}')
 })
 
 test('variable without saved label displays its existing key', async ({ page }) => {
 	await setup(page, 'variables', undefined, { 'Система повышения': { old_key: 'old value' } })
-	await expect(page.getByRole('textbox', { name: 'Название переменной 1' })).toHaveValue('old_key')
-	await expect(page.getByRole('textbox', { name: 'Ключ в тексте 1' })).toHaveValue('old_key')
-	await expect(page.getByRole('textbox', { name: 'Значение old_key' })).toHaveValue('old value')
+	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('old_key')
+	await expect(page.getByRole('textbox', { name: 'Значение', exact: true })).toHaveValue('old value')
 })
 
 test('channel mentions display names in editors and preserve source through copy, deletion and undo', async ({ page }) => {
@@ -133,7 +133,7 @@ test('channel mentions display names in editors and preserve source through copy
 	await page.keyboard.type(' #общ')
 	await page.getByRole('option', { name: '#общий' }).click()
 	await expect(mention).toHaveCount(2)
-	await page.getByRole('tab', { name: 'Предпросмотр' }).click()
+	await page.getByRole('tab', { name: 'Просмотр' }).click()
 	await expect(page.getByLabel('Предпросмотр сообщения в Discord').locator('.discord-mention')).toHaveText(['#общий', '#общий'])
 	await page.getByRole('button', { name: 'Сохранить шаблон' }).click()
 	await expect.poll(() => requests.find(r => r.path === 'templates')?.body?.values?.['promotion.document']).toBe(`Начало ${channel} ${channel} `)
@@ -254,4 +254,176 @@ test('role curators configure managed roles, persist after reload and can be rem
 	await page.getByRole('button', { name: 'Удалить', exact: true }).click()
 	await page.getByRole('button', { name: 'Сохранить кураторов' }).click()
 	await expect.poll(() => requests.filter(r => r.path === 'role-curators' && r.body).at(-1)?.body.curators).toHaveLength(1)
+})
+
+
+test('appearance follows system, persists choices and keeps Discord colors', async ({ page }) => {
+	await page.emulateMedia({ colorScheme: 'light' })
+	await setup(page, 'templates')
+	const theme = page.getByRole('combobox', { name: 'Тема оформления' })
+	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+	await page.emulateMedia({ colorScheme: 'dark' })
+	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+	await theme.selectOption('light')
+	await page.reload()
+	await expect(theme).toHaveValue('light')
+	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+	await page.getByRole('tab', { name: 'Просмотр', exact: true }).click()
+	await expect(page.locator('.discord-preview')).toHaveCSS('background-color', 'rgb(49, 51, 56)')
+	await theme.selectOption('dark')
+	await expect(page.locator('.discord-preview')).toHaveCSS('background-color', 'rgb(49, 51, 56)')
+	await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#151720')
+	await theme.selectOption('system')
+	await page.emulateMedia({ colorScheme: 'light' })
+	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+})
+
+test('effects persist and respect reduced motion and touch', async ({ page }, testInfo) => {
+	await setup(page, 'settings')
+	const effects = page.getByRole('button', { name: 'Декоративные эффекты' })
+	await effects.click()
+	await page.reload()
+	await expect(effects).toHaveAttribute('aria-pressed', 'false')
+	await expect(page.locator('html')).toHaveAttribute('data-effects', 'off')
+	await effects.click()
+	await page.emulateMedia({ reducedMotion: 'reduce' })
+	await expect(page.locator('html')).toHaveAttribute('data-effects', 'off')
+	await page.emulateMedia({ reducedMotion: 'no-preference' })
+	await expect(page.locator('html')).toHaveAttribute('data-effects', testInfo.project.name === 'mobile' ? 'off' : 'on')
+	if (testInfo.project.name === 'desktop') {
+		await page.mouse.move(650, 300)
+		await expect(page.locator('html')).toHaveAttribute('data-cursor', 'on')
+		await effects.click()
+		await expect(page.locator('html')).toHaveAttribute('data-cursor', 'off')
+		await expect.poll(() => page.locator('html').evaluate(el => el.style.getPropertyValue('--drift-x'))).toBe('')
+	}
+})
+
+test('appearance works with unavailable storage and on login', async ({ page }, testInfo) => {
+	await page.addInitScript(() => {
+		Storage.prototype.getItem = () => { throw new Error('Unavailable') }
+		Storage.prototype.setItem = () => { throw new Error('Unavailable') }
+	})
+	await page.emulateMedia({ colorScheme: 'light' })
+	await page.route('**/api/session', route => route.fulfill({ status: 401, json: { error: 'Войди' } }))
+	await page.goto('/')
+	await expect(page.getByRole('link', { name: 'Войти через Discord' })).toBeVisible()
+	await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-light-login.png`, fullPage: true })
+	await page.getByRole('combobox', { name: 'Тема оформления' }).selectOption('dark')
+	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+	await page.getByRole('button', { name: 'Декоративные эффекты' }).click()
+	await expect(page.locator('html')).toHaveAttribute('data-effects', 'off')
+	await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-dark-login.png`, fullPage: true })
+})
+
+test('editor modes preserve draft, undo and do not send requests', async ({ page }) => {
+	const requests = await setup(page, 'templates', 'Исходный текст')
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	await editor.focus(); await page.keyboard.press('End'); await page.keyboard.type(' новый')
+	const draft = await editor.innerText()
+	await page.getByRole('tab', { name: 'Просмотр', exact: true }).click()
+	await expect(editor).toBeHidden()
+	await expect(page.getByLabel('Предпросмотр сообщения в Discord')).toContainText(draft)
+	await page.getByRole('tab', { name: 'Редактирование', exact: true }).click()
+	await expect(page.getByLabel('Предпросмотр сообщения в Discord')).toHaveCount(0)
+	await expect(editor).toHaveText(draft)
+	await editor.focus(); await page.keyboard.press('Control+z')
+	await expect(editor).not.toHaveText(draft)
+	await page.keyboard.press('Control+Shift+z')
+	await expect(editor).toHaveText(draft)
+	expect(requests.filter(request => request.body)).toHaveLength(0)
+})
+
+test('mobile navigation traps focus, closes on Escape and follows links', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'mobile')
+	await setup(page, 'settings')
+	const open = page.getByRole('button', { name: 'Открыть меню' })
+	await open.click()
+	await expect(page.getByRole('link', { name: 'Настройки', exact: true })).toBeFocused()
+	await page.keyboard.press('Escape')
+	await expect(open).toBeFocused()
+	await open.click()
+	const close = page.locator('.sidebar-close')
+	await close.focus(); await page.keyboard.press('Shift+Tab')
+	await expect(page.getByRole('button', { name: 'Выйти из аккаунта' })).toBeFocused()
+	await page.getByRole('link', { name: 'Шаблоны', exact: true }).click()
+	await expect(page.getByRole('heading', { name: 'Шаблоны сообщений', exact: true })).toBeVisible()
+	await expect(page.locator('.sidebar')).not.toHaveClass(/sidebar-open/)
+})
+
+test('all sections fit both themes and capture review images', async ({ page }, testInfo) => {
+	test.setTimeout(60000)
+	const errors: string[] = []
+	page.on('pageerror', error => errors.push(error.message))
+	await setup(page, 'templates', 'Текст сообщения')
+	await page.route('**/api/overview', route => route.fulfill({ json: { ready: true, ping: 42, database: true, uptime: 3600, history: [] } }))
+	await page.route('**/api/history', route => route.fulfill({ json: [] }))
+	await page.route('**/api/majestic', route => route.fulfill({ json: { configured: true, busy: false, decisions: {}, rankRoles: {}, preview: null, run: null } }))
+	for (const theme of ['light', 'dark']) {
+		await page.getByRole('combobox', { name: 'Тема оформления' }).selectOption(theme)
+		for (const section of ['overview', 'templates', 'variables', 'captures', 'curators', 'access', 'majestic', 'settings', 'history']) {
+			await page.goto('/#' + section)
+			await expect(page.locator('.page-heading h1')).toBeVisible()
+			await page.waitForLoadState('networkidle')
+			await page.evaluate(() => scrollTo(0, 0))
+			if (section === 'templates') {
+				const actions = await page.locator('.editor-footer').boundingBox()
+				const editor = await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).boundingBox()
+				expect(actions!.y + actions!.height).toBeLessThanOrEqual(editor!.y)
+			}
+			await expect(page.getByRole('dialog')).toHaveCount(0)
+			await expect(page.locator('body')).toHaveCSS('color', theme === 'light' ? 'rgb(37, 40, 61)' : 'rgb(243, 242, 250)')
+			await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+			await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-${theme}-${section}.png`, fullPage: true })
+		}
+		await page.goto('/#templates')
+		await page.getByRole('button', { name: 'Восстановить исходный шаблон' }).click()
+		await expect(page.getByRole('dialog')).toBeVisible()
+		await page.screenshot({ path: `output/dashboard-review/redesign/${testInfo.project.name}-${theme}-dialog.png`, fullPage: true })
+		await page.getByRole('button', { name: 'Отмена', exact: true }).click()
+	}
+	expect(errors).toEqual([])
+})
+
+
+test('save conflict keeps draft and retry cannot submit twice', async ({ page }) => {
+	await setup(page, 'templates', 'Исходный текст')
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	await editor.fill('Мой черновик')
+	await page.route('**/api/templates', route => route.fulfill({ status: 409, json: { error: 'Версия изменилась. Обнови данные.' } }))
+	await page.getByRole('button', { name: 'Сохранить шаблон', exact: true }).click()
+	await expect(page.getByRole('dialog')).toContainText('Версия изменилась')
+	await page.getByRole('button', { name: 'Понятно', exact: true }).click()
+	await expect(editor).toHaveText('Мой черновик')
+	let count = 0
+	let release!: () => void
+	const pending = new Promise<void>(resolve => { release = resolve })
+	await page.route('**/api/templates', async route => {
+		count++
+		await pending
+		await route.fulfill({ status: 500, json: { error: 'Повтори сохранение' } })
+	})
+	const save = page.getByRole('button', { name: 'Сохранить шаблон', exact: true })
+	await save.click()
+	await expect(save).toBeDisabled()
+	expect(count).toBe(1)
+	release()
+	await expect(page.getByRole('dialog')).toContainText('Повтори сохранение')
+	await page.getByRole('button', { name: 'Понятно', exact: true }).click()
+	await expect(editor).toHaveText('Мой черновик')
+})
+
+
+test('invalid variable key shows an inline error and preserves input', async ({ page }) => {
+	const requests = await setup(page, 'templates')
+	await page.getByRole('button', { name: 'Добавить переменную' }).click()
+	const key = page.getByRole('textbox', { name: 'Ключ', exact: true })
+	await key.fill('123 неверный')
+	await page.getByRole('button', { name: 'Сохранить переменные', exact: true }).click()
+	await expect(key).toHaveAttribute('aria-invalid', 'true')
+	await expect(key).toHaveValue('123 неверный')
+	await expect(page.getByText('Ключ: до 64 букв, цифр, дефисов и подчёркиваний; начинается с буквы.')).toBeVisible()
+	expect(requests.filter(request => request.path === 'template-variables')).toHaveLength(0)
+	await key.fill('правильный-ключ')
+	await expect(key).toHaveAttribute('aria-invalid', 'false')
 })
