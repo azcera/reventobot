@@ -163,6 +163,7 @@ const shutdown = async () => {
 	console.log('\n🛑 Получен сигнал остановки. Завершаю работу...')
 	await client.stopTelegramBroadcast?.()
 	await client.familyWars?.stop()
+	await client.captureResults?.stop()
 	await client.majesticNicknames?.stop()
 	await client.familyMembership?.stop()
 	await client.eventSchedule?.stop()

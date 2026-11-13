@@ -33,6 +33,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | Расписание событий | `src/services/eventSchedule.ts`, `src/config/eventSchedule.ts`, `src/features/capture/groupOptions.ts` |
 | Majestic: получение состава, план и применение синхронизации | `src/services/majesticClient.ts`, `src/features/majestic/syncPreview.ts`, `src/services/majesticSync.ts` |
 | Majestic: фоновые задачи, Family Wars, членство | `src/services/majesticNicknameScheduler.ts`, `src/services/familyWars.ts`, `src/services/familyMembership.ts` |
+| Результаты каптов из API в объявлениях Telegram | `src/services/captureResults.ts`, `src/events/telegramCaptures.ts` |
 | Telegram | `src/services/telegram*.ts`, `src/events/telegram*.ts` |
 | Роли и префиксы ников | `src/services/rolePrefixSync.ts`, `src/utils/adminPrefix.ts`, `src/utils/parseDisplayName.ts` |
 | HTTP API дашборда | `src/dashboard/routes.ts`; часть API контейнеров подключена в `index.ts` |

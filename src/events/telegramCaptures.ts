@@ -121,9 +121,12 @@ export = (client: import('discord.js').Client) => {
 					})))
 						.addActionRowComponents(actionRow)
 
-					await channel.send({
+					const sent = await channel.send({
 						flags: MessageFlags.IsComponentsV2 as const,
 						components: [container]
+					})
+					await client.captureResults?.track(sent, {
+						attack: isAttack, enemy: isAttack ? defender : attacker, startTime, zone: zoneNum
 					})
 				} catch (caught) {
  const err = getError(caught);

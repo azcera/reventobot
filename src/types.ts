@@ -136,6 +136,7 @@ declare module 'discord.js' {
 		mclLists?: ReturnType<typeof import('./services/mclLists').createMclLists>
 		capturePresets?: ReturnType<typeof import('./features/capture/capturePresets').createCapturePresets>
 		familyWars?: ReturnType<typeof import('./services/familyWars').createFamilyWars> | null
+		captureResults?: ReturnType<typeof import('./services/captureResults').createCaptureResults>
 		majesticSync?: ReturnType<typeof import('./services/majesticSync').createMajesticSync>
 		majesticNicknames?: ReturnType<typeof import('./services/majesticNicknameScheduler').createMajesticNicknameScheduler>
 		familyMembership?: ReturnType<typeof import('./services/familyMembership').createFamilyMembership> | null
