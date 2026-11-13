@@ -2,7 +2,7 @@ import { replaceTemplateVariables } from '../../../shared/templateVariables'
 import type { Config, Resources, Drafts, Setter, PageServices } from '../types'
 import React, { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, Link, Pencil, Plus, RefreshCw, RotateCcw, Save, Send, Trash2, Unlink } from 'lucide-react'
-import { Button, Field, IconButton, Panel, useModal } from '../components/ui'
+import { SaveStatus, Button, Field, IconButton, Panel, useModal } from '../components/ui'
 import { TemplateVariables } from './Variables'
 import { ChannelPicker } from '../components/ChannelPicker'
 import { EditorWorkspace, MarkdownEditor } from '../components/Editor'
@@ -95,7 +95,7 @@ export function Templates({ config, setConfig, resources, drafts, setDrafts, api
 		if (!await modal({ title: 'Восстановить исходный шаблон?', message: `Все изменения раздела «${group}» будут сброшены. Привязанные сообщения обновятся в Discord.`, confirm: 'Восстановить', danger: true })) return
 		run(async () => { const next = await api('templates', { revision: config.revision, values: Object.fromEntries(config.templates.filter(field => field.group === group).map(field => [field.key, null])) }); clearDraft(group); result(next, 'Исходный шаблон восстановлен.') })
 	}
-	const footer = <div className="editor-footer"><span className="text-xs text-muted" aria-live="polite">{dirtyGroup(config, drafts, group) ? 'Есть несохранённые изменения' : 'Сохранённая версия'}</span><div className="flex gap-2">{kind?.startsWith('custom-') && <IconButton icon={Trash2} label="Удалить шаблон" onClick={remove} />}<IconButton icon={RotateCcw} label="Восстановить исходный шаблон" onClick={reset} /><Button variant="primary" icon={Save} onClick={save}>Сохранить шаблон</Button></div></div>
+	const footer = <div className="editor-footer"><SaveStatus dirty={dirtyGroup(config, drafts, group)} /><div className="flex gap-2">{kind?.startsWith('custom-') && <IconButton icon={Trash2} label="Удалить шаблон" onClick={remove} />}<IconButton icon={RotateCcw} label="Восстановить исходный шаблон" onClick={reset} /><Button variant="primary" icon={Save} onClick={save}>Сохранить шаблон</Button></div></div>
 	return <div className="grid gap-6">
 		<div className="flex flex-wrap items-center justify-between gap-4"><Field label="Раздел шаблона" className="w-full sm:w-72"><select value={group} onChange={event => setSelectedGroup(event.target.value)}>{groups.map(name => <option key={name}>{name}</option>)}</select></Field><Button icon={Plus} onClick={() => modal({ title: 'Новый шаблон', hideFooter: true, content: ({ close }) => <NewTemplate create={name => { if (!name.trim()) return; close(); run(async () => { const next = await api('templates/create', { name, revision: config.revision }); setConfig(next); setSelectedGroup(name.trim()); notify('Шаблон создан. Напиши сообщение и выбери канал публикации.'); }) }} /> })}>Новый шаблон</Button></div>
 		{kind && <div className="binding-strip"><div className="binding-icon"><Link aria-hidden="true" /></div><div className="min-w-0 flex-1"><h2 className="text-sm font-medium">Постоянное сообщение</h2><p className="mt-1 text-xs text-muted">{binding ? 'Обновляется в Discord при сохранении шаблона' : 'Выбери канал или привяжи существующую публикацию'}</p></div>{binding && <span className="badge hidden sm:inline-flex"># {bindingChannel?.name || 'Канал привязан'}</span>}<IconButton icon={Pencil} label="Настроить постоянное сообщение" onClick={openBinding} /></div>}

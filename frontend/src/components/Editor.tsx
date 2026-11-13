@@ -6,6 +6,7 @@ import { Bold, Code, CodeXml, Eye, Heading1, Heading2, Heading3, Image, Italic, 
 import { queryAt, suggestions } from '../lib/mentions'
 import { editorTokens, type EditorToken } from '../lib/editorTokens'
 import { Button, Field, IconButton, useModal } from './ui'
+import { DiscordPreview, Markdown } from './DiscordPreview'
 
 type Format = [LucideIcon, string, string, string, string?, boolean?]
 const formats: Format[] = [
@@ -63,7 +64,7 @@ function TagForm({ token, selected, resources, onSubmit, close }: { token: Pick<
 			onSubmit(source); close()
 		} catch (error) { setError(errorMessage(error)) }
 	}}>
-		{token.kind !== 'image' && <Field label={token.kind === 'section' ? 'Текст секции' : 'Текст ссылки'}>{token.kind === 'section' ? <MarkdownEditor aria-label="Текст секции" value={text} onChange={setText} resources={resources} components={false} /> : <textarea required value={text} rows={4} onChange={event => setText(event.target.value)} />}</Field>}
+		{token.kind !== 'image' && <Field label={token.kind === 'section' ? 'Текст секции' : 'Текст ссылки'}>{token.kind === 'section' ? <EditorWorkspace resetKey={token.source} footer={null} renderPreview={() => <DiscordPreview><Markdown source={text} /></DiscordPreview>}><MarkdownEditor aria-label="Текст секции" value={text} onChange={setText} resources={resources} components={false} /></EditorWorkspace> : <textarea required value={text} rows={4} onChange={event => setText(event.target.value)} />}</Field>}
 		{token.kind === 'section' && <Field label="Название кнопки"><input required value={label} maxLength={80} onChange={event => setLabel(event.target.value)} /></Field>}
 		<Field label={token.kind === 'image' ? 'Ссылка на изображение' : token.kind === 'section' ? 'Ссылка кнопки' : 'Адрес ссылки'}><input required type="url" value={url} onChange={event => setUrl(event.target.value)} /></Field>
 		{error && <p role="alert" className="text-danger">{error}</p>}
@@ -152,7 +153,7 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 			onDrop={event => event.preventDefault()}
 			onBeforeInput={event => { if (ref.current?.closest('fieldset')?.disabled) { event.preventDefault(); return }; const type = (event.nativeEvent as InputEvent).inputType; if (type === 'historyUndo' || type === 'historyRedo') { event.preventDefault(); restore(type === 'historyRedo') } else remember() }}
 			onInput={event => { if ((event.nativeEvent as InputEvent).isComposing) return; const root = ref.current!, [start, end] = caretRange(root); const next = rawText(root); change(next, start, end); setQuery(queryAt(next, start, end)); setSelected(0) }}
-			onMouseUp={refresh} onClick={refresh} onKeyUp={event => { if (!event.ctrlKey && !event.metaKey && !(found.length && ['ArrowUp', 'ArrowDown'].includes(event.key))) refresh() }} onBlur={() => setQuery(null)}
+			onMouseUp={refresh} onClick={refresh} onKeyUp={event => { if (!event.ctrlKey && !event.metaKey && !(found.length && ['ArrowUp', 'ArrowDown'].includes(event.key))) refresh() }} onBlur={() => { if (ref.current!.contains(window.getSelection()?.anchorNode || null)) remember(); setQuery(null) }} onFocus={() => { if (!ref.current!.contains(window.getSelection()?.anchorNode || null)) setCaret(ref.current!, ...lastSelection.current) }}
 			onCompositionEnd={() => { const root = ref.current!, [start, end] = caretRange(root); change(rawText(root), start, end) }}
 			onPaste={event => { event.preventDefault(); remember(); const [start, end] = lastSelection.current; replace(start, end, event.clipboardData.getData('text/plain').replace(/\r\n?/g, '\n')) }}
 			onCopy={event => { const [start, end] = caretRange(ref.current!); if (start !== end) { event.preventDefault(); event.clipboardData.setData('text/plain', value.slice(start, end)) } }}
@@ -187,14 +188,14 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 		}
 		setMode(next)
 	}
-	return <div className="grid gap-4">
+	return <div className="editor-workspace grid gap-4">
 		<div className="editor-tabs" role="tablist" aria-label="Режим редактора" onKeyDown={event => {
 			if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
 			event.preventDefault()
 			const next = event.key === 'Home' ? 'edit' : event.key === 'End' ? 'preview' : mode === 'edit' ? 'preview' : 'edit'
 			switchMode(next); document.getElementById(`${id}-${next}-tab`)?.focus()
 		}}>
-			{([['edit', 'Редактировать', TextCursorInput], ['preview', 'Предпросмотр', Eye]] satisfies [string, string, LucideIcon][]).map(([key, label, Icon]) => <button key={key} type="button" role="tab" id={`${id}-${key}-tab`} aria-selected={mode === key} aria-controls={`${id}-${key}-panel`} tabIndex={mode === key ? 0 : -1} onClick={() => switchMode(key)}><Icon aria-hidden="true" />{label}</button>)}
+			{([['edit', 'Редактирование', TextCursorInput], ['preview', 'Просмотр', Eye]] satisfies [string, string, LucideIcon][]).map(([key, label, Icon]) => <button key={key} type="button" role="tab" id={`${id}-${key}-tab`} aria-selected={mode === key} aria-controls={`${id}-${key}-panel`} tabIndex={mode === key ? 0 : -1} onClick={() => switchMode(key)}><Icon aria-hidden="true" />{label}</button>)}
 		</div>
 		<div role="tabpanel" id={`${id}-edit-panel`} aria-labelledby={`${id}-edit-tab`} hidden={mode !== 'edit'}>{children}</div>
 		{mode === 'preview' && <div role="tabpanel" id={`${id}-preview-panel`} aria-labelledby={`${id}-preview-tab`}>{preview}</div>}

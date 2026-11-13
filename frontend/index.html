@@ -4,6 +4,16 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="theme-color" content="#0b0a10">
+	<script>
+		(() => {
+			let theme = 'system';
+			try { theme = localStorage.getItem('revento-theme') || 'system'; } catch {}
+			const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+			document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+			document.querySelector('meta[name="theme-color"]').content = dark ? '#151720' : '#f3f4fa';
+		})();
+	</script>
+	<style>:root[data-theme='light'] { color-scheme: light; background: #f3f4fa; } :root[data-theme='dark'] { color-scheme: dark; background: #151720; }</style>
 	<title>Revento — управление ботом</title>
 	<link rel="icon" type="image/png" href="/revento-logo.png">
 	<link rel="stylesheet" href="/theme.css">

@@ -3,15 +3,16 @@ import { errorMessage, errorStatus } from '../types'
 import React, { useEffect, useState } from 'react'
 import { Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { RoleChoices } from '../components/RoleChoices'
-import { Button, Field, IconButton, Panel } from '../components/ui'
+import { SaveStatus, Button, Field, IconButton, Panel } from '../components/ui'
 
 export function CapturePresets({ active, resources, api, run, notify, setConfig }: PageServices & { active: boolean; resources: Resources; setConfig: Setter<Config | null> }) {
 	const [presets, setPresets] = useState<CapturePreset[] | null>(null)
 	const [revision, setRevision] = useState(0)
+	const [saved, setSaved] = useState('')
 	const [failed, setFailed] = useState(false)
 	const [conflict, setConflict] = useState(false)
 	async function load() {
-		try { const data = await api('capture-presets'); setPresets(data.presets); setRevision(data.revision); setFailed(false); setConflict(false) }
+		try { const data = await api('capture-presets'); setPresets(data.presets); setSaved(JSON.stringify(data.presets)); setRevision(data.revision); setFailed(false); setConflict(false) }
 		catch (error) { setFailed(true); notify(errorMessage(error), true) }
 	}
 	useEffect(() => { if (active && !presets && !failed) void load() }, [active, presets, failed, api])
@@ -22,7 +23,7 @@ export function CapturePresets({ active, resources, api, run, notify, setConfig 
 		await run(async () => {
 			try {
 				const data = await api('capture-presets', { presets, revision })
-				setPresets(data.presets); setRevision(data.revision); setConfig(await api('config')); notify('Предустановки сохранены. Команды доступны в Discord.')
+				setPresets(data.presets); setSaved(JSON.stringify(data.presets)); setRevision(data.revision); setConfig(await api('config')); notify('Предустановки сохранены. Команды доступны в Discord.')
 			} catch (error) {
 				if (errorStatus(error) === 409) {
 					setConflict(true)
@@ -45,6 +46,6 @@ export function CapturePresets({ active, resources, api, run, notify, setConfig 
 				<Field label="Количество участников" hint="Лимит подтверждённых участников. Записавшиеся ожидают подтверждения модератора."><input required type="number" min={1} max={2147483647} step={1} value={preset.maxMain || ''} onChange={event => edit(preset.id, { maxMain: Number(event.target.value) })} /></Field>
 			</div>
 		</Panel>)}
-		<div className="flex flex-wrap justify-between gap-3"><Button icon={Plus} disabled={presets.length >= 20} onClick={() => setPresets([...presets, { id: crypto.randomUUID(), command: '', target: '', channelId: '', accessRoleId: '', maxMain: 20 }])}>Добавить предустановку</Button><Button type="submit" variant="primary" icon={Save} disabled={conflict}>Сохранить сборы</Button></div>
+		<div className="action-bar flex flex-wrap items-center justify-between gap-3"><SaveStatus dirty={JSON.stringify(presets) !== saved} /><Button icon={Plus} disabled={presets.length >= 20} onClick={() => setPresets([...presets, { id: crypto.randomUUID(), command: '', target: '', channelId: '', accessRoleId: '', maxMain: 20 }])}>Добавить предустановку</Button><Button type="submit" variant="primary" icon={Save} disabled={conflict}>Сохранить сборы</Button></div>
 	</form>
 }
