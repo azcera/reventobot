@@ -3,7 +3,7 @@ import { errorMessage } from '../types'
 import React, { useEffect, useState } from 'react'
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { RoleChoices } from '../components/RoleChoices'
-import { SaveStatus, Button, Field, IconButton, Panel, useModal } from '../components/ui'
+import { ActionBar, SaveStatus, Button, Field, IconButton, Panel, useModal } from '../components/ui'
 
 export function RoleCurators({ active, resources, api, run, notify, setConfig }: PageServices & { active: boolean; resources: Resources; setConfig: Setter<Config | null> }) {
 	const [curators, setCurators] = useState<RoleCurator[] | null>(null)
@@ -24,7 +24,8 @@ export function RoleCurators({ active, resources, api, run, notify, setConfig }:
 			</div>
 		</Panel>)}
 		{!curators.length && <p className="text-sm text-muted">Кураторы ещё не добавлены. Доступ к управлению ролями закрыт для всех.</p>}
-		<div className="action-bar flex flex-wrap items-center justify-between gap-3"><SaveStatus dirty={JSON.stringify(curators) !== saved} /><Button icon={Plus} onClick={() => setCurators([...curators, { roleId: '', managedRoleIds: [] }])}>Добавить куратора</Button>
+		<div><Button icon={Plus} onClick={() => setCurators([...curators, { roleId: '', managedRoleIds: [] }])}>Добавить куратора</Button></div>
+		<ActionBar><SaveStatus dirty={JSON.stringify(curators) !== saved} />
 			<Button variant="primary" icon={Save} onClick={() => run(async () => {
 				let data
 				try { data = await api('role-curators', { curators, revision }) }
@@ -34,6 +35,6 @@ export function RoleCurators({ active, resources, api, run, notify, setConfig }:
 				}
 				setCurators(data.curators); setSaved(JSON.stringify(data.curators)); setRevision(data.revision); setConfig(await api('config')); notify('Кураторы ролей сохранены.')
 			})}>Сохранить кураторов</Button>
-		</div>
+		</ActionBar>
 	</div>
 }

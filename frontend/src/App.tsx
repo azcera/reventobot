@@ -3,7 +3,7 @@ import type { Api, Config, Resources, Session, Drafts, SettingsDraft, Notify, Ru
 import { errorMessage, errorStatus } from './types'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, ArrowUp, ArrowRight, ArrowUpRight, Clock, ListChecks, CalendarDays, Braces, BookOpen, Check, ChevronRight, Database, Files, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, Wifi, X } from 'lucide-react'
-import { BusyContext, Button, Empty, IconButton, Loading, Panel, useModal } from './components/ui'
+import { BusyContext, Button, Empty, IconButton, Loading, Field, Panel, useModal } from './components/ui'
 import { HistoryRows } from './components/History'
 import { Variables } from './pages/Variables'
 import { Templates } from './pages/Templates'
@@ -24,10 +24,11 @@ const pages = {
 	curators: { title: 'Кураторы ролей', label: 'Кураторы ролей', description: 'Назначай, кто и какими ролями может управлять.', icon: ListChecks },
 	captures: { title: 'Управление сборами', label: 'Сборы', description: 'Предустановки ручной регистрации на мероприятия.', icon: CalendarDays },
 	majestic: { title: 'Majestic — синхронизация', label: 'Majestic', description: 'Сверь состав семьи с Discord перед применением изменений.', icon: RefreshCw },
-	history: { title: 'История изменений', label: 'История изменений', description: 'Последние 100 действий администраторов. Время — московское.', icon: History }
+	notFound: { title: '404 — страница не найдена', label: 'Страница не найдена', description: 'Проверь адрес или вернись на главную.', icon: Files },
+	history: { title: 'История изменений', label: 'История изменений', description: 'Действия за последние 7 суток. Время — московское.', icon: History }
 }
 
-function currentPage() { const page = location.hash.slice(1).split('?')[0]; return Object.hasOwn(pages, page) ? page as keyof typeof pages : 'overview' }
+function currentPage() { const page = location.hash.slice(1).split('?')[0]; return !['/', '/dashboard/', '/dashboard/index.html'].includes(location.pathname) ? 'notFound' : !page ? 'overview' : Object.hasOwn(pages, page) ? page as keyof typeof pages : 'notFound' }
 
 const navigation = [
 	['Обзор', ['overview']],
@@ -38,7 +39,7 @@ const navigation = [
 ] satisfies [string, (keyof typeof pages)[]][]
 
 function Login({ loading, configured, status, retry }: { loading: boolean; configured: boolean; status: string; retry(): void }) {
-	return <main className="login-screen"><div className="login-decoration" aria-hidden="true" /><div className="login-card"><img src="/revento-logo.png" className="mb-8 size-16 rounded-2xl" alt="Логотип Revento" /><p className="eyebrow mb-4">REVENTO / CONTROL ROOM</p><h1 className="text-4xl font-semibold leading-tight tracking-[-1.5px] sm:text-5xl">Всё под<br /><span className="text-brand">контролем.</span></h1><p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">Сообщения, компоненты и настройки твоего сервера в одном месте.</p>
+	return <main className="login-screen"><div className="login-decoration" aria-hidden="true" /><div className="login-card"><img src="/revento-logo.png" className="mb-8 size-16 rounded-2xl" alt="Логотип Revento" /><p className="eyebrow mb-4">REVENTO / панель управления</p><h1 className="text-4xl font-semibold leading-tight tracking-[-1.5px] sm:text-5xl">Всё под<br /><span className="text-brand">контролем.</span></h1><p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">Сообщения, компоненты и настройки твоего сервера в одном месте.</p>
 		{loading ? <Loading>Проверяем подключение…</Loading> : configured ? <a className="button button-primary mt-8 w-full" href="/auth/discord">Войти через Discord<ArrowUpRight aria-hidden="true" /></a> : <Button className="mt-8" icon={RefreshCw} onClick={retry}>Проверить подключение</Button>}
 		<p role="status" aria-live="polite" className="mt-4 text-xs leading-relaxed text-muted">{status || 'Доступ только администраторам сервера.'}</p><div className="mt-8 flex items-center gap-2 border-t border-line pt-5 text-[11px] text-muted"><ShieldCheck className="size-4 text-brand" />Авторизация через Discord · проверка прав на сервере</div></div></main>
 }
@@ -63,13 +64,23 @@ function Overview({ active, api, config, guild, notify, refresh }: DataPageProps
 
 function HistoryPage({ active, api, config, guild, notify, refresh }: DataPageProps) {
 	const [entries, setEntries] = useState<HistoryEntry[] | null>(null)
+	const [period, setPeriod] = useState('168')
+	const [from, setFrom] = useState('')
+	const [to, setTo] = useState('')
 	useEffect(() => {
 		if (!active) return
 		let cancelled = false
 		api('history').then(data => { if (!cancelled) setEntries(data) }).catch(error => { if (!cancelled) notify(errorMessage(error), true) })
 		return () => { cancelled = true }
 	}, [active, api, notify, refresh])
-	return entries ? <Panel title="Журнал действий"><HistoryRows entries={entries} config={config} guild={guild} /></Panel> : <Loading />
+	const invalid = period === 'custom' && Boolean(from && to && from > to)
+	const lower = period === 'custom' ? from ? Date.parse(from + '+03:00') : -Infinity : Date.now() - Number(period) * 3600000
+	const upper = period === 'custom' && to ? Date.parse(to + '+03:00') + 59999 : Infinity
+	const visible = entries?.filter(entry => !invalid && Date.parse(entry.created_at) >= lower && Date.parse(entry.created_at) <= upper) || []
+	return <div className="grid gap-5"><Panel title="Период истории"><div className="flex flex-wrap items-end gap-4 p-5"><Field label="Показать за"><select value={period} onChange={event => setPeriod(event.target.value)}><option value="1">Час</option><option value="24">Сутки</option><option value="168">Неделю</option><option value="custom">Выбрать диапазон</option></select></Field>{period === 'custom' && <><Field label="С (МСК)"><input type="datetime-local" value={from} onChange={event => setFrom(event.target.value)} /></Field><Field label="По (МСК)"><input type="datetime-local" value={to} onChange={event => setTo(event.target.value)} /></Field></>}<Button disabled={!entries || invalid} onClick={() => {
+		const url = URL.createObjectURL(new Blob([JSON.stringify(visible, null, 2)], { type: 'application/json' }))
+		const link = document.createElement('a'); link.href = url; link.download = 'revento-history.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+	}}>Выгрузить JSON</Button>{invalid && <p role="alert" className="text-danger">Начало диапазона должно быть раньше конца.</p>}</div></Panel>{entries ? <Panel title={`Журнал действий · ${visible.length}`}><HistoryRows entries={visible} config={config} guild={guild} /></Panel> : <Loading />}</div>
 }
 
 export function App() {
@@ -175,7 +186,6 @@ export function App() {
 		start()
 		const change = () => { setPage(currentPage()); setMenu(false); setToast('') }
 		window.addEventListener('hashchange', change)
-		if (!Object.hasOwn(pages, location.hash.slice(1).split('?')[0]) && location.hash) history.replaceState(null, '', '/#overview')
 		return () => window.removeEventListener('hashchange', change)
 	}, [])
 	useEffect(() => {
@@ -194,16 +204,17 @@ export function App() {
 		if (!await modal({ title: 'Обновить данные?', message: 'Несохранённые правки шаблонов и настроек будут сброшены.', confirm: 'Обновить' })) return
 		run(async () => { await loadConfig(); notify('Данные обновлены.') })
 	}
+	if (page === 'notFound') return <main className="login-screen"><Panel className="p-8" title="404 — страница не найдена"><p className="my-5 text-muted">Такой страницы нет.</p><a className="button button-primary" href="/#overview">На главную</a></Panel></main>
 	if (!session) return <><div className="login-appearance"><Appearance /></div><Login loading={booting} configured={configured} status={loginStatus} retry={start} /></>
 	const current = pages[page]
 	return <div className={`app-shell ${alt ? 'show-shortcuts' : ''}`}>
 		{menu && <button className="sidebar-scrim" aria-label="Закрыть меню" onClick={() => setMenu(false)} />}
-		<aside ref={sidebar} id="dashboard-navigation" className={`sidebar ${menu ? 'sidebar-open' : ''}`} aria-label="Рабочее пространство"><IconButton className="sidebar-close lg:hidden" icon={X} label="Закрыть меню" onClick={() => setMenu(false)} /><a href="#overview" className="brand"><img src="/revento-logo.png" alt="" /><span>REVENTO<small>CONTROL ROOM</small></span></a><nav aria-label="Разделы дашборда">{navigation.map(([title, keys]) => <div className="nav-group" key={title}><p className="nav-caption">{title}</p>{keys.map(key => { const { label, icon: Icon } = pages[key]; return <a href={'#' + key} key={key} aria-keyshortcuts={`Alt+${navigation.flatMap(([, items]) => items).indexOf(key) + 1}`} aria-current={page === key ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span><kbd className="nav-shortcut" aria-hidden="true">{navigation.flatMap(([, items]) => items).indexOf(key) + 1}</kbd></a> })}</div>)}</nav><div className="sidebar-bottom"><div className="user-avatar">{session.user.avatar ? <img src={session.user.avatar} alt="" className="size-full rounded-full object-cover" /> : session.user.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium" title={session.user.name}>{session.user.name}</p><p className="mt-1 text-[10px] text-muted">Аккаунт Discord</p></div><IconButton icon={LogOut} label="Выйти из аккаунта" disabled={busy} onClick={async () => {
+		<aside ref={sidebar} id="dashboard-navigation" className={`sidebar ${menu ? 'sidebar-open' : ''}`} aria-label="Рабочее пространство"><IconButton className="sidebar-close lg:hidden" icon={X} label="Закрыть меню" onClick={() => setMenu(false)} /><a href="#overview" className="brand"><img src="/revento-logo.png" alt="" /><span>REVENTO<small>панель управления</small></span></a><nav aria-label="Разделы дашборда">{navigation.map(([title, keys]) => <div className="nav-group" key={title}><p className="nav-caption">{title}</p>{keys.map(key => { const { label, icon: Icon } = pages[key]; return <a href={'#' + key} key={key} aria-keyshortcuts={`Alt+${navigation.flatMap(([, items]) => items).indexOf(key) + 1}`} aria-current={page === key ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span><kbd className="nav-shortcut" aria-hidden="true">{navigation.flatMap(([, items]) => items).indexOf(key) + 1}</kbd></a> })}</div>)}</nav><div className="sidebar-bottom"><div className="user-avatar">{session.user.avatar ? <img src={session.user.avatar} alt="" className="size-full rounded-full object-cover" /> : session.user.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium" title={session.user.name}>{session.user.name}</p><p className="mt-1 text-[10px] text-muted">Аккаунт Discord</p></div><IconButton icon={LogOut} label="Выйти из аккаунта" disabled={busy} onClick={async () => {
 			if (!await modal({ title: 'Выйти из аккаунта?', message: dirty ? 'Несохранённые правки будут потеряны. Для входа потребуется авторизация через Discord.' : 'Для входа потребуется снова авторизоваться через Discord.', confirm: 'Выйти' })) return
 			run(async () => { await api('logout', {}); sessionRef.current = null; setSession(null); setConfig(null); setResources(null); setDrafts({}); setSettings({}); setLoginStatus('Ты вышел из аккаунта.'); setToast('') })
 		}} /></div></aside>
 		<main className="main-content" inert={menu}><header className={`topbar ${headerVisible || menu ? 'topbar-visible' : ''}`}><div className="flex min-w-0 items-center gap-3"><div className="lg:hidden"><IconButton aria-expanded={menu} aria-controls="dashboard-navigation" icon={menu ? X : Menu} label={menu ? 'Закрыть меню' : 'Открыть меню'} className="lg:hidden" onClick={() => setMenu(!menu)} /></div><p className="flex min-w-0 items-center gap-2 text-xs text-muted"><span className="hidden sm:inline">Рабочее пространство</span><ChevronRight className="hidden size-3 sm:block" aria-hidden="true" /><span className="truncate text-text">{current.label}</span></p></div><div className="flex items-center gap-3"><Appearance /></div></header>
-			<div className="page-content"><div className="page-heading"><div><p className="eyebrow mb-2 lg:hidden">REVENTO / CONTROL ROOM</p><h1>{current.title}</h1><p>{current.description}</p></div><div className="flex shrink-0 gap-2">{page !== 'majestic' && <IconButton icon={RefreshCw} label="Обновить данные" disabled={busy || booting} onClick={reload} />}<IconButton icon={BookOpen} label="Руководство по разделу" onClick={() => showGuide(modal, page)} /></div></div>
+			<div className="page-content"><div className="page-heading"><div><p className="eyebrow mb-2 lg:hidden">REVENTO / панель управления</p><h1>{current.title}</h1><p>{current.description}</p></div><div className="flex shrink-0 gap-2">{page !== 'majestic' && <IconButton icon={RefreshCw} label="Обновить данные" disabled={busy || booting} onClick={reload} />}<IconButton icon={BookOpen} label="Руководство по разделу" onClick={() => showGuide(modal, page)} /></div></div>
 				{!config || !resources ? booting || busy ? <Loading /> : <Empty title="Не удалось загрузить данные"><Button icon={RefreshCw} onClick={() => run(loadConfig)}>Повторить загрузку</Button></Empty>
 					: <BusyContext.Provider value={busy}><fieldset className="min-w-0" disabled={busy} aria-busy={busy}>
 						<div className="page-view" hidden={page !== 'overview'}><Overview active={page === 'overview'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>

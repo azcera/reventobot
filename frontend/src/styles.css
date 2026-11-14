@@ -367,8 +367,8 @@ input[type='checkbox']:not([role='switch']):checked::before { content: ''; width
 .role-chip { display: inline-flex; min-height: 34px; align-items: center; gap: 7px; padding: 6px 10px; font-size: 11px; overflow-wrap: anywhere; text-align: left; background: var(--brand-soft); color: var(--brand); border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent); border-radius: 11px; }
 .role-chip svg { width: 13px; height: 13px; }.role-chip:hover { border-color: var(--brand); }
 details.panel > summary { list-style: none; display: flex; align-items: center; gap: 8px; }
-details.panel > summary::after { content: '+'; margin-left: auto; color: var(--brand); font-size: 20px; font-weight: 300; transition: rotate .3s; }
-details.panel[open] > summary::after { rotate: 45deg; }
+details.panel > summary::after { content: ''; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); rotate: 45deg; transition: rotate .3s; }
+details.panel[open] > summary::after { rotate: 225deg; }
 details.panel > summary::-webkit-details-marker { display: none; }
 @supports (interpolate-size: allow-keywords) {
 	details.panel { interpolate-size: allow-keywords; }
@@ -442,3 +442,15 @@ input:not([type='checkbox']):not([type='radio']):focus-visible, textarea:focus-v
 	.editor-toolbar { background-color: var(--control); backdrop-filter: blur(16px) saturate(150%); }
 	.markdown-source { background-color: color-mix(in srgb, var(--input) 80%, transparent); }
 }
+
+/* Shared save and integration controls. */
+.action-bar { display: flex; align-items: center; top: 12px; min-height: 76px; }
+.action-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; width: 100%; justify-content: space-between; }
+.action-bar-stuck { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; pointer-events: none; }
+.action-bar-stuck .action-buttons { width: fit-content; margin-inline: auto; justify-content: center; pointer-events: auto; }
+.action-bar-stuck .action-buttons > [role='status'] { display: none; }
+.main-content:has(.topbar-visible) .action-bar { top: 84px; }
+.toggle-track { box-sizing: border-box; position: relative; display: block; }
+.toggle-track::before { position: absolute; left: 4px; top: 4px; transform: none; }
+.toggle-row input:checked + .toggle-track::before { transform: translateX(20px); }
+.toggle-row input[role='switch'] { width: 46px; height: 26px; margin: 0; cursor: pointer; }

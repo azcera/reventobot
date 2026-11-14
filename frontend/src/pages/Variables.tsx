@@ -2,7 +2,7 @@ import { templateVariableName } from '../../../shared/templateVariables'
 import { useEffect, useState } from 'react'
 import { ArrowUpRight, Plus, Save, Trash2 } from 'lucide-react'
 import type { Config, PageServices, Setter } from '../types'
-import { AutoTextarea, SaveStatus, Field, IconButton, Panel } from '../components/ui'
+import { ActionBar, Button, AutoTextarea, SaveStatus, Field, IconButton, Panel } from '../components/ui'
 import { syncNotice } from '../lib/templates'
 
 export function TemplateVariables({ group, config, setConfig, api, run, notify, overview = false }: PageServices & { overview?: boolean; group: string; config: Config; setConfig: Setter<Config | null> }) {
@@ -23,9 +23,17 @@ export function TemplateVariables({ group, config, setConfig, api, run, notify, 
 	</div></Panel>
 }
 
-export function Variables(props: PageServices & { config: Config; setConfig: Setter<Config | null> }) {
+export function Variables({ config, setConfig, api, run, notify }: PageServices & { config: Config; setConfig: Setter<Config | null> }) {
 	const [search, setSearch] = useState('')
-	const groups = [...new Set(props.config.templates.map(field => field.group))].filter(group => Object.keys(props.config.templateVariables?.[group] || {}).length > 0)
-	const visibleGroups = groups.filter(group => [group, ...Object.entries(props.config.templateVariables?.[group] || {}).flat(), ...Object.values(props.config.templateVariableLabels?.[group] || {})].join(' ').toLowerCase().includes(search.toLowerCase()))
-	return <div className="grid gap-5"><Field label="Поиск переменных"><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Шаблон, название, ключ или значение" /></Field>{visibleGroups.map(group => <TemplateVariables overview key={group} {...props} group={group} />)}{!visibleGroups.length && <p role="status" className="text-sm text-muted">{groups.length ? 'Переменные не найдены.' : 'Пока нет переменных. Добавь их на странице нужного шаблона.'}</p>}</div>
+	const [draft, setDraft] = useState(config.templateVariables || {})
+	useEffect(() => { setDraft(config.templateVariables || {}) }, [config.templateVariables])
+	const groups = [...new Set(config.templates.map(field => field.group))].filter(group => Object.keys(draft[group] || {}).length > 0)
+	const query = search.trim().toLocaleLowerCase('ru')
+	const matches = (group: string, key: string, value: string) => [group, config.templateVariableLabels?.[group]?.[key] || '', value].some(text => text.toLocaleLowerCase('ru').includes(query))
+	const visible = groups.map(group => ({ group, entries: Object.entries(draft[group] || {}).filter(([key, value]) => matches(group, key, value)) })).filter(item => item.entries.length)
+	return <div className="grid gap-5"><ActionBar><SaveStatus dirty={JSON.stringify(draft) !== JSON.stringify(config.templateVariables || {})} /><Button variant="primary" icon={Save} onClick={() => run(async () => {
+		const next = await api('template-variables', { groups: draft, revision: config.revision })
+		setConfig(next)
+		const notice = syncNotice(next, 'Переменные сохранены. Публикации обновлены.'); notify(notice.message, notice.error)
+	})}>Сохранить переменные</Button></ActionBar><Field label="Поиск переменных"><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Шаблон, название или значение" /></Field>{visible.map(({ group, entries }) => <Panel key={group} title={`Переменные · ${group}`} action={<IconButton icon={ArrowUpRight} label="Открыть переменные шаблона" onClick={() => { location.hash = `templates?group=${encodeURIComponent(group)}&section=variables` }} />}><div className="grid gap-4 p-5">{entries.map(([key, value]) => <div key={key} className="grid gap-3 lg:grid-cols-2"><div className="grid content-start gap-2"><span className="field-label">Название переменной</span><p className="py-3 text-sm">{config.templateVariableLabels?.[group]?.[key] || key}</p></div><Field label={`Значение · ${config.templateVariableLabels?.[group]?.[key] || key}`}><AutoTextarea className="min-h-12" rows={1} value={value} maxLength={4000} onChange={event => setDraft(previous => ({ ...previous, [group]: { ...previous[group], [key]: event.target.value } }))} /></Field></div>)}</div></Panel>)}{!visible.length && <p role="status" className="text-sm text-muted">{groups.length ? 'Переменные не найдены.' : 'Пока нет переменных. Добавь их на странице нужного шаблона.'}</p>}</div>
 }

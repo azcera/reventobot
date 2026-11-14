@@ -226,22 +226,30 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 	})
 	app.post('/api/template-variables', async (req: E.Request, res: E.Response) => {
 		try {
-			const { group, values, labels, revision } = req.body
-			const fields = store.snapshot().templates.filter(field => field.group === group)
-			if (!fields.length || !Number.isSafeInteger(revision) || !values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length > 50) throw problem(400, 'Проверьте шаблон и список переменных (до 50).')
-			const reserved = new Set(fields.flatMap(field => field.variables || []))
-			for (const [name, value] of Object.entries(values)) {
-				if (!templateVariableName.test(name)) throw problem(400, `Ключ «${name}»: начните с буквы, используйте до 64 букв, цифр, дефисов или подчёркиваний без пробелов.`)
-				if (reserved.has(name)) throw problem(400, `Ключ «${name}» занят системной переменной.`)
-				if (typeof value !== 'string' || value.length > 4000 || /\{[^{}]+\}/.test(value)) throw problem(400, `Значение «${name}»: до 4000 символов без вложенных переменных.`)
+			const { group, values, labels, groups, revision } = req.body
+			const batch = groups !== undefined
+			if (!Number.isSafeInteger(revision) || (batch && (!groups || typeof groups !== 'object' || Array.isArray(groups)))) throw problem(400, 'Проверьте список переменных и обновите данные.')
+			const updates: Record<string, Record<string, string>> = batch ? groups : { [group]: values }
+			const snapshot = store.snapshot()
+			const keys: string[] = []
+			for (const [name, entries] of Object.entries(updates)) {
+				const fields = snapshot.templates.filter(field => field.group === name)
+				if (!fields.length || !entries || typeof entries !== 'object' || Array.isArray(entries) || Object.keys(entries).length > 50) throw problem(400, 'Проверьте шаблон и список переменных (до 50).')
+				const reserved = new Set(fields.flatMap(field => field.variables || []))
+				if (batch && (Object.keys(entries).length !== Object.keys(store.templateVariables[name] || {}).length || Object.keys(entries).some(key => !Object.hasOwn(store.templateVariables[name] || {}, key)))) throw problem(400, 'На странице переменных можно изменять только значения.')
+				for (const [key, value] of Object.entries(entries)) {
+					if (!templateVariableName.test(key)) throw problem(400, `Ключ «${key}»: начните с буквы, используйте до 64 букв, цифр, дефисов или подчёркиваний без пробелов.`)
+					if (reserved.has(key)) throw problem(400, `Ключ «${key}» занят системной переменной.`)
+					if (typeof value !== 'string' || value.length > 4000 || /\{[^{}]+\}/.test(value)) throw problem(400, `Значение «${key}»: до 4000 символов без вложенных переменных.`)
+				}
+				if (!batch && labels !== undefined && (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.entries(labels).some(([key, label]) => !Object.hasOwn(entries, key) || typeof label !== 'string' || !label.trim() || label.length > 100))) throw problem(400, 'Название переменной: от 1 до 100 символов. Для каждого названия нужен существующий ключ.')
+				keys.push(...fields.map(field => field.key))
 			}
-			if (labels !== undefined && (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.entries(labels).some(([name, label]) => !Object.hasOwn(values, name) || typeof label !== 'string' || !label.trim() || label.length > 100))) throw problem(400, 'Название переменной: от 1 до 100 символов. Для каждого названия нужен существующий ключ.')
-			validateTemplates(Object.fromEntries(fields.map(field => [field.key, field.value])), { ...store.templateVariables, [group]: values })
-			await store.save('templateVariables', { [group]: values }, revision, req.dashboardUser, labels === undefined ? undefined : { [group]: labels })
-			const keys = fields.map(field => field.key)
+			validateTemplates(Object.fromEntries(snapshot.templates.filter(field => keys.includes(field.key)).map(field => [field.key, field.value])), { ...store.templateVariables, ...updates })
+			await store.save('templateVariables', updates, revision, req.dashboardUser, batch || labels === undefined ? undefined : { [group]: labels })
 			const syncResults: T.SyncResult[] = await permanent.syncMessages(keys, client, req.guild, undefined, req.dashboardUser)
 			if (keys.some(key => key.startsWith('navigation.'))) syncResults.push(...await navigation.sync(client, req.guild))
-			if (syncResults.length) await store.audit(req.dashboardUser, 'message.sync', group, { syncResults }).catch(error => console.error('[Dashboard audit]', error.message))
+			if (syncResults.length) await store.audit(req.dashboardUser, 'message.sync', Object.keys(updates).join(', '), { syncResults }).catch(error => console.error('[Dashboard audit]', error.message))
 			res.json({ ...store.snapshot(), syncResults })
 		} catch (caught) { respondError(res, getError(caught)) }
 	})

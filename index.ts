@@ -83,7 +83,9 @@ app.get('/', (req, res) => {
 })
 app.get('/builder.html', (req, res) => res.redirect('/#builder'))
 app.use(express.static(path.join(ROOT_PATH, 'dist', 'browser')))
-app.use(express.static(path.join(PUBLIC_PATH)))
+app.use(express.static(path.join(PUBLIC_PATH), { setHeaders(res, file) {
+	if (/\.(png|jpe?g|gif|webp|svg|ico|avif)$/i.test(file)) res.setHeader('Cache-Control', 'public, max-age=604800')
+} }))
 registerContainerMessageRoutes(app, client, {
 	beforeMutation: async (req, action, target) => {
 		const ids = parseMessageLink(target)
@@ -153,6 +155,11 @@ app.post('/api/send-container', async (req, res) => {
 		console.error('Ошибка при отправке контейнера с сайта:', err)
 		res.status(err.status || 500).json({ error: err.message })
 	}
+})
+
+app.get('/{*path}', (req, res, next) => {
+	if (req.path.startsWith('/api/') || !req.accepts('html')) return next()
+	res.status(404).sendFile(path.join(PUBLIC_PATH, 'dashboard', 'index.html'))
 })
 
 const port = Number(process.env.PORT || 3000)

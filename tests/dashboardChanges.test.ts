@@ -187,4 +187,40 @@ test('variable endpoint validates keys and labels and persists section substitut
 	assert.equal(row.revision, 1)
 	assert.equal((await request({ group, values, revision: 1 })).status, 200)
 	assert.deepEqual(dashboardStore.templateVariableLabels[group], labels)
+	assert.equal((await request({ groups: { [group]: { ...values, extra: 'bad' } }, revision: 2 })).status, 400)
+	assert.equal(row.revision, 2)
+	assert.equal((await request({ groups: { [group]: { ...values, 'цена-пулик': '300' } }, revision: 2 })).status, 200)
+	assert.equal(row.revision, 3)
+	assert.equal(dashboardStore.templateVariables[group]['цена-пулик'], '300')
+	assert.deepEqual(dashboardStore.templateVariableLabels[group], labels)
+	const second = dashboardStore.snapshot().templates.find(field => field.group !== group)!.group
+	await dashboardStore.save('templateVariables', { [second]: { second_value: 'old' } }, 3, 'tester')
+	const groups = { [group]: { ...values, 'цена-пулик': '500' }, [second]: { second_value: 'new' } }
+	assert.equal((await request({ groups: { ...groups, [second]: { second_value: '{nested}' } }, revision: 4 })).status, 400)
+	assert.equal(row.revision, 4)
+	assert.equal(dashboardStore.templateVariables[group]['цена-пулик'], '300')
+	assert.equal((await request({ groups, revision: 4 })).status, 200)
+	assert.equal(row.revision, 5)
+	assert.equal(dashboardStore.templateVariables[group]['цена-пулик'], '500')
+	assert.equal(dashboardStore.templateVariables[second].second_value, 'new')
+
+})
+
+
+test('audit retains a week without the old 100-row limit and survives store restart', async () => {
+	const queries: string[] = []
+	const records = Array.from({ length: 150 }, (_, id) => ({ id, action: 'settings' }))
+	const row = { revision: 0, value: { templates: {}, settings: {}, settingsEnvMigrated: true } }
+	const query = async (sql: string) => {
+		queries.push(sql)
+		if (sql.startsWith('SELECT revision')) return { rows: [row] }
+		return { rows: sql.startsWith('SELECT id, created_at') ? records : [] }
+	}
+	const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool
+	const store = createStore({}); await store.init(pool)
+	assert.equal((await store.history()).length, 150)
+	const restarted = createStore({}); await restarted.init(pool)
+	assert.deepEqual(await restarted.history(), records)
+	assert.ok(queries.some(sql => sql.startsWith('DELETE FROM dashboard_audit') && sql.includes("INTERVAL '7 days'")))
+	assert.ok(queries.some(sql => sql.startsWith('SELECT id, created_at') && sql.includes("INTERVAL '7 days'") && !sql.includes('LIMIT 100')))
 })

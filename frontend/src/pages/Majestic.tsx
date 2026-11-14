@@ -3,7 +3,7 @@ import { errorMessage } from '../types'
 import React, { useEffect, useRef, useState } from 'react'
 import { CheckCheck, ChevronRight, Link, Pencil, RefreshCw, RotateCcw, ScanEye, Square, UserRoundCheck, UserRoundX, Users } from 'lucide-react'
 import { applicableSelection, majesticLabels, previewIssue, visibleRows } from '../lib/majestic'
-import { Button, Empty, Field, IconButton, Loading, Panel, useModal } from '../components/ui'
+import { ActionBar, Button, Empty, Field, IconButton, Loading, Panel, useModal } from '../components/ui'
 
 function Resolution({ row, data, resolve }: { row: PreviewRow; data: MajesticState; resolve(body: Decision): void }) {
 	const decision = data.decisions?.[row.discordId]
@@ -72,9 +72,9 @@ export function Majestic({ active, resources, api, run, notify }: PageServices &
 	if (!data) return loading ? <Loading /> : <Empty icon={Users} title="Не удалось загрузить синхронизацию"><Button icon={RefreshCw} onClick={() => setRefresh(n => n + 1)}>Повторить</Button></Empty>
 	return <div className="grid gap-6">
 		<div className="callout">Tier-роли сохраняются. Отсутствие в семье само по себе не снимает роли.</div>
-		<div className="flex flex-wrap items-center gap-2"><Button variant="primary" icon={ScanEye} disabled={locked} onClick={() => operation('preview')}>Получить предпросмотр</Button><IconButton icon={RefreshCw} label={locked ? 'Обновить статус' : 'Обновить предпросмотр'} onClick={() => locked ? setRefresh(n => n + 1) : operation('preview')} /><IconButton icon={Square} label="Остановить операцию" disabled={!locked || data.run?.stopRequested} onClick={async () => {
+		<ActionBar><Button variant="primary" icon={ScanEye} disabled={locked} onClick={() => operation('preview')}>Получить предпросмотр</Button><IconButton icon={RefreshCw} label={locked ? 'Обновить статус' : 'Обновить предпросмотр'} onClick={() => locked ? setRefresh(n => n + 1) : operation('preview')} /><IconButton icon={Square} label="Остановить операцию" disabled={!locked || data.run?.stopRequested} onClick={async () => {
 			if (await modal({ title: 'Остановить синхронизацию?', message: 'Оставшиеся операции прекратятся. Уже выполненные изменения сохранятся.', confirm: 'Остановить' })) operation('stop')
-		}} />{loading && <span className="ml-2 text-xs text-muted" role="status">Обновляем статус…</span>}</div>
+		}} />{loading && <span className="ml-2 text-xs text-muted" role="status">Обновляем статус…</span>}</ActionBar>
 		<Panel title="Состояние синхронизации"><div className="grid gap-3 p-5 text-sm" role="status" aria-live="polite">
 			{!data.configured && <p className="text-danger">Настрой подключение Majestic на сервере: MAJESTIC_SESSION_ID, MAJESTIC_SERVER и MAJESTIC_CHARACTER_ID.</p>}
 			{data.run && <><div className="flex flex-wrap items-center justify-between gap-2"><span>{({ apply: 'Применение', preview: 'Предпросмотр', nicknames: 'Автообновление ников', sync: 'Автосинхронизация' } as Record<string, string>)[data.run.kind] || data.run.kind}: <strong className="font-medium">{majesticLabels[data.run.status] || data.run.status}</strong></span><span className="tabular-nums text-muted">{data.run.completed} / {data.run.total}</span></div>{data.run.total > 0 && <progress className="sync-progress" value={data.run.completed} max={data.run.total} aria-label="Обработано участников" />}{data.run.stopRequested && <p className="text-muted">Запрошена остановка. Текущий запрос Discord может завершиться.</p>}{data.run.error && <p className="text-danger">{data.run.error}</p>}</>}

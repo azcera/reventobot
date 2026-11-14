@@ -14,6 +14,7 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 			for (const field of config.settings) if (Object.hasOwn(body.values, field.key)) field.value = body.values[field.key]
 			config.revision++
 		}
+		if (path === 'template-variables' && body?.groups) { config.templateVariables = body.groups; config.revision++ }
 		if (path === 'template-variables' && body?.values) {
 			Object.assign(config, { templateVariables: { [body.group]: body.values }, templateVariableLabels: { [body.group]: body.labels } })
 			config.revision++
@@ -30,9 +31,9 @@ test('variable history shows changed variable names instead of the internal acti
 	await setup(page, 'settings')
 	const group = 'Система повышения'
 	await page.route('**/api/history', route => route.fulfill({ json: [
-		{ id: 1, action: 'templateVariables', target: group, actor: 'u', created_at: '2026-01-01T12:00:00Z', details: { fields: { [group]: { before: { price: '100', unchanged: 'same' }, after: { price: '200', unchanged: 'same' } }, [group + '.labels']: { after: { price: 'Цена пулемёта' } } } } },
-		{ id: 2, action: 'templateVariables', target: group, actor: 'u', created_at: '2026-01-01T12:00:00Z', details: JSON.stringify({ fields: { [group]: { before: { removed: '100' }, after: {} } } }) },
-		{ id: 3, action: 'templateVariables', target: group, actor: 'u', created_at: '2026-01-01T12:00:00Z', details: { fields: { [group + '.labels']: { before: { price: 'Цена' }, after: { price: 'Новая цена' } } } } }
+		{ id: 1, action: 'templateVariables', target: group, actor: 'u', created_at: new Date().toISOString(), details: { fields: { [group]: { before: { price: '100', unchanged: 'same' }, after: { price: '200', unchanged: 'same' } }, [group + '.labels']: { after: { price: 'Цена пулемёта' } } } } },
+		{ id: 2, action: 'templateVariables', target: group, actor: 'u', created_at: new Date().toISOString(), details: JSON.stringify({ fields: { [group]: { before: { removed: '100' }, after: {} } } }) },
+		{ id: 3, action: 'templateVariables', target: group, actor: 'u', created_at: new Date().toISOString(), details: { fields: { [group + '.labels']: { before: { price: 'Цена' }, after: { price: 'Новая цена' } } } } }
 	] }))
 	await page.goto('/#history')
 	await expect(page.getByRole('heading', { name: 'Изменение переменной · Цена пулемёта', exact: true })).toBeVisible()
@@ -92,7 +93,8 @@ test('variable changes save', async ({ page }) => {
 	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('Цена пулемёта')
 	await page.goto('/#variables')
 	await page.getByRole('searchbox', { name: 'Поиск переменных' }).fill('пулемёта')
-	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('Цена пулемёта')
+	await expect(page.getByText('Цена пулемёта', { exact: true })).toBeVisible()
+	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveCount(0)
 	await page.goto('/#templates')
 	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('Цена пулемёта')
 	await page.getByRole('tab', { name: 'Просмотр' }).click()
@@ -102,8 +104,8 @@ test('variable changes save', async ({ page }) => {
 
 test('variable without saved label displays its existing key', async ({ page }) => {
 	await setup(page, 'variables', undefined, { 'Система повышения': { old_key: 'old value' } })
-	await expect(page.getByRole('textbox', { name: 'Название переменной', exact: true })).toHaveValue('old_key')
-	await expect(page.getByRole('textbox', { name: 'Значение', exact: true })).toHaveValue('old value')
+	await expect(page.getByText('old_key', { exact: true })).toBeVisible()
+	await expect(page.getByRole('textbox', { name: 'Значение · old_key', exact: true })).toHaveValue('old value')
 })
 
 test('channel mentions display names in editors and preserve source through copy, deletion and undo', async ({ page }) => {
@@ -722,7 +724,7 @@ test('scroll controls return early and textarea grows without manual resize', as
 	await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5)
 	await page.keyboard.press('Alt+Digit3')
 	await expect(page.getByRole('heading', { name: 'Переменные шаблонов', exact: true })).toBeVisible()
-	const textarea = page.locator('.page-view:not([hidden])').getByLabel('Значение', { exact: true })
+	const textarea = page.locator('.page-view:not([hidden])').getByLabel('Значение · price', { exact: true })
 	await textarea.fill(Array.from({ length: 15 }, () => 'Длинное значение').join('\n'))
 	await expect(textarea).toHaveCSS('resize', 'none')
 	await expect(textarea).toHaveCSS('box-shadow', 'none')
@@ -784,4 +786,72 @@ test('saving joins the sticky toolbar only while editing', async ({ page }, test
 	await expect(toolbar.getByRole('button', { name: 'Сохранить шаблон' })).toBeVisible()
 	await save.click()
 	await expect.poll(() => requests.find(request => request.path === 'templates')?.body?.values?.['promotion.document']).toContain('Правка ')
+})
+
+
+test('variables search filters rows without keys and saves every draft including hidden rows', async ({ page }) => {
+	const requests = await setup(page, 'variables', undefined, { 'Система повышения': { secret_key: 'Первое', other_key: 'Второе' } })
+	await page.getByLabel('Значение · secret_key', { exact: true }).fill('Изменено первое')
+	await page.getByLabel('Значение · other_key', { exact: true }).fill('Изменено второе')
+	const search = page.getByRole('searchbox', { name: 'Поиск переменных' })
+	await search.fill('secret_key')
+	await expect(page.getByText('Переменные не найдены.', { exact: true })).toBeVisible()
+	await search.fill('первое')
+	await expect(page.getByLabel('Значение · secret_key', { exact: true })).toBeVisible()
+	await expect(page.getByLabel('Значение · other_key', { exact: true })).toHaveCount(0)
+	await page.getByRole('button', { name: 'Сохранить переменные', exact: true }).click()
+	await expect.poll(() => requests.find(item => item.path === 'template-variables')?.body).toEqual({ groups: { 'Система повышения': { secret_key: 'Изменено первое', other_key: 'Изменено второе' } }, revision: 3 })
+})
+
+test('unknown hash shows 404 with a working home link', async ({ page }) => {
+	await setup(page, 'settings')
+	await page.goto('/#missing')
+	await expect(page.getByRole('heading', { name: '404 — страница не найдена' })).toBeVisible()
+	await page.getByRole('link', { name: 'На главную' }).click()
+	await expect(page.getByRole('heading', { name: 'Обзор', exact: true })).toBeVisible()
+})
+
+test('settings switch thumb stays inside track and save centers on scroll', async ({ page }) => {
+	await setup(page, 'settings')
+	await page.getByRole('searchbox', { name: 'Поиск настроек' }).fill('Автоматическое исключение')
+	const toggle = page.getByRole('switch', { name: 'Автоматическое исключение' })
+	await expect(toggle).toBeChecked()
+	await toggle.click()
+	await expect(toggle).not.toBeChecked()
+	await toggle.click()
+	await expect(toggle).toBeChecked()
+	const inside = await toggle.evaluate(element => {
+		const track = element.nextElementSibling!, css = getComputedStyle(track, '::before')
+		const x = Number(new DOMMatrix(css.transform).m41)
+		return parseFloat(css.left) + x + parseFloat(css.width) <= track.clientWidth
+	})
+	expect(inside).toBe(true)
+	await page.locator('.page-view:not([hidden])').evaluate(element => { (element as HTMLElement).style.minHeight = '2200px' })
+	await page.evaluate(() => window.scrollTo(0, 600))
+	await expect(page.locator('.page-view:not([hidden]) .action-bar')).toHaveClass(/action-bar-stuck/)
+	await expect(page.locator('.page-view:not([hidden]) .action-bar [role="status"]')).toBeHidden()
+	await expect.poll(async () => {
+		const center = await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).boundingBox()
+		const bar = await page.locator('.page-view:not([hidden]) .action-bar').boundingBox()
+		return Math.abs(center!.x + center!.width / 2 - (bar!.x + bar!.width / 2))
+	}).toBeLessThan(2)
+})
+
+test('history range and JSON export contain the same entries', async ({ page }) => {
+	await setup(page, 'settings')
+	const entries = [0, 48].map((hours, index) => ({ id: index + 1, action: 'settings', actor: 'u', target: 'test', created_at: new Date(Date.now() - hours * 3600000).toISOString(), details: {} }))
+	await page.route('**/api/history', route => route.fulfill({ json: entries }))
+	await page.goto('/#history')
+	await expect(page.locator('.page-view:not([hidden]) .history-row')).toHaveCount(2)
+	await page.getByLabel('Показать за', { exact: true }).selectOption('24')
+	await expect(page.locator('.page-view:not([hidden]) .history-row')).toHaveCount(1)
+	const download = page.waitForEvent('download')
+	await page.getByRole('button', { name: 'Выгрузить JSON' }).click()
+	const stream = await (await download).createReadStream()
+	const chunks: Buffer[] = []; for await (const chunk of stream!) chunks.push(Buffer.from(chunk))
+	expect(JSON.parse(Buffer.concat(chunks).toString())).toEqual([entries[0]])
+	await page.getByLabel('Показать за', { exact: true }).selectOption('custom')
+	await page.getByLabel('С (МСК)', { exact: true }).fill('2026-01-02T00:00')
+	await page.getByLabel('По (МСК)', { exact: true }).fill('2026-01-01T00:00')
+	await expect(page.getByRole('button', { name: 'Выгрузить JSON' })).toBeDisabled()
 })

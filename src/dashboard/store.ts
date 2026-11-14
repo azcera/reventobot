@@ -60,6 +60,8 @@ function createStore(env = process.env) {
 	let revision = 0
 	let pool: Pool
 	let ready = false
+	let auditCleanup: ReturnType<typeof setInterval> | undefined
+	const pruneAudit = () => pool.query("DELETE FROM dashboard_audit WHERE created_at < NOW() - INTERVAL '7 days'")
 	type SettingFor<K extends string> = K extends 'ROLE_PREFIXES' ? RolePrefix[] : K extends 'TELEGRAM_BROADCAST_ENABLED' | 'MAJESTIC_AUTO_NICKNAMES' | 'MAJESTIC_AUTO_KICK' | 'DASHBOARD_ALLOW_MENTIONS' ? boolean : string
 	function getSetting<K extends string>(key: K): SettingFor<K> {
 		if (key === 'ROLE_PREFIXES') return structuredClone(state.settings[key] ?? defaultRolePrefixes(String(getSetting('ADMIN_ROLES')).split(',').map(id => id.trim()).filter(Boolean))) as SettingFor<K>
@@ -129,6 +131,7 @@ function createStore(env = process.env) {
 				id BIGSERIAL PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 				actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, details JSONB NOT NULL
 			);
+			CREATE INDEX IF NOT EXISTS dashboard_audit_created_at_idx ON dashboard_audit (created_at);
 			INSERT INTO dashboard_state (id) VALUES (1) ON CONFLICT DO NOTHING`)
 			const db = await pool.connect()
 			try {
@@ -169,6 +172,10 @@ function createStore(env = process.env) {
 				throw error
 			} finally { db.release() }
 			refreshBoundFields(state)
+			await pruneAudit()
+			clearInterval(auditCleanup)
+			auditCleanup = setInterval(() => { pruneAudit().catch(error => console.error('[Dashboard audit cleanup]', error.message)) }, 60 * 60 * 1000)
+			auditCleanup.unref()
 			ready = true
 		},
 		async trackNavigation(message: Message, location: { containerIndex: number; prefixLength: number }) {
@@ -249,7 +256,7 @@ function createStore(env = process.env) {
 				[typeof actor === 'string' ? actor : actor?.id, action, target, JSON.stringify({ ...details, actorName: (typeof actor === 'object' ? actor?.name : undefined) || details.actorName })])
 		},
 		async history() {
-			return (await pool.query('SELECT id, created_at, actor, action, target, details FROM dashboard_audit ORDER BY id DESC LIMIT 100')).rows
+			return (await pool.query("SELECT id, created_at, actor, action, target, details FROM dashboard_audit WHERE created_at >= NOW() - INTERVAL '7 days' ORDER BY id DESC")).rows
 		}
 	}
 }
