@@ -18,7 +18,7 @@ const EXCLUDED_ROLE_ID = '1445808131832676560'
 const INTERVAL_MS = 10 * 60 * 1000
 const PREFIX = 'family_cleanup_'
 const CATEGORIES = ['Не в составе семьи', 'Ник не по форме', 'Без ролей']
-const MISSING_HEADING = '### В семье, но нет в Discord и привязках'
+const MISSING_HEADING = 'В семье, но нет в Discord и привязках'
 const isMembershipMessage = (message: D.Message) => message.components.some(component => {
 	const json = JSON.stringify(component.toJSON())
 	return json.includes(PREFIX) || json.includes(MISSING_HEADING)
@@ -145,11 +145,10 @@ function createFamilyMembership({ client, pool, store, sync, env = process.env, 
 		const pages = reportPages(report)
 		for (let page = 0; page < pages.length; page++) {
 			const { members, reason, missingMembers } = pages[page]
-			const text = `## Несинхронизированно с игрой — ${report.manual.length}\n` +
-				`Страница ${page + 1}/${pages.length}. Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
+			const text = `## ${missingMembers ? MISSING_HEADING : 'Несинхронизированно с игрой'} — ${missingMembers ? report.missingMembers.length : report.manual.length}\n` +
+				`Проверено <t:${Math.floor(now() / 1000)}:R>.\n` +
 				(failed ? `⚠️ Не удалось автоматически кикнуть: ${failed}. Проверьте права и журнал бота.\n` : '') +
-				(missingMembers ? `${MISSING_HEADING} — ${report.missingMembers.length}\n` +
-					(missingMembers.map(character => `- ${escapeMarkdown(character.login).replace(/@/g, '＠')} | ${character.id}`).join('\n') || 'Список пуст.') :
+				(missingMembers ? (missingMembers.map(character => `- ${escapeMarkdown(character.login).replace(/@/g, '＠')} | ${character.id}`).join('\n') || 'Список пуст.') :
 					members.length ? `### ${reason}\n${members.map((member: D.GuildMember) => `- <@${member.id}>`).join('\n')}` : 'Список пуст.')
 			const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
 			if (!missingMembers) container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(

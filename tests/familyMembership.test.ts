@@ -235,3 +235,31 @@ test('invalid dismissal data and incomplete roster fail closed', async () => {
 	await assert.rejects(fetchDismissals(config, (async () => new Response('', { status: 401 })) as typeof fetch))
 	await assert.rejects(fetchMembers(config, (async () => Response.json({ code: 200, status: true, result: { total: 2, items: [] } })) as typeof fetch), /Неполный состав/)
 })
+
+
+test('membership messages use category headings without page labels and still recognize existing missing lists', async () => {
+	const s = snapshot()
+	s.missingMembers = Array.from({ length: 26 }, (_, id) => ({ id, login: `Player${id}`, rankId: 1, rankName: 'Member' }))
+	const payloads: any[] = []
+	let edits = 0
+	const existing = { author: { id: 'bot' }, createdTimestamp: 1,
+		components: [{ toJSON: () => ({ type: 10, content: '### В семье, но нет в Discord и привязках' }) }],
+		edit: async (payload: any) => { edits++; payloads.push(payload) } }
+	const guild = { channels: { fetch: async () => ({ isTextBased: () => true,
+		messages: { fetch: async () => new Collection([['old', existing]]) },
+		send: async (payload: any) => { payloads.push(payload) } }) } } as unknown as Guild
+	const service = createFamilyMembership({ client: { user: { id: 'bot' } } as Client,
+		pool: { query: async () => ({ rows: [] }) } as unknown as Pool,
+		store: { getSetting: () => false } as unknown as Store,
+		sync: { membershipSnapshot: async () => s }, now: () => checkedAt })
+	await service.refresh(guild)
+	assert.equal(edits, 1)
+	assert.equal(payloads.length, 3)
+	for (const [index, payload] of payloads.entries()) {
+		const container = payload.components[0].toJSON()
+		const text = container.components[0].content
+		assert.doesNotMatch(text, /Страница|### В семье/)
+		assert.ok(text.startsWith(index < 2 ? '## В семье, но нет в Discord и привязках — 26\n' : '## Несинхронизированно с игрой — 1\n'))
+		assert.equal(container.components.length, index < 2 ? 1 : 2)
+	}
+})

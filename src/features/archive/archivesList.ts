@@ -109,6 +109,8 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 	})
 
 	const MAX_TOTAL_TEXT = 3800
+	const title = dashboard.text('archives.1')
+	const maxBlockLength = MAX_TOTAL_TEXT - title.length
 	const blocks = []
 
 	for (const key of Object.keys(groupings)) {
@@ -130,22 +132,26 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 			return a.staticId - b.staticId
 		})
 
-		const lines = sortedItems.map((item, index) => {
-			let channelText
-
-			if (item.isInvalidNick) {
-				channelText = 'некорректный никнейм'
-			} else if (item.archiveChannel) {
-				channelText = `<#${item.archiveChannel.id}>`
-			} else {
-				channelText = 'нет архива'
-			}
-
-			return `${index + 1}. <@${item.member.id}> → ${channelText}`
-		})
-
-		const blockText = `## <@&${role.id}>\n${lines.join('\n')}`
-		blocks.push(blockText)
+		const sections = [
+			{ title: 'Архивы', items: sortedItems.filter(item => !item.isInvalidNick && item.archiveChannel) },
+			{ title: 'Нет архива', items: sortedItems.filter(item => !item.isInvalidNick && !item.archiveChannel) },
+			{ title: 'Некорректный никнейм', items: sortedItems.filter(item => item.isInvalidNick) }
+		]
+		for (const section of sections) {
+			if (!section.items.length) continue
+			const heading = `## <@&${role.id}>\n### ${section.title}`
+			let block = heading
+			section.items.forEach((item, index) => {
+				const line = `${index + 1}. <@${item.member.id}>` +
+					(item.archiveChannel && !item.isInvalidNick ? ` → <#${item.archiveChannel.id}>` : '')
+				if (block.length + 1 + line.length > maxBlockLength) {
+					blocks.push(block)
+					block = heading
+				}
+				block += `\n${line}`
+			})
+			blocks.push(block)
+		}
 	}
 
 	// Собираем части
@@ -153,25 +159,23 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 
 	let currentContainer = new ContainerBuilder()
 		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent(dashboard.text('archives.1'))
+			new TextDisplayBuilder().setContent(title)
 		)
 		.addSeparatorComponents(new SeparatorBuilder())
 
-	let currentLength = 60
+	let currentLength = title.length
 
 	for (const block of blocks) {
-		if (currentLength + block.length > MAX_TOTAL_TEXT) {
+		if (currentLength + block.length > MAX_TOTAL_TEXT || currentContainer.components.length >= 36) {
 			parts.push(currentContainer)
 
 			currentContainer = new ContainerBuilder()
 				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(
-						dashboard.text('archives.part', { part: parts.length + 1 })
-					)
+					new TextDisplayBuilder().setContent(title)
 				)
 				.addSeparatorComponents(new SeparatorBuilder())
 
-			currentLength = 60
+			currentLength = title.length
 		}
 
 		currentContainer
