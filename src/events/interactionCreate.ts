@@ -7,6 +7,7 @@ import captureManager = require('../features/capture/captureManager')
 import groupInteractions = require('../features/capture/groupInteractions')
 import captureInteractions = require('../features/capture/captureInteractions')
 import archiveInteractions = require('../features/archive/archiveInteractions')
+import { handleArchiveCleanup } from '../features/archive/archiveCleanupInteractions'
 import moveAllInteractions = require('../features/moveAll/moveAllInteractions')
 import inviteApplication = require('../features/invite/inviteApplication')
 import {
@@ -69,6 +70,9 @@ export = (client: import('discord.js').Client) => {
 		if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('family_cleanup_')) {
 			if (!client.familyMembership) return interaction.reply({ content: 'Проверка семьи ещё не готова.', flags: MessageFlags.Ephemeral })
 			return await client.familyMembership.handle(interaction)
+		}
+		if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('archive_cleanup_')) {
+			return await handleArchiveCleanup(interaction)
 		}
 
 		if (

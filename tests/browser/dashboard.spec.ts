@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 
 async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец', templateVariables: Record<string, Record<string, string>> = {}) {
 	const config = { revision: 3, bindings: {}, templateVariables, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] }
+	config.settings.push({ key: 'ARCHIVE_AUTO_DELETE_EMPTY', label: 'Автоматически удалять пустые архивы при выходе участника с сервера', type: 'boolean', value: false })
 	const preset = { id: '12345678-1234-1234-1234-123456789012', command: 'test', target: 'Сбор', channelId: 'parent', accessRoleId: 'one', maxMain: 10 }
 	let curators = [{ roleId: 'one', managedRoleIds: ['one'] }]
 	const requests: { path: string; body: any }[] = []
@@ -822,6 +823,18 @@ test('unknown hash shows 404 with a working home link', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: '404 — страница не найдена' })).toBeVisible()
 	await page.getByRole('link', { name: 'На главную' }).click()
 	await expect(page.getByRole('heading', { name: 'Обзор', exact: true })).toBeVisible()
+})
+
+test('archive auto-delete setting is shown under archives and persists through settings API', async ({ page }) => {
+	const requests = await setup(page, 'settings')
+	await page.getByRole('searchbox', { name: 'Поиск настроек' }).fill('ARCHIVE_AUTO_DELETE_EMPTY')
+	const group = page.locator('details.panel').filter({ has: page.getByRole('heading', { name: 'Архивы', exact: true }) })
+	const toggle = group.getByRole('switch', { name: 'Автоматически удалять пустые архивы при выходе участника с сервера' })
+	await expect(toggle).not.toBeChecked()
+	await toggle.check()
+	await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
+	await expect.poll(() => requests.find(request => request.path === 'settings')?.body.values).toEqual({ ARCHIVE_AUTO_DELETE_EMPTY: true })
+	await expect(toggle).toBeChecked()
 })
 
 test('settings switch thumb stays inside track and save centers on scroll', async ({ page }) => {

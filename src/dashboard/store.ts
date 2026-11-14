@@ -42,6 +42,7 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 	MAIN_ROLE_ID: { label: 'Роль после принятия заявки', type: 'role' },
 	AUTO_ROLE: { label: 'Роль участников для архивов', type: 'role' },
 	ARCHIVE_GROUP_ROLES: { label: 'Группы ролей в архивах', type: 'roles' },
+	ARCHIVE_AUTO_DELETE_EMPTY: { label: 'Автоматически удалять пустые архивы при выходе участника с сервера', type: 'boolean', default: false },
 	PRIORITY_ROLES: { label: 'Приоритет ролей на капт (сверху вниз)', type: 'roles' },
 	DISCORD_NOTIFICATION_CHANNEL_IDS: { label: 'Каналы массовой Telegram-рассылки', type: 'channels', channelTypes: [0, 5] },
 	TELEGRAM_BROADCAST_ENABLED: { label: 'Доставка массовой Telegram-рассылки', type: 'boolean', default: true },
@@ -62,7 +63,7 @@ function createStore(env = process.env) {
 	let ready = false
 	let auditCleanup: ReturnType<typeof setInterval> | undefined
 	const pruneAudit = () => pool.query("DELETE FROM dashboard_audit WHERE created_at < NOW() - INTERVAL '7 days'")
-	type SettingFor<K extends string> = K extends 'ROLE_PREFIXES' ? RolePrefix[] : K extends 'TELEGRAM_BROADCAST_ENABLED' | 'MAJESTIC_AUTO_NICKNAMES' | 'MAJESTIC_AUTO_KICK' | 'DASHBOARD_ALLOW_MENTIONS' ? boolean : string
+	type SettingFor<K extends string> = K extends 'ROLE_PREFIXES' ? RolePrefix[] : K extends 'TELEGRAM_BROADCAST_ENABLED' | 'MAJESTIC_AUTO_NICKNAMES' | 'MAJESTIC_AUTO_KICK' | 'ARCHIVE_AUTO_DELETE_EMPTY' | 'DASHBOARD_ALLOW_MENTIONS' ? boolean : string
 	function getSetting<K extends string>(key: K): SettingFor<K> {
 		if (key === 'ROLE_PREFIXES') return structuredClone(state.settings[key] ?? defaultRolePrefixes(String(getSetting('ADMIN_ROLES')).split(',').map(id => id.trim()).filter(Boolean))) as SettingFor<K>
 		const value = Object.hasOwn(state.settings, key) ? state.settings[key]

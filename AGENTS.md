@@ -29,7 +29,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | Заявки и модерация | `src/features/invite/`, `src/services/adminApplicationCommands.ts` |
 | Капты, регистрация, группы | `src/features/capture/`, `src/services/captureExpiry.ts` (закрытие кнопок) |
 | Предустановки ручных сборов и их команды | `src/features/capture/capturePresets.ts`, `frontend/src/pages/CapturePresets.tsx` |
-| Архивы | `src/features/archive/` |
+| Архивы и очистка неиспользуемых веток | `src/features/archive/`, `src/events/guildMemberRemove.ts` |
 | Расписание событий | `src/services/eventSchedule.ts`, `src/config/eventSchedule.ts`, `src/features/capture/groupOptions.ts` |
 | Majestic: получение состава, план и применение синхронизации | `src/services/majesticClient.ts`, `src/features/majestic/syncPreview.ts`, `src/services/majesticSync.ts` |
 | Majestic: фоновые задачи, Family Wars, членство | `src/services/majesticNicknameScheduler.ts`, `src/services/familyWars.ts`, `src/services/familyMembership.ts` |

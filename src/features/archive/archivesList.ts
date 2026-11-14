@@ -137,21 +137,29 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 			{ title: 'Нет архива', items: sortedItems.filter(item => !item.isInvalidNick && !item.archiveChannel) },
 			{ title: 'Некорректный никнейм', items: sortedItems.filter(item => item.isInvalidNick) }
 		]
+		const roleHeading = `## <@&${role.id}>`
+		let block = roleHeading
 		for (const section of sections) {
 			if (!section.items.length) continue
-			const heading = `## <@&${role.id}>\n### ${section.title}`
-			let block = heading
-			section.items.forEach((item, index) => {
-				const line = `${index + 1}. <@${item.member.id}>` +
-					(item.archiveChannel && !item.isInvalidNick ? ` → <#${item.archiveChannel.id}>` : '')
+			const heading = `### ${section.title}`
+			const lines = section.items.map((item, index) => `${index + 1}. <@${item.member.id}>` +
+				(item.archiveChannel && !item.isInvalidNick ? ` → <#${item.archiveChannel.id}>` : ''))
+			const sectionText = `${heading}\n${lines.join('\n')}`
+			if (block.length + 1 + sectionText.length <= maxBlockLength) {
+				block += `\n${sectionText}`
+				continue
+			}
+			if (block !== roleHeading) blocks.push(block)
+			block = `${roleHeading}\n${heading}`
+			for (const line of lines) {
 				if (block.length + 1 + line.length > maxBlockLength) {
 					blocks.push(block)
-					block = heading
+					block = `${roleHeading}\n${heading}`
 				}
 				block += `\n${line}`
-			})
-			blocks.push(block)
+			}
 		}
+		if (block !== roleHeading) blocks.push(block)
 	}
 
 	// Собираем части

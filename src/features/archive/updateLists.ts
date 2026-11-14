@@ -9,6 +9,7 @@ import {
 import { getArchivesLists } from './archivesList'
 import { getUnansweredList } from './archiveUnansweredList'
 import { isMembershipMessage } from '../../services/familyMembership'
+import { getUnusedArchiveLists } from './archiveCleanupInteractions'
 require('dotenv').config()
 
 
@@ -16,7 +17,22 @@ require('dotenv').config()
  * Отправляет или изменяет сообщение в панель управления
  * @param {Guild} guild
  */
-async function updateLists(guild: import('discord.js').Guild) {
+const updates = new WeakMap<Guild, { pending: Promise<void>; rerun: boolean }>()
+
+async function updateLists(guild: Guild) {
+	const previous = updates.get(guild)
+	if (previous) { previous.rerun = true; return previous.pending }
+	const state = { pending: Promise.resolve(), rerun: false }
+	updates.set(guild, state)
+	state.pending = (async () => {
+		try {
+			do { state.rerun = false; await refreshLists(guild) } while (state.rerun)
+		} finally { updates.delete(guild) }
+	})()
+	return state.pending
+}
+
+async function refreshLists(guild: Guild) {
 	if (['PARENT_CHANNEL_ID', 'ARCHIVE_SETTINGS_CHANNEL', 'AUTO_ROLE', 'ARCHIVE_GROUP_ROLES'].some(key => !dashboard.getSetting(key).trim())) {
 		console.warn('⚠️ Обновление списков архивов пропущено: заполните настройки архивов в дашборде.')
 		return
@@ -24,7 +40,7 @@ async function updateLists(guild: import('discord.js').Guild) {
 	/**
 	 * @type {ContainerBuilder[]}
 	 */
-	const containers = []
+	const containers = [...await getUnusedArchiveLists(guild)]
 	const allList = await getArchivesLists(guild)
 	const unansweredList = await getUnansweredList(guild)
 
@@ -52,12 +68,15 @@ async function updateLists(guild: import('discord.js').Guild) {
 		)
 	}
 
-	const channelMessagesCollection = await adminChannel.messages.fetch({
-		limit: 20
-	})
-	const channelMessages = Array.from(
-		channelMessagesCollection.values()
-	).filter(message => !isMembershipMessage(message)).reverse()
+	const channelMessages: import('discord.js').Message[] = []
+	let before: string | undefined
+	for (;;) {
+		const messages = await adminChannel.messages.fetch({ limit: 100, ...(before ? { before } : {}) })
+		channelMessages.push(...[...messages.values()].filter(message => message.author.id === guild.client.user.id && !isMembershipMessage(message)))
+		if (messages.size < 100) break
+		before = messages.last()!.id
+	}
+	channelMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp)
 
 	if (channelMessages.length > containers.length) {
 		for (let i = containers.length; i < channelMessages.length; i++) {
