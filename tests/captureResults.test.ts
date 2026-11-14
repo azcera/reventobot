@@ -72,10 +72,46 @@ function fixture() {
 	} } as unknown as Pool
 	const members = new Collection<string, any>([['bound', { id: 'bound', nickname: 'Damage | 10', user: { bot: false } }]])
 	const options = { pool, client: { user: { id: 'bot' }, guilds: { async fetch() { return { members: { async fetch() { return members } } } } }, channels: { async fetch() { return { guildId: 'guild', isTextBased: () => true, messages: { async fetch() { return message } } } } } } as unknown as Client,
+		now: () => Date.parse('2026-11-13T18:30:00+03:00'),
 		env: { FAMILY_WARS_API_KEY: 'test', GUILD_ID: 'guild' }, logger: { error() {} },
 		fetchImpl: (async () => { fetches++; return { ok: true, json: async () => ({ code: 200, status: true, result: { serverId: 'RU8', captures } }) } }) as unknown as typeof fetch }
 	return { rows, edits, original, options, setFail(value: boolean) { fail = value }, setCaptures(value: RawWar[]) { captures = value }, getFetches: () => fetches }
 }
+
+test('polls only on capture days from the scheduled start through 21:15 Moscow, retaining pending notices', async () => {
+	const { options, rows, getFetches } = fixture()
+	let time = ''
+	const service = createCaptureResults({ ...options, now: () => Date.parse(time) })
+	await service.track({ id: 'message', channelId: 'channel', guildId: 'guild' }, notice)
+	const query = options.pool.query
+	let queries = 0
+	options.pool.query = (async (...args: any[]) => { queries++; return (query as any)(...args) }) as typeof query
+	for (const date of ['2026-11-09', '2026-11-11', '2026-11-13', '2026-11-14']) {
+		for (const clock of ['15:00:00', '21:00:00', '21:15:00', '21:15:59']) {
+			time = `${date}T${clock}+03:00`
+			const before = getFetches()
+			await service.poll()
+			assert.equal(getFetches(), before + 1, time)
+		}
+	}
+	for (const date of ['2026-11-10', '2026-11-12', '2026-11-15']) {
+		time = `${date}T18:00:00+03:00`
+		const before = queries
+		await service.poll()
+		assert.equal(queries, before, time)
+	}
+	for (const value of ['2026-11-13T14:59:59+03:00', '2026-11-13T21:16:00+03:00', '2026-11-13T23:59:59+03:00', '2026-11-14T22:53:02.096Z']) {
+		time = value
+		const before = queries
+		await service.poll()
+		assert.equal(queries, before, time)
+	}
+	assert.equal(rows[0].api_id, null)
+	time = '2026-11-16T15:00:00+03:00'
+	const before = getFetches()
+	await service.poll()
+	assert.equal(getFetches(), before + 1)
+})
 
 test('only processes null IDs, retries failed edits after restart and stops polling completed notices', async () => {
 	const { rows, edits, original, options, setFail, setCaptures, getFetches } = fixture()

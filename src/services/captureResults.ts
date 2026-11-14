@@ -4,6 +4,7 @@ import type { Env, RawComponent } from '../types'
 import type { BindingMember, Decisions, RawWar, War } from '../features/capture/familyWarTypes'
 import { battleSummary, bindingIndex, FAMILY_ID, normalizeWar, rulesFromEnv, SERVER } from '../features/capture/familyWarData'
 import { loadDiscordMembers } from './discordMembers'
+import events = require('../config/eventSchedule')
 
 interface CaptureNotice { attack: boolean; enemy: string; startTime: string; zone: string }
 interface NoticeRow { message_id: string; channel_id: string; guild_id: string; notice: CaptureNotice; api_id: string | null; version: string | null }
@@ -49,8 +50,8 @@ export function captureResultText(war: War, members: Iterable<BindingMember> = [
 	return `### ${war.status === 'finished' ? `Результат капта: ${battle.result}` : 'Капт не завершён'}\nУрон | Киллы\n${lines.join('\n') || 'Состав пока не получен.'}`
 }
 
-export function createCaptureResults({ client, pool, env = process.env, fetchImpl = fetch, logger = console }: {
-	client: Client; pool: Pool; env?: Env; fetchImpl?: typeof fetch; logger?: Pick<Console, 'error'>
+export function createCaptureResults({ client, pool, env = process.env, fetchImpl = fetch, logger = console, now = Date.now }: {
+	client: Client; pool: Pool; env?: Env; fetchImpl?: typeof fetch; logger?: Pick<Console, 'error'>; now?: () => number
 }) {
 	let schema: Promise<unknown> | undefined, timer: ReturnType<typeof setInterval> | undefined, polling: Promise<void> | undefined
 	const ensureSchema = () => schema ||= pool.query(SCHEMA).catch(error => { schema = undefined; throw error })
@@ -64,6 +65,15 @@ export function createCaptureResults({ client, pool, env = process.env, fetchImp
 	async function pollOnce() {
 		const key = env.FAMILY_WARS_API_KEY?.trim()
 		if (!key) return
+		const capture = events.find(event => event.id === 'captures')
+		const moscow = new Date(now() + 3 * 3600000)
+		if (!capture || !capture.days.some(day => day === ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][moscow.getUTCDay()])) return
+		const [start, end] = capture.time.split('–').map(time => {
+			const [hours, minutes] = time.split(':').map(Number)
+			return hours * 60 + minutes
+		})
+		const minute = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
+		if (!(minute >= start && minute <= end + 15)) return
 		await ensureSchema()
 		const rows = (await pool.query<NoticeRow>(`SELECT * FROM telegram_capture_results
 			WHERE guild_id = $1 AND api_id IS NULL AND created_at > NOW() - INTERVAL '7 days'`, [env.GUILD_ID])).rows
