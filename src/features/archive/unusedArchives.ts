@@ -35,7 +35,7 @@ async function fetchArchiveThreads(guild: Guild) {
 }
 
 async function getUnusedArchives(guild: Guild, fresh = false) {
-	const members = fresh ? await guild.members.fetch({ time: 30000 }) : await loadDiscordMembers(guild)
+	const members = await loadDiscordMembers(guild, { force: fresh })
 	const names = new Set([...members.values()].filter(member => !member.user.bot).map(archiveName))
 	const threads = await fetchArchiveThreads(guild)
 	return [...threads.values()].filter(thread => !names.has(thread.name.toLowerCase()))

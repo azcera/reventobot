@@ -9,10 +9,10 @@ interface LoadState { pending?: Promise<D.Collection<string, D.GuildMember>> | n
 const loads = new WeakMap<D.Guild, LoadState>()
 const CACHE_MS = 30000
 
-async function loadDiscordMembers(guild: D.Guild, { now = Date.now, sleep = delay, onRateLimit = () => {} }: { now?: () => number; sleep?: (ms: number) => Promise<unknown>; onRateLimit?: (details: { guildId: string; attempt: number; waitMs: number }) => void } = {}) {
+async function loadDiscordMembers(guild: D.Guild, { force = false, now = Date.now, sleep = delay, onRateLimit = () => {} }: { force?: boolean; now?: () => number; sleep?: (ms: number) => Promise<unknown>; onRateLimit?: (details: { guildId: string; attempt: number; waitMs: number }) => void } = {}) {
 	const previous = loads.get(guild)
 	if (previous?.pending) return previous.pending
-	if (previous && now() - (previous.loadedAt || 0) < CACHE_MS) return guild.members.cache || previous.members
+	if (!force && previous && now() - (previous.loadedAt || 0) < CACHE_MS) return guild.members.cache || previous.members
 	const state: LoadState = {}
 	loads.set(guild, state)
 	state.pending = (async () => {

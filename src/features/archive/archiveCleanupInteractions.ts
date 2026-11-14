@@ -7,7 +7,12 @@ import { getUnusedArchives, isArchiveUsed } from './unusedArchives'
 import { loadDiscordMembers } from '../../services/discordMembers'
 
 const PREFIX = 'archive_cleanup_'
-const sessions = new Map<string, { actorId: string; guildId: string; ids: string[]; selected: string[]; createdAt: number }>()
+const sessions = new Map<string, { actorId: string; guildId: string; threads: ThreadChannel[]; selected: string[]; createdAt: number }>()
+
+function selectionContent(threads: ThreadChannel[], selected: string[] = []) {
+	return `Выбрано: ${selected.length} из ${threads.length}. Ветки будут удалены вместе со всем содержимым.\n` +
+		threads.map(thread => `${selected.includes(thread.id) ? '☑' : '☐'} ${thread.name.slice(0, 40)} — <#${thread.id}>`).join('\n')
+}
 
 async function getUnusedArchiveLists(guild: Guild) {
 	const threads = await getUnusedArchives(guild)
@@ -31,7 +36,10 @@ function selectionComponents(token: string, threads: ThreadChannel[], selected: 
 			label: thread.name.slice(0, 100), value: thread.id, default: selected.includes(thread.id)
 		})))), new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder()
 		.setCustomId(`${PREFIX}delete_${token}`).setLabel(`Удалить выбранные (${selected.length})`)
-		.setStyle(ButtonStyle.Danger).setDisabled(!selected.length))]
+		.setStyle(ButtonStyle.Danger).setDisabled(!selected.length), new ButtonBuilder()
+		.setCustomId(`${PREFIX}all_${token}`).setLabel('Выбрать всю страницу').setStyle(ButtonStyle.Secondary)
+		.setDisabled(selected.length === threads.length), new ButtonBuilder()
+		.setCustomId(`${PREFIX}clear_${token}`).setLabel('Снять выбор').setStyle(ButtonStyle.Secondary).setDisabled(!selected.length))]
 }
 
 async function handleArchiveCleanup(interaction: ButtonInteraction<'cached'> | StringSelectMenuInteraction<'cached'>) {
@@ -42,31 +50,41 @@ async function handleArchiveCleanup(interaction: ButtonInteraction<'cached'> | S
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 		const offset = Number(action.slice(5)) * 25
 		if (!Number.isSafeInteger(offset) || offset < 0) return interaction.editReply('Некорректный список.')
-		const threads = (await getUnusedArchives(interaction.guild, true)).slice(offset, offset + 25)
+		const threads = (await getUnusedArchives(interaction.guild)).slice(offset, offset + 25)
 		if (!threads.length) return interaction.editReply('На этом месте больше нет неиспользуемых веток. Дождитесь обновления списка.')
 		const token = randomUUID()
-		sessions.set(token, { actorId: interaction.user.id, guildId: interaction.guildId, ids: threads.map(thread => thread.id), selected: [], createdAt: Date.now() })
-		return interaction.editReply({ content: 'Выберите ветки и нажмите «Удалить выбранные». Они будут удалены вместе со всем содержимым.', components: selectionComponents(token, threads) })
+		sessions.set(token, { actorId: interaction.user.id, guildId: interaction.guildId, threads, selected: [], createdAt: Date.now() })
+		return interaction.editReply({ content: selectionContent(threads), components: selectionComponents(token, threads) })
 	}
 	const token = action.slice(action.indexOf('_') + 1)
 	const session = sessions.get(token)
 	if (!session || session.actorId !== interaction.user.id || session.guildId !== interaction.guildId) {
 		return interaction.reply({ content: 'Выбор устарел. Откройте список заново.', flags: MessageFlags.Ephemeral })
 	}
+	const deleting = interaction.isButton() && action.startsWith('delete_')
+	if (deleting) sessions.delete(token)
 	await interaction.deferUpdate()
 	if (interaction.isStringSelectMenu() && action.startsWith('select_')) {
-		if (interaction.values.some(id => !session.ids.includes(id))) return interaction.editReply({ content: 'Некорректный выбор.', components: [] })
+		if (interaction.values.some(id => !session.threads.some(thread => thread.id === id))) return interaction.editReply({ content: 'Некорректный выбор.', components: [] })
 		session.selected = [...new Set(interaction.values)]
-		const threads = (await getUnusedArchives(interaction.guild, true)).filter(thread => session.ids.includes(thread.id))
-		if (!threads.length) return interaction.editReply({ content: 'Ветки больше не доступны для удаления.', components: [] })
-		session.selected = session.selected.filter(id => threads.some(thread => thread.id === id))
-		return interaction.editReply({ components: selectionComponents(token, threads, session.selected) })
+		return interaction.editReply({ content: selectionContent(session.threads, session.selected), components: selectionComponents(token, session.threads, session.selected) })
 	}
-	if (interaction.isButton() && action.startsWith('delete_')) {
-		sessions.delete(token)
-		const unused = await getUnusedArchives(interaction.guild, true)
+	if (interaction.isButton() && (action.startsWith('all_') || action.startsWith('clear_'))) {
+		session.selected = action.startsWith('all_') ? session.threads.map(thread => thread.id) : []
+		return interaction.editReply({ content: selectionContent(session.threads, session.selected), components: selectionComponents(token, session.threads, session.selected) })
+	}
+	if (deleting) {
+		const selected = [...session.selected]
+		await interaction.editReply({ content: `Проверяю состав сервера и удаляю выбранные ветки (${selected.length})…`, components: [] })
+		let unused: ThreadChannel[]
+		try { unused = await getUnusedArchives(interaction.guild, true) }
+		catch (error) {
+			sessions.set(token, session)
+			console.error('[Archives] Не удалось проверить состав перед удалением', (error as Error).message)
+			return interaction.editReply({ content: 'Не удалось проверить состав сервера. Ничего не удалено. Повторите удаление.\n' + selectionContent(session.threads, selected), components: selectionComponents(token, session.threads, selected) })
+		}
 		let deleted = 0, failed = 0
-		for (const id of session.selected) {
+		for (const id of selected) {
 			const thread = unused.find(thread => thread.id === id)
 			if (!thread) continue
 			try {
@@ -81,7 +99,7 @@ async function handleArchiveCleanup(interaction: ButtonInteraction<'cached'> | S
 				await store.audit({ id: interaction.user.id }, 'archive.delete.result', id, { status: 'deleted' })
 			} catch (error) { failed++; console.error('[Archives] Не удалось удалить выбранную ветку', id, (error as Error).message) }
 		}
-		await interaction.editReply({ content: `Удалено: ${deleted}. Пропущено: ${session.selected.length - deleted - failed}. Ошибок: ${failed}.`, components: [] })
+		await interaction.editReply({ content: `Удалено: ${deleted}. Пропущено: ${selected.length - deleted - failed}. Ошибок: ${failed}.`, components: [] })
 		await (await import('./updateLists')).updateLists(interaction.guild)
 	}
 }

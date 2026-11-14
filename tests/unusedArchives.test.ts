@@ -4,6 +4,7 @@ import { ChannelType, Collection, MessageType, PermissionFlagsBits, type Guild, 
 import { store } from '../src/dashboard/store'
 import { cleanupUnusedEmptyArchives, deleteEmptyArchive, fetchArchiveThreads, getUnusedArchives, inspectEmptyArchive } from '../src/features/archive/unusedArchives'
 import { getUnusedArchiveLists, handleArchiveCleanup } from '../src/features/archive/archiveCleanupInteractions'
+import { loadDiscordMembers } from '../src/services/discordMembers'
 
 const botId = '100000000000000001', ownerId = '100000000000000002', parentId = '100000000000000003'
 const threadId = '100000000000000004', otherId = '100000000000000005'
@@ -132,10 +133,31 @@ test('unused archive list includes a selection button even when no role matches'
 	assert.match(JSON.stringify(list[0].toJSON()), /archive_cleanup_open_0/)
 })
 
-test('manual selection is authorized, bound to actor, and rechecks roster before deleting', async t => {
+test('fresh member loads share requests and retry gateway rate limits', async t => {
+	const f = fixture()
+	let requests = 0
+	const waits: number[] = []
+	t.mock.method(f.guild.members, 'fetch', async () => {
+		requests++
+		if (requests === 2) throw Object.assign(new Error('Rate limited'), { name: 'GatewayRateLimitError', data: { opcode: 8, retry_after: 1.498 } })
+		return f.members
+	})
+	await loadDiscordMembers(f.guild)
+	await loadDiscordMembers(f.guild)
+	assert.equal(requests, 1)
+	const pending = loadDiscordMembers(f.guild, { force: true, sleep: async ms => { waits.push(ms) } })
+	await Promise.all([pending, loadDiscordMembers(f.guild, { force: true })])
+	assert.equal(requests, 3)
+	assert.deepEqual(waits, [1748])
+	await loadDiscordMembers(f.guild)
+	assert.equal(requests, 3)
+})
+
+test('manual selection is local, authorized, recoverable, and rechecks roster before deleting', async t => {
 	mockSettings(t)
-	for (const mode of ['delete', 'returned', 'unauthorized', 'other-actor'] as const) {
+	for (const mode of ['delete', 'returned', 'unauthorized', 'other-actor', 'select-all', 'fetch-failed'] as const) {
 		const f = fixture([message('2', MessageType.Default, ownerId, 'Saved history'), welcome()])
+		const fetchMembers = t.mock.method(f.guild.members, 'fetch', f.guild.members.fetch)
 		t.mock.method(store, 'audit', async (...args: unknown[]) => { f.audits.push(args) })
 		const replies: any[] = [], edits: any[] = []
 		const interaction = { guild: f.guild, guildId: f.guild.id, user: { id: otherId },
@@ -148,11 +170,34 @@ test('manual selection is authorized, bound to actor, and rechecks roster before
 		const selectId = edits[0].components[0].toJSON().components[0].custom_id
 		const selection = { ...interaction, customId: selectId, values: [threadId], isButton: () => false, isStringSelectMenu: () => true }
 		await handleArchiveCleanup(selection as any)
+		assert.equal(fetchMembers.mock.callCount(), 1, 'selecting must not fetch the roster again')
+		if (mode === 'select-all') {
+			const buttons = edits[1].components[1].toJSON().components
+			await handleArchiveCleanup({ ...interaction, customId: buttons[2].custom_id } as any)
+			assert.match(edits.at(-1).content, /Выбрано: 0 из 1/)
+			assert.equal(edits.at(-1).components[1].toJSON().components[0].disabled, true)
+			await handleArchiveCleanup({ ...interaction, customId: buttons[1].custom_id } as any)
+			assert.match(edits.at(-1).content, /Выбрано: 1 из 1/)
+			assert.equal(fetchMembers.mock.callCount(), 1)
+		}
 		const deleteId = edits[1].components[1].toJSON().components[0].custom_id
 		if (mode === 'returned') f.addMember()
 		if (mode === 'other-actor') interaction.user = { id: ownerId }
-		await handleArchiveCleanup({ ...interaction, customId: deleteId } as any)
-		assert.equal(f.deleted.length, mode === 'delete' ? 1 : 0, mode)
-		if (mode === 'delete') assert.equal(f.audits.length, 2)
+		if (mode === 'fetch-failed') {
+			fetchMembers.mock.mockImplementationOnce(async () => { throw new Error('Discord unavailable') })
+			await handleArchiveCleanup({ ...interaction, customId: deleteId } as any)
+			assert.equal(f.deleted.length, 0)
+			assert.match(edits.at(-1).content, /Ничего не удалено/)
+			assert.equal(edits.at(-1).components[1].toJSON().components[0].custom_id, deleteId)
+		}
+		if (mode === 'delete') await Promise.all([
+			handleArchiveCleanup({ ...interaction, customId: deleteId } as any),
+			handleArchiveCleanup({ ...interaction, customId: deleteId } as any)
+		])
+		else await handleArchiveCleanup({ ...interaction, customId: deleteId } as any)
+		const shouldDelete = mode === 'delete' || mode === 'select-all' || mode === 'fetch-failed'
+		assert.equal(f.deleted.length, shouldDelete ? 1 : 0, mode)
+		if (shouldDelete) assert.equal(f.audits.length, 2)
+		if (mode === 'delete') assert.equal(fetchMembers.mock.callCount(), 2, 'one fresh roster before deletion')
 	}
 })
