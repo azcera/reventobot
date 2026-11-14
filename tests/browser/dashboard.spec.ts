@@ -377,6 +377,12 @@ test('all sections fit both themes and capture review images', async ({ page }, 
 				await Promise.all(el.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})))
 			})
 			await expect(page.locator('.page-view:not([hidden])')).toHaveCSS('opacity', '1')
+			await expect(page.getByRole('main')).toHaveCount(1)
+			await expect(page.locator('main > .topbar')).toHaveCount(1)
+			await expect(page.locator('main > .page-content')).toHaveCSS('max-width', '1440px')
+			await expect(page.locator('.page-view:not([hidden]) > .page-stack')).toHaveCSS('gap', '24px')
+			for (const heading of await page.locator('.page-view:not([hidden]) .section-title').all()) await expect(heading).toHaveCSS('font-size', '16px')
+			for (const card of await page.locator('.page-view:not([hidden]) :is(.panel, .metric, .quick-link, .binding-strip, .participant-card, .overview-hero)').all()) await expect(card).toHaveCSS('border-radius', '20px')
 			await page.evaluate(() => scrollTo(0, 0))
 			if (section === 'templates') {
 				const actions = await page.locator('.editor-footer').boundingBox()
@@ -958,6 +964,7 @@ test('history details preserve the scrolled shell and position', async ({ page }
 	await page.evaluate(() => window.scrollBy({ top: -80, behavior: 'instant' }))
 	await expect(page.locator('.topbar')).toHaveClass(/topbar-visible/)
 	const shell = testInfo.project.name === 'desktop' ? ['.sidebar', '.topbar'] : ['.topbar']
+	await page.locator('.topbar').evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)) })
 	const before = await Promise.all(shell.map(selector => page.locator(selector).boundingBox()))
 	const scroll = await page.evaluate(() => scrollY)
 	await rows.nth(15).getByRole('button', { name: 'Подробности изменения' }).click()

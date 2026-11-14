@@ -12,9 +12,9 @@ export function RoleCurators({ active, resources, api, run, notify, setConfig }:
 	useEffect(() => { if (active && !curators) api('role-curators').then(data => { setCurators(data.curators); setRevision(data.revision) }).catch(error => notify(error.message, true)) }, [active, curators, api, notify])
 	if (!curators) return <p className="text-sm text-muted">Загрузка кураторов…</p>
 	const edit = (index: number, value: Partial<RoleCurator>) => setCurators(previous => previous!.map((curator, i) => i === index ? { ...curator, ...value } : curator))
-	return <div className="grid gap-6"><div className="callout">Кураторы управляют только назначенными им ролями через ПКМ по участнику → Приложения → Управление ролями. Панель видит только вызвавший её пользователь. Право «Управлять ролями» кураторам не требуется. Если у пользователя несколько ролей куратора, их разрешения объединяются.</div>
+	return <div className="page-stack"><div className="callout">Кураторы управляют только назначенными им ролями через ПКМ по участнику → Приложения → Управление ролями. Панель видит только вызвавший её пользователь. Право «Управлять ролями» кураторам не требуется. Если у пользователя несколько ролей куратора, их разрешения объединяются.</div>
 		{curators.map((curator, index) => <Panel key={index} title={resources.roles.find(role => role.id === curator.roleId)?.name || `Куратор ${index + 1}`} action={<IconButton icon={Trash2} label="Удалить куратора" onClick={async () => { if (await modal({ title: 'Удалить куратора?', message: 'После сохранения эта роль потеряет назначенные здесь разрешения.', confirm: 'Удалить' })) setCurators(curators.filter((_, i) => i !== index)) }} />}>
-			<div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
+			<div className="panel-body grid gap-5 sm:grid-cols-2">
 				<Field label="Роль куратора"><select value={curator.roleId} onChange={event => edit(index, { roleId: event.target.value })}><option value="">Выберите роль…</option>
 					{curator.roleId && !resources.roles.some(role => role.id === curator.roleId) && <option value={curator.roleId}>Недоступна · {curator.roleId}</option>}
 					{resources.roles.filter(role => role.id === curator.roleId || !curators.some(item => item.roleId === role.id)).map(role => <option key={role.id} value={role.id}>@ {role.name}</option>)}

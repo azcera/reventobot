@@ -53,13 +53,13 @@ export function HistoryRows({ entries, config, guild, compact = false }: { entri
 			const link = /^https:\/\/discord.com\/channels\/\d+\/\d+\/\d+$/.test(entry.target)
 			return <article key={entry.id} className="history-row">
 				<div className={`history-mark ${failed ? 'text-danger' : 'text-brand'}`}><FileClock aria-hidden="true" /></div>
-				<div className="min-w-0 flex-1"><h3 className="text-sm font-medium">{title}</h3><p className="mt-1 break-words text-xs text-muted">{details.actorName || 'Имя не сохранено'}{!compact && ` · Discord ID: ${entry.actor}`}</p><p className="mt-1 break-words text-xs text-muted">{link ? 'Сообщение в Discord' : String(entry.target || '').split(', ').map(label).join(', ')}</p></div>
+				<div className="min-w-0 flex-1"><h3 className="subsection-title">{title}</h3><p className="mt-1 break-words text-xs text-muted">{details.actorName || 'Имя не сохранено'}{!compact && ` · Discord ID: ${entry.actor}`}</p><p className="mt-1 break-words text-xs text-muted">{link ? 'Сообщение в Discord' : String(entry.target || '').split(', ').map(label).join(', ')}</p></div>
 				<div className="flex flex-wrap items-center justify-end gap-2"><time dateTime={entry.created_at} className="text-[11px] tabular-nums text-muted">{new Date(entry.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'short' })}</time>
 					{link && <a href={entry.target} target="_blank" rel="noopener noreferrer" className="icon-button" aria-label="Открыть сообщение в Discord" title="Открыть сообщение в Discord"><ArrowUpRight aria-hidden="true" /></a>}
 					<IconButton icon={ScanText} label="Подробности изменения" onClick={() => modal({ title, content: <div className="mt-4 grid gap-4 text-sm">
 						<p className="text-muted">{details.actorName || entry.actor}</p>
 						{details.error && <p className="callout text-danger">{details.error}</p>}
-						{Object.entries(fields).map(([key, change]) => <div key={key}><h3 className="mb-2 font-medium">{change.label || label(key)}</h3><pre className="detail-code">{'Было:\n' + format(change.before) + '\n\nСтало:\n' + format(change.after)}</pre></div>)}
+						{Object.entries(fields).map(([key, change]) => <div key={key}><h3 className="subsection-title mb-2">{change.label || label(key)}</h3><pre className="detail-code">{'Было:\n' + format(change.before) + '\n\nСтало:\n' + format(change.after)}</pre></div>)}
 						{details.diff && <pre className="detail-code">{details.diff}</pre>}
 						{details.outcome && <p>{details.outcome}</p>}{details.logError && <p className="text-danger">{details.logError}</p>}
 						{(details.syncResults || []).map((result, index) => <p key={index} className={!result.ok ? 'text-danger' : ''}>{permanentGroups[result.kind] || 'Навигация'}: {result.ok ? 'Обновлено' : result.error}{result.logError && ' · ' + result.logError}</p>)}

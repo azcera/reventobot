@@ -57,7 +57,7 @@ export function AutoTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaEle
 
 export function Panel({ title, action, children, className = '', ...props }: Omit<React.HTMLAttributes<HTMLElement>, 'title'> & { title?: React.ReactNode; action?: React.ReactNode }) {
 	return <section className={`panel ${className}`} {...props}>
-		{title && <div className="panel-heading"><h2>{title}</h2>{action}</div>}{children}
+		{title && <div className="panel-heading"><h2 className="section-title">{title}</h2>{action}</div>}{children}
 	</section>
 }
 
@@ -70,7 +70,7 @@ export function Field({ label, hint, children, className = '' }: { label: React.
 }
 
 export function Empty({ icon: Icon = Info, title, children }: { icon?: LucideIcon; title: string; children?: React.ReactNode }) {
-	return <div className="empty-state"><Icon aria-hidden="true" /><h3>{title}</h3>{children && <p>{children}</p>}</div>
+	return <div className="empty-state"><Icon aria-hidden="true" /><h3 className="subsection-title">{title}</h3>{children && <p>{children}</p>}</div>
 }
 
 export function Loading({ children = 'Загружаем данные…' }: { children?: React.ReactNode }) {
