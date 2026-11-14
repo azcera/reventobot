@@ -255,8 +255,15 @@ function createStore(env = process.env) {
 			await pool.query('INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',
 				[typeof actor === 'string' ? actor : actor?.id, action, target, JSON.stringify({ ...details, actorName: (typeof actor === 'object' ? actor?.name : undefined) || details.actorName })])
 		},
-		async history() {
-			return (await pool.query("SELECT id, created_at, actor, action, target, details FROM dashboard_audit WHERE created_at >= NOW() - INTERVAL '7 days' ORDER BY id DESC")).rows
+		async history(options: { limit?: number; before?: string; from?: string; to?: string } = {}) {
+			const values: (string | number)[] = []
+			let sql = "SELECT id, created_at, actor, action, target, details FROM dashboard_audit WHERE created_at >= NOW() - INTERVAL '7 days'"
+			for (const [condition, value] of [['id <', options.before], ['created_at >=', options.from], ['created_at <=', options.to]] as const) {
+				if (value !== undefined) { values.push(value); sql += ` AND ${condition} $${values.length}` }
+			}
+			sql += ' ORDER BY id DESC'
+			if (options.limit !== undefined) { values.push(options.limit); sql += ` LIMIT $${values.length}` }
+			return (await pool.query(sql, values)).rows
 		}
 	}
 }

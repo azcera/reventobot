@@ -42,6 +42,7 @@ export interface ApiRoutes {
 }
 export type Api = {
   <P extends keyof ApiRoutes>(path: P, body?: unknown): Promise<ApiRoutes[P]>;
+  (path: `history?${string}`): Promise<HistoryEntry[]>;
   (path: `container-message?${string}`, body?: unknown): Promise<{ items: ComponentItem[]; source: SourceMessage }>;
   (path: `channel-threads/${string}`, body?: unknown): Promise<ChannelResource[]>;
   (path: `majestic/${string}`, body?: unknown): Promise<MajesticState>;

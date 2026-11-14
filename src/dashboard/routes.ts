@@ -132,7 +132,7 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
 	app.get('/api/overview', async (req: E.Request, res: E.Response) => {
 		try {
 			await pool.query('SELECT 1')
-			res.json({ ready: client.isReady(), ping: client.ws.ping, uptime: Math.floor((client.uptime || 0) / 1000), database: true, history: (await store.history()).slice(0, 5) })
+			res.json({ ready: client.isReady(), ping: client.ws.ping, uptime: Math.floor((client.uptime || 0) / 1000), database: true, history: await store.history({ limit: 5 }) })
 		} catch { res.status(503).json({ error: 'Нет подключения к PostgreSQL.' }) }
 	})
 	app.get('/api/resources', async (req: E.Request, res: E.Response) => {
@@ -318,7 +318,12 @@ function registerDashboard(app: E.Express, client: D.Client, pool: Pg.Pool, { au
  respondError(res, error) }
 	})
 	app.get('/api/history', async (req: E.Request, res: E.Response) => {
-		try { res.json(await store.history()) } catch (caughtError) {
+		try {
+			const { before, from, to } = req.query
+			if (before !== undefined && (typeof before !== 'string' || !/^[0-9]{1,19}$/.test(before) || BigInt(before) > 9223372036854775807n)) throw problem(400, 'Некорректный курсор истории.')
+			for (const date of [from, to]) if (date !== undefined && (typeof date !== 'string' || !Number.isFinite(Date.parse(date)))) throw problem(400, 'Некорректная дата истории.')
+			res.json(await store.history({ limit: 50, before: before as string | undefined, from: from as string | undefined, to: to as string | undefined }))
+		} catch (caughtError) {
  const error = getError(caughtError)
  respondError(res, error) }
 	})

@@ -24,7 +24,7 @@ function validResponse(path: string, value: unknown): boolean {
   if (path.startsWith('channel-threads/')) return array(value, channel => resource(channel) && record(channel) && number(channel.type))
   if (path === 'resources') return record(value) && array(value.roles, resource) && array(value.channels, channel => resource(channel) && record(channel) && number(channel.type))
   if (path === 'session') return record(value) && text(value.csrf) && resource(value.guild) && resource(value.user)
-  if (path === 'history') return array(value, history)
+  if (path === 'history' || path.startsWith('history?')) return array(value, history)
   if (path === 'overview') return record(value) && boolean(value.ready) && number(value.ping) && number(value.uptime) && boolean(value.database) && array(value.history, history)
   if (path === 'role-curators') return record(value) && number(value.revision) && array(value.curators, roleCurator)
   if (path === 'capture-presets') return record(value) && number(value.revision) && array(value.presets, item => record(item) && ['id', 'command', 'target', 'channelId', 'accessRoleId'].every(key => text(item[key])) && number(item.maxMain))

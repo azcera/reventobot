@@ -10,8 +10,8 @@ export function useMotion(enabled: boolean) {
 		const pointer = matchMedia('(any-hover: hover) and (any-pointer: fine)')
 		let mouseSeen = false
 		let lenis: Lenis | undefined
-		let frame = 0, scrollFrame = 0, navigationFrame = 0
-		let lastPaint = 0, lastScrollTime = 0, scrollTime = 0
+		let frame = 0, navigationFrame = 0
+		let lastPaint = 0
 		let surface: HTMLElement | null = null
 		let tilt: HTMLElement | null = null
 		let rect: DOMRect | null = null
@@ -57,33 +57,20 @@ export function useMotion(enabled: boolean) {
 			}
 			if (!frame) frame = requestAnimationFrame(paint)
 		}
-		const scrollTick = (time: number) => {
-			scrollFrame = 0
-			if (!lenis || document.hidden) return
-			// A virtual clock avoids a large first delta after an idle period.
-			scrollTime += lastScrollTime ? Math.min(time - lastScrollTime, 50) : 16
-			lastScrollTime = time
-			lenis.raf(scrollTime)
-			if (lenis.isScrolling === 'smooth') scrollFrame = requestAnimationFrame(scrollTick)
-		}
-		const wakeScroll = () => {
-			if (!scrollFrame && !document.hidden) { lastScrollTime = 0; scrollFrame = requestAnimationFrame(scrollTick) }
-		}
 		const navigate = () => {
 			reset(); cancelAnimationFrame(navigationFrame)
 			navigationFrame = requestAnimationFrame(() => { lenis?.resize(); if (lenis) lenis.scrollTo(0, { immediate: true }); else window.scrollTo({ top: 0, behavior: 'instant' }) })
 		}
 		const apply = () => {
-			reset(); cancelAnimationFrame(scrollFrame); scrollFrame = 0; scrollTime = 0
+			reset()
 			lenis?.destroy(); lenis = undefined
 			const motion = allowed()
 			root.dataset.reducedMotion = reduced.matches ? 'on' : 'off'
 			root.dataset.motion = motion ? 'on' : 'off'
 			root.dataset.effects = motion && (pointer.matches || mouseSeen) ? 'on' : 'off'
 			if (motion) {
-				lenis = new Lenis({ autoRaf: false, lerp: .09, syncTouch: false, autoToggle: true,
+				lenis = new Lenis({ autoRaf: true, lerp: .09, syncTouch: false, autoToggle: true,
 					prevent: node => Boolean(node.closest('dialog, .sidebar, .role-picker, .mention-menu, textarea, pre')) })
-				lenis.on('virtual-scroll', wakeScroll)
 			}
 		}
 		apply()
@@ -93,7 +80,7 @@ export function useMotion(enabled: boolean) {
 		window.addEventListener('blur', reset); window.addEventListener('resize', reset)
 		window.addEventListener('scroll', reset, { passive: true }); window.addEventListener('hashchange', navigate)
 		return () => {
-			reset(); cancelAnimationFrame(scrollFrame); cancelAnimationFrame(navigationFrame); lenis?.destroy()
+			reset(); cancelAnimationFrame(navigationFrame); lenis?.destroy()
 			reduced.removeEventListener('change', apply); pointer.removeEventListener('change', apply)
 			document.removeEventListener('visibilitychange', apply)
 			document.removeEventListener('pointermove', move); document.removeEventListener('pointerleave', reset)

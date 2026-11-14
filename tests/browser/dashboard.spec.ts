@@ -30,7 +30,7 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 test('variable history shows changed variable names instead of the internal action', async ({ page }) => {
 	await setup(page, 'settings')
 	const group = 'Система повышения'
-	await page.route('**/api/history', route => route.fulfill({ json: [
+	await page.route('**/api/history*', route => route.fulfill({ json: [
 		{ id: 1, action: 'templateVariables', target: group, actor: 'u', created_at: new Date().toISOString(), details: { fields: { [group]: { before: { price: '100', unchanged: 'same' }, after: { price: '200', unchanged: 'same' } }, [group + '.labels']: { after: { price: 'Цена пулемёта' } } } } },
 		{ id: 2, action: 'templateVariables', target: group, actor: 'u', created_at: new Date().toISOString(), details: JSON.stringify({ fields: { [group]: { before: { removed: '100' }, after: {} } } }) },
 		{ id: 3, action: 'templateVariables', target: group, actor: 'u', created_at: new Date().toISOString(), details: { fields: { [group + '.labels']: { before: { price: 'Цена' }, after: { price: 'Новая цена' } } } } }
@@ -364,7 +364,7 @@ test('all sections fit both themes and capture review images', async ({ page }, 
 	page.on('pageerror', error => errors.push(error.message))
 	await setup(page, 'templates', 'Текст сообщения')
 	await page.route('**/api/overview', route => route.fulfill({ json: { ready: true, ping: 42, database: true, uptime: 3600, history: [] } }))
-	await page.route('**/api/history', route => route.fulfill({ json: [] }))
+	await page.route('**/api/history*', route => route.fulfill({ json: [] }))
 	await page.route('**/api/majestic', route => route.fulfill({ json: { configured: true, busy: false, decisions: {}, rankRoles: {}, preview: null, run: null } }))
 	for (const theme of ['light', 'dark']) {
 		await page.getByRole('radio', { name: theme === 'light' ? 'Светлая' : 'Тёмная', exact: true }).check()
@@ -467,14 +467,14 @@ test('cursor produces a visible perspective tilt and resets it', async ({ page }
 	await expect(page.locator('html')).toHaveAttribute('data-motion', 'off')
 })
 
-test('glass panels track light without moving the editor', async ({ page }, testInfo) => {
+test('panels track light without moving or blurring the editor', async ({ page }, testInfo) => {
 	test.skip(testInfo.project.name !== 'desktop')
 	await setup(page, 'templates')
 	const panel = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Содержимое сообщения', exact: true }) })
 	await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).hover({ position: { x: 180, y: 100 } })
 	await expect(panel).toHaveClass(/is-lit/)
 	await expect.poll(() => panel.evaluate(el => parseFloat(el.style.getPropertyValue('--light-x')))).toBeGreaterThan(0)
-	await expect(panel).toHaveCSS('backdrop-filter', /blur/)
+	await expect(panel).toHaveCSS('backdrop-filter', 'none')
 	await expect(panel).toHaveCSS('transform', 'none')
 	await expect.poll(() => panel.evaluate(el => getComputedStyle(el, '::before').opacity)).toBe('1')
 })
@@ -497,12 +497,19 @@ test('smooth scrolling is progressive and stops with reduced motion', async ({ p
 		;(window as any).__recordScroll = () => (window as any).__scrollPositions.push(scrollY)
 		window.addEventListener('scroll', (window as any).__recordScroll)
 	})
-	const editor = await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).boundingBox()
-	await page.mouse.move(editor!.x + editor!.width / 2, editor!.y + 24)
+	await page.locator('.page-view:not([hidden])').evaluate(element => { (element as HTMLElement).style.minHeight = '4000px' })
+	const main = await page.locator('.main-content').boundingBox()
+	await page.mouse.move(main!.x + 6, 400)
+	// Let the page transition and debounced scroll-size observer settle.
+	await page.waitForTimeout(500)
 	await page.mouse.wheel(0, 700)
 	await expect.poll(() => page.evaluate(() => new Set((window as any).__scrollPositions as number[]).size)).toBeGreaterThan(4)
 	const positions = await page.evaluate(() => { window.removeEventListener('scroll', (window as any).__recordScroll); return (window as any).__scrollPositions as number[] })
 	expect(positions.at(-1)!).toBeGreaterThan(positions[0])
+	await expect(page.locator('html')).not.toHaveClass(/lenis-scrolling/)
+	const stopped = await page.evaluate(() => scrollY)
+	await page.mouse.wheel(0, 400)
+	await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(stopped + 300)
 	await page.emulateMedia({ reducedMotion: 'reduce' })
 	await expect(page.locator('html')).not.toHaveClass(/lenis/)
 	await expect(page.locator('html')).toHaveAttribute('data-motion', 'off')
@@ -820,9 +827,10 @@ test('settings switch thumb stays inside track and save centers on scroll', asyn
 	await expect(toggle).not.toBeChecked()
 	await toggle.click()
 	await expect(toggle).toBeChecked()
+	await expect.poll(() => toggle.evaluate(element => getComputedStyle(element.nextElementSibling!, '::before').transform)).toBe('matrix(1, 0, 0, 1, 20, 0)')
 	const inside = await toggle.evaluate(element => {
 		const track = element.nextElementSibling!, css = getComputedStyle(track, '::before')
-		const x = Number(new DOMMatrix(css.transform).m41)
+		const x = Number(new DOMMatrix(css.transform).m41) + (css.translate === 'none' ? 0 : parseFloat(css.translate))
 		return parseFloat(css.left) + x + parseFloat(css.width) <= track.clientWidth
 	})
 	expect(inside).toBe(true)
@@ -840,7 +848,10 @@ test('settings switch thumb stays inside track and save centers on scroll', asyn
 test('history range and JSON export contain the same entries', async ({ page }) => {
 	await setup(page, 'settings')
 	const entries = [0, 48].map((hours, index) => ({ id: index + 1, action: 'settings', actor: 'u', target: 'test', created_at: new Date(Date.now() - hours * 3600000).toISOString(), details: {} }))
-	await page.route('**/api/history', route => route.fulfill({ json: entries }))
+	await page.route('**/api/history*', route => {
+		const query = new URL(route.request().url()).searchParams
+		return route.fulfill({ json: entries.filter(entry => (!query.has('from') || Date.parse(entry.created_at) >= Date.parse(query.get('from')!)) && (!query.has('to') || Date.parse(entry.created_at) <= Date.parse(query.get('to')!))) })
+	})
 	await page.goto('/#history')
 	await expect(page.locator('.page-view:not([hidden]) .history-row')).toHaveCount(2)
 	await page.getByLabel('Показать за', { exact: true }).selectOption('24')
@@ -854,4 +865,58 @@ test('history range and JSON export contain the same entries', async ({ page }) 
 	await page.getByLabel('С (МСК)', { exact: true }).fill('2026-01-02T00:00')
 	await page.getByLabel('По (МСК)', { exact: true }).fill('2026-01-01T00:00')
 	await expect(page.getByRole('button', { name: 'Выгрузить JSON' })).toBeDisabled()
+})
+
+
+test('history loads pages near the end and exports unloaded entries', async ({ page }) => {
+	await setup(page, 'settings')
+	const entries = Array.from({ length: 101 }, (_, index) => ({ id: 101 - index, action: 'settings', actor: 'u', target: 'test', created_at: new Date().toISOString(), details: {} }))
+	const cursors: (string | null)[] = []
+	await page.route('**/api/history*', route => {
+		const before = new URL(route.request().url()).searchParams.get('before')
+		cursors.push(before)
+		return route.fulfill({ json: entries.filter(entry => !before || entry.id < Number(before)).slice(0, 50) })
+	})
+	await page.goto('/#history')
+	const rows = page.locator('.page-view:not([hidden]) .history-row')
+	await expect(rows).toHaveCount(50)
+	expect(cursors).toEqual([null])
+	await page.locator('.page-view:not([hidden]) .history-more').scrollIntoViewIfNeeded()
+	await expect(rows).toHaveCount(100)
+	expect(cursors).toEqual([null, '52'])
+	const download = page.waitForEvent('download')
+	await page.getByRole('button', { name: 'Выгрузить JSON' }).click()
+	const stream = await (await download).createReadStream()
+	const chunks: Buffer[] = []; for await (const chunk of stream!) chunks.push(Buffer.from(chunk))
+	expect(JSON.parse(Buffer.concat(chunks).toString())).toEqual(entries)
+	await expect(rows).toHaveCount(100)
+	await page.locator('.page-view:not([hidden]) .history-more').scrollIntoViewIfNeeded()
+	await expect(rows).toHaveCount(101)
+	await expect(page.locator('.page-view:not([hidden]) .history-more')).toHaveCount(0)
+})
+
+test('variables use the full panel width with a single value label', async ({ page }) => {
+	await setup(page, 'variables', undefined, { 'Система повышения': { price: '1000' } })
+	await expect(page.locator('.page-view:not([hidden])').getByText('Название переменной', { exact: true })).toHaveCount(0)
+	const input = page.getByLabel('Значение · price', { exact: true })
+	await expect(input).toBeVisible()
+	expect(await input.evaluate(element => element.getBoundingClientRect().width / element.closest('.panel')!.getBoundingClientRect().width)).toBeGreaterThan(.8)
+})
+
+
+test('majestic controls stay left before scrolling and centered when sticky', async ({ page }) => {
+	await setup(page, 'settings')
+	await page.route('**/api/majestic', route => route.fulfill({ json: { configured: true, busy: false, decisions: {}, rankRoles: {}, preview: null, run: null } }))
+	await page.goto('/#majestic')
+	const bar = page.locator('.page-view:not([hidden]) .action-bar')
+	await expect(bar.getByRole('button', { name: 'Получить предпросмотр' })).toBeVisible()
+	await expect(bar).not.toHaveClass(/action-bar-stuck/)
+	await expect(bar.locator('.action-buttons')).toHaveCSS('justify-content', /^(flex|flow)-start$/)
+	const buttons = await bar.locator('button').evaluateAll(elements => elements.map(element => { const rect = element.getBoundingClientRect(); return { x: rect.x, right: rect.right, y: rect.y } }))
+	for (let i = 1; i < buttons.length; i++) if (buttons[i].y === buttons[i - 1].y) expect(buttons[i].x - buttons[i - 1].right).toBeLessThan(20)
+	await page.locator('.page-view:not([hidden])').evaluate(element => { (element as HTMLElement).style.minHeight = '2200px' })
+	await page.waitForTimeout(500)
+	await page.evaluate(() => window.scrollTo({ top: 600, behavior: 'instant' }))
+	await expect(bar).toHaveClass(/action-bar-stuck/)
+	await expect(bar.locator('.action-buttons')).toHaveCSS('justify-content', 'center')
 })

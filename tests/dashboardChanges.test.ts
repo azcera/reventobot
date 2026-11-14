@@ -224,3 +224,18 @@ test('audit retains a week without the old 100-row limit and survives store rest
 	assert.ok(queries.some(sql => sql.startsWith('DELETE FROM dashboard_audit') && sql.includes("INTERVAL '7 days'")))
 	assert.ok(queries.some(sql => sql.startsWith('SELECT id, created_at') && sql.includes("INTERVAL '7 days'") && !sql.includes('LIMIT 100')))
 })
+
+
+test('history pagination and date bounds use parameterized SQL', async () => {
+	const queries: { sql: string; values?: unknown[] }[] = []
+	const query = async (sql: string, values?: unknown[]) => {
+		queries.push({ sql, values })
+		return { rows: sql.startsWith('SELECT revision') ? [{ revision: 0, value: { templates: {}, settings: {}, settingsEnvMigrated: true } }] : [] }
+	}
+	const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool
+	const store = createStore({}); await store.init(pool)
+	await store.history({ limit: 50, before: '123', from: '2026-11-10T00:00:00Z', to: '2026-11-14T23:59:59Z' })
+	const last = queries[queries.length - 1]
+	assert.match(last.sql, /AND id < \$1 AND created_at >= \$2 AND created_at <= \$3 ORDER BY id DESC LIMIT \$4$/)
+	assert.deepEqual(last.values, ['123', '2026-11-10T00:00:00Z', '2026-11-14T23:59:59Z', 50])
+})

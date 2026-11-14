@@ -67,20 +67,60 @@ function HistoryPage({ active, api, config, guild, notify, refresh }: DataPagePr
 	const [period, setPeriod] = useState('168')
 	const [from, setFrom] = useState('')
 	const [to, setTo] = useState('')
-	useEffect(() => {
-		if (!active) return
-		let cancelled = false
-		api('history').then(data => { if (!cancelled) setEntries(data) }).catch(error => { if (!cancelled) notify(errorMessage(error), true) })
-		return () => { cancelled = true }
-	}, [active, api, notify, refresh])
+	const [before, setBefore] = useState<string | null>(null)
+	const [attempt, setAttempt] = useState(0)
+	const [loading, setLoading] = useState(false)
+	const [hasMore, setHasMore] = useState(false)
+	const loadMoreRef = useRef<HTMLDivElement>(null)
 	const invalid = period === 'custom' && Boolean(from && to && from > to)
-	const lower = period === 'custom' ? from ? Date.parse(from + '+03:00') : -Infinity : Date.now() - Number(period) * 3600000
-	const upper = period === 'custom' && to ? Date.parse(to + '+03:00') + 59999 : Infinity
-	const visible = entries?.filter(entry => !invalid && Date.parse(entry.created_at) >= lower && Date.parse(entry.created_at) <= upper) || []
-	return <div className="grid gap-5"><Panel title="Период истории"><div className="flex flex-wrap items-end gap-4 p-5"><Field label="Показать за"><select value={period} onChange={event => setPeriod(event.target.value)}><option value="1">Час</option><option value="24">Сутки</option><option value="168">Неделю</option><option value="custom">Выбрать диапазон</option></select></Field>{period === 'custom' && <><Field label="С (МСК)"><input type="datetime-local" value={from} onChange={event => setFrom(event.target.value)} /></Field><Field label="По (МСК)"><input type="datetime-local" value={to} onChange={event => setTo(event.target.value)} /></Field></>}<Button disabled={!entries || invalid} onClick={() => {
-		const url = URL.createObjectURL(new Blob([JSON.stringify(visible, null, 2)], { type: 'application/json' }))
-		const link = document.createElement('a'); link.href = url; link.download = 'revento-history.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-	}}>Выгрузить JSON</Button>{invalid && <p role="alert" className="text-danger">Начало диапазона должно быть раньше конца.</p>}</div></Panel>{entries ? <Panel title={`Журнал действий · ${visible.length}`}><HistoryRows entries={visible} config={config} guild={guild} /></Panel> : <Loading />}</div>
+	const [since, setSince] = useState(() => new Date(Date.now() - 168 * 3600000).toISOString())
+	const query = new URLSearchParams()
+	if (period === 'custom') {
+		if (from) query.set('from', new Date(from + '+03:00').toISOString())
+		if (to) query.set('to', new Date(Date.parse(to + '+03:00') + 59999).toISOString())
+	} else query.set('from', since)
+	const range = query.toString()
+	const resetRange = () => { setBefore(null); setEntries(null) }
+	useEffect(() => { if (active) { setBefore(null); setEntries(null) } }, [active, refresh])
+	useEffect(() => {
+		if (!active || invalid) return
+		let cancelled = false
+		setLoading(true)
+		api(`history?${range}${before ? `&before=${before}` : ''}`).then(data => {
+			if (cancelled) return
+			setEntries(previous => before ? [...(previous || []).filter(entry => !data.some(next => next.id === entry.id)), ...data] : data)
+			setHasMore(data.length === 50)
+		}).catch(error => { if (!cancelled) { setHasMore(false); notify(errorMessage(error), true) } }).finally(() => { if (!cancelled) setLoading(false) })
+		return () => { cancelled = true }
+	}, [active, api, notify, refresh, range, before, invalid, attempt])
+	useEffect(() => {
+		const sentinel = loadMoreRef.current
+		if (!active || loading || invalid || !hasMore || !entries?.length || !sentinel) return
+		const observer = new IntersectionObserver(([entry]) => {
+			if (!entry.isIntersecting) return
+			observer.disconnect()
+			setBefore(String(entries[entries.length - 1].id)); setAttempt(value => value + 1)
+		}, { rootMargin: '0px 0px 600px 0px' })
+		observer.observe(sentinel)
+		return () => observer.disconnect()
+	}, [active, loading, invalid, hasMore, entries])
+	const visible = invalid ? [] : entries || []
+	const [exporting, setExporting] = useState(false)
+	return <div className="grid gap-5"><Panel title="Период истории"><div className="flex flex-wrap items-end gap-4 p-5"><Field label="Показать за"><select value={period} onChange={event => { resetRange(); setPeriod(event.target.value); if (event.target.value !== 'custom') setSince(new Date(Date.now() - Number(event.target.value) * 3600000).toISOString()) }}><option value="1">Час</option><option value="24">Сутки</option><option value="168">Неделю</option><option value="custom">Выбрать диапазон</option></select></Field>{period === 'custom' && <><Field label="С (МСК)"><input type="datetime-local" value={from} onChange={event => { resetRange(); setFrom(event.target.value) }} /></Field><Field label="По (МСК)"><input type="datetime-local" value={to} onChange={event => { resetRange(); setTo(event.target.value) }} /></Field></>}<Button disabled={!entries || invalid || loading || exporting} onClick={async () => {
+		setExporting(true)
+		try {
+			const exported = [...visible]
+			let more = hasMore
+			while (more) {
+				const cursor = String(exported[exported.length - 1].id)
+				const batch = await api(`history?${range}&before=${cursor}`)
+				if (batch.some(entry => String(entry.id) === cursor)) throw new Error('Не удалось загрузить следующую страницу истории.')
+				exported.push(...batch); more = batch.length === 50
+			}
+			const url = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }))
+			const link = document.createElement('a'); link.href = url; link.download = 'revento-history.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+		} catch (error) { notify(errorMessage(error), true) } finally { setExporting(false) }
+	}}>Выгрузить JSON</Button>{invalid && <p role="alert" className="text-danger">Начало диапазона должно быть раньше конца.</p>}</div></Panel>{entries ? <Panel title={`Журнал действий · ${visible.length}`}><HistoryRows entries={visible} config={config} guild={guild} />{hasMore && !invalid && <div ref={loadMoreRef} className="history-more p-5 text-sm text-muted" role="status">{loading ? 'Загружаем…' : ''}</div>}</Panel> : <Loading />}</div>
 }
 
 export function App() {
