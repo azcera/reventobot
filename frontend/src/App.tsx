@@ -3,7 +3,7 @@ import type { Api, Config, Resources, Session, Drafts, SettingsDraft, Notify, Ru
 import { errorMessage, errorStatus } from './types'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, ArrowUp, ArrowRight, ArrowUpRight, Clock, ListChecks, CalendarDays, Braces, BookOpen, Check, ChevronRight, Database, Files, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, Wifi, X } from 'lucide-react'
-import { BusyContext, Button, Empty, IconButton, Loading, Field, Panel, useModal } from './components/ui'
+import { ActionBar, BusyContext, Button, Empty, IconButton, Loading, Field, Panel, useModal } from './components/ui'
 import { HistoryRows } from './components/History'
 import { Variables } from './pages/Variables'
 import { Templates } from './pages/Templates'
@@ -106,7 +106,7 @@ function HistoryPage({ active, api, config, guild, notify, refresh }: DataPagePr
 	}, [active, loading, invalid, hasMore, entries])
 	const visible = invalid ? [] : entries || []
 	const [exporting, setExporting] = useState(false)
-	return <div className="grid gap-5"><Panel title="Период истории"><div className="flex flex-wrap items-end gap-4 p-5"><Field label="Показать за"><select value={period} onChange={event => { resetRange(); setPeriod(event.target.value); if (event.target.value !== 'custom') setSince(new Date(Date.now() - Number(event.target.value) * 3600000).toISOString()) }}><option value="1">Час</option><option value="24">Сутки</option><option value="168">Неделю</option><option value="custom">Выбрать диапазон</option></select></Field>{period === 'custom' && <><Field label="С (МСК)"><input type="datetime-local" value={from} onChange={event => { resetRange(); setFrom(event.target.value) }} /></Field><Field label="По (МСК)"><input type="datetime-local" value={to} onChange={event => { resetRange(); setTo(event.target.value) }} /></Field></>}<Button disabled={!entries || invalid || loading || exporting} onClick={async () => {
+	return <div className="grid gap-5"><div className="history-actions"><ActionBar><Field label="Показать за"><select value={period} onChange={event => { resetRange(); setPeriod(event.target.value); if (event.target.value !== 'custom') setSince(new Date(Date.now() - Number(event.target.value) * 3600000).toISOString()) }}><option value="1">Час</option><option value="24">Сутки</option><option value="168">Неделю</option><option value="custom">Выбрать диапазон</option></select></Field>{period === 'custom' && <><Field label="С (МСК)"><input type="datetime-local" value={from} onChange={event => { resetRange(); setFrom(event.target.value) }} /></Field><Field label="По (МСК)"><input type="datetime-local" value={to} onChange={event => { resetRange(); setTo(event.target.value) }} /></Field></>}<Button disabled={!entries || invalid || loading || exporting} onClick={async () => {
 		setExporting(true)
 		try {
 			const exported = [...visible]
@@ -120,7 +120,7 @@ function HistoryPage({ active, api, config, guild, notify, refresh }: DataPagePr
 			const url = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }))
 			const link = document.createElement('a'); link.href = url; link.download = 'revento-history.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
 		} catch (error) { notify(errorMessage(error), true) } finally { setExporting(false) }
-	}}>Выгрузить JSON</Button>{invalid && <p role="alert" className="text-danger">Начало диапазона должно быть раньше конца.</p>}</div></Panel>{entries ? <Panel title={`Журнал действий · ${visible.length}`}><HistoryRows entries={visible} config={config} guild={guild} />{hasMore && !invalid && <div ref={loadMoreRef} className="history-more p-5 text-sm text-muted" role="status">{loading ? 'Загружаем…' : ''}</div>}</Panel> : <Loading />}</div>
+	}}>Выгрузить JSON</Button>{invalid && <p role="alert" className="text-danger">Начало диапазона должно быть раньше конца.</p>}</ActionBar></div>{entries ? <Panel title={`Журнал действий · ${visible.length}`}><HistoryRows entries={visible} config={config} guild={guild} />{hasMore && !invalid && <div ref={loadMoreRef} className="history-more p-5 text-sm text-muted" role="status">{loading ? 'Загружаем…' : ''}</div>}</Panel> : <Loading />}</div>
 }
 
 export function App() {

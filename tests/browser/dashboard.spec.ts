@@ -836,7 +836,7 @@ test('settings switch thumb stays inside track and save centers on scroll', asyn
 	expect(inside).toBe(true)
 	await page.locator('.page-view:not([hidden])').evaluate(element => { (element as HTMLElement).style.minHeight = '2200px' })
 	await page.evaluate(() => window.scrollTo(0, 600))
-	await expect(page.locator('.page-view:not([hidden]) .action-bar')).toHaveClass(/action-bar-stuck/)
+	await expect(page.locator('.page-view:not([hidden]) .action-bar')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 	await expect(page.locator('.page-view:not([hidden]) .action-bar [role="status"]')).toBeHidden()
 	await expect.poll(async () => {
 		const center = await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).boundingBox()
@@ -904,19 +904,69 @@ test('variables use the full panel width with a single value label', async ({ pa
 })
 
 
-test('majestic controls stay left before scrolling and centered when sticky', async ({ page }) => {
+test('majestic controls stay centered without a container before and after scrolling', async ({ page }) => {
 	await setup(page, 'settings')
 	await page.route('**/api/majestic', route => route.fulfill({ json: { configured: true, busy: false, decisions: {}, rankRoles: {}, preview: null, run: null } }))
 	await page.goto('/#majestic')
 	const bar = page.locator('.page-view:not([hidden]) .action-bar')
 	await expect(bar.getByRole('button', { name: 'Получить предпросмотр' })).toBeVisible()
-	await expect(bar).not.toHaveClass(/action-bar-stuck/)
-	await expect(bar.locator('.action-buttons')).toHaveCSS('justify-content', /^(flex|flow)-start$/)
+	await expect(bar).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+	await expect(bar.locator('.action-buttons')).toHaveCSS('justify-content', 'center')
 	const buttons = await bar.locator('button').evaluateAll(elements => elements.map(element => { const rect = element.getBoundingClientRect(); return { x: rect.x, right: rect.right, y: rect.y } }))
 	for (let i = 1; i < buttons.length; i++) if (buttons[i].y === buttons[i - 1].y) expect(buttons[i].x - buttons[i - 1].right).toBeLessThan(20)
 	await page.locator('.page-view:not([hidden])').evaluate(element => { (element as HTMLElement).style.minHeight = '2200px' })
 	await page.waitForTimeout(500)
 	await page.evaluate(() => window.scrollTo({ top: 600, behavior: 'instant' }))
-	await expect(bar).toHaveClass(/action-bar-stuck/)
+	await expect(bar).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 	await expect(bar.locator('.action-buttons')).toHaveCSS('justify-content', 'center')
+})
+
+
+test('save controls are centered without a container or status in every panel', async ({ page }) => {
+	await setup(page, 'settings')
+	for (const hash of ['settings', 'access', 'variables', 'curators', 'captures']) {
+		await page.goto('/#' + hash)
+		const bar = page.locator('.page-view:not([hidden]) .action-bar')
+		await expect(bar).toBeVisible()
+		await expect(bar).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+		await expect(bar).toHaveCSS('backdrop-filter', 'none')
+		await expect(bar.getByRole('status')).toHaveCount(0)
+		const buttons = await bar.locator('.action-buttons').boundingBox(), rect = await bar.boundingBox()
+		expect(Math.abs(buttons!.x + buttons!.width / 2 - rect!.x - rect!.width / 2)).toBeLessThan(2)
+	}
+})
+
+test('template saving precedes mode switching', async ({ page }) => {
+	await setup(page, 'templates')
+	const save = await page.locator('.editor-save-home').boundingBox()
+	const tabs = await page.getByRole('tablist', { name: 'Режим редактора' }).boundingBox()
+	expect(save!.y + save!.height).toBeLessThanOrEqual(tabs!.y)
+})
+
+test('history details preserve the scrolled shell and position', async ({ page }, testInfo) => {
+	await setup(page, 'history')
+	await page.route('**/api/history*', route => route.fulfill({ json: Array.from({ length: 30 }, (_, i) => ({ id: 30 - i, action: 'majestic.sync', actor: 'majestic-auto', target: 'guild', created_at: new Date().toISOString(), details: { status: 'completed' } })) }))
+	await page.reload()
+	const rows = page.locator('.page-view:not([hidden]) .history-row')
+	await expect(rows).toHaveCount(30)
+	await expect(rows.first()).toContainText('Автосинхронизация Majestic')
+	const bar = page.locator('.history-actions .action-bar')
+	await expect(bar).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+	await expect(bar.locator('.action-buttons')).toHaveCSS('justify-content', 'center')
+	await rows.nth(15).scrollIntoViewIfNeeded()
+	await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+	await page.evaluate(() => window.scrollBy({ top: -80, behavior: 'instant' }))
+	await expect(page.locator('.topbar')).toHaveClass(/topbar-visible/)
+	const shell = testInfo.project.name === 'desktop' ? ['.sidebar', '.topbar'] : ['.topbar']
+	const before = await Promise.all(shell.map(selector => page.locator(selector).boundingBox()))
+	const scroll = await page.evaluate(() => scrollY)
+	await rows.nth(15).getByRole('button', { name: 'Подробности изменения' }).click()
+	await expect(page.getByRole('dialog')).toBeVisible()
+	for (const [i, selector] of shell.entries()) {
+		const rect = await page.locator(selector).boundingBox()
+		expect(Math.abs(rect!.y - before[i]!.y)).toBeLessThan(2)
+	}
+	await page.getByRole('button', { name: 'Закрыть окно' }).click()
+	await expect(page.getByRole('dialog')).toHaveCount(0)
+	expect(Math.abs(await page.evaluate(() => scrollY) - scroll)).toBeLessThan(2)
 })

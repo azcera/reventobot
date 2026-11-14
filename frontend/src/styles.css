@@ -39,7 +39,7 @@
 	--scrim: #272d5377;
 }
 @layer base {
-	:root:has(.modal[open]), :root:has(.modal[open]) body { overflow: hidden; }
+	:root:has(.modal[open]) { overflow: hidden; }
 	body { @apply m-0 bg-bg font-sans text-sm text-text antialiased; }
 	button, a, summary { -webkit-tap-highlight-color: transparent; }
 	button, summary { @apply cursor-pointer; }
@@ -248,7 +248,7 @@ body { isolation: isolate; }
 .editor-tabs button { min-height: 40px; border-radius: 9px; }
 .editor-tabs button[aria-selected='true'] { background: var(--brand-soft); color: var(--brand); }
 .editor-footer, .action-bar { position: sticky; top: 12px; z-index: 20; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
-.editor-save-home { grid-row: 2; z-index: 26; min-height: 42px; justify-self: center; max-width: 100%; }
+.editor-save-home { grid-row: 1; z-index: 26; min-height: 42px; justify-self: center; max-width: 100%; }
 .action-bar { order: -1; }
 
 input, select, textarea, [contenteditable] { scroll-margin-top: 180px; scroll-margin-bottom: 30px; }
@@ -444,11 +444,10 @@ input:not([type='checkbox']):not([type='radio']):focus-visible, textarea:focus-v
 }
 
 /* Shared save and integration controls. */
-.action-bar { display: flex; align-items: center; top: 12px; min-height: 76px; }
-.action-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; width: 100%; justify-content: flex-start; }
-.action-bar-stuck { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; pointer-events: none; }
-.action-bar-stuck .action-buttons { width: fit-content; margin-inline: auto; justify-content: center; pointer-events: auto; }
-.action-bar-stuck .action-buttons > [role='status'] { display: none; }
+.action-bar { display: flex; justify-content: center; align-items: center; top: 12px; min-height: 44px; padding: 0; border: 0; background: transparent; box-shadow: none; backdrop-filter: none; pointer-events: none; }
+.action-buttons { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; width: fit-content; max-width: 100%; pointer-events: auto; }
+.history-actions .action-buttons { align-items: end; }
+.history-actions { display: contents; }
 .main-content:has(.topbar-visible) .action-bar { top: 84px; }
 .toggle-track { box-sizing: border-box; position: relative; display: block; }
 .toggle-track::before { position: absolute; left: 4px; top: 4px; transform: none; }

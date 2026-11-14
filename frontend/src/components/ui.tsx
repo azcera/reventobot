@@ -4,37 +4,8 @@ import React, { createContext, useCallback, useContext, useEffect, useId, useLay
 import { AlertCircle, BookOpen, Check, CheckCircle2, Info, LoaderCircle, X } from 'lucide-react'
 
 export const BusyContext = createContext(false)
-export function SaveStatus({ dirty }: { dirty: boolean }) {
-	const busy = useContext(BusyContext)
-	return <span role="status" aria-live="polite" className="text-xs text-muted">{busy ? 'Сохраняется…' : dirty ? 'Есть изменения' : 'Сохранено'}</span>
-}
-
 export function ActionBar({ children }: { children: React.ReactNode }) {
-	const ref = useRef<HTMLDivElement>(null)
-	const [stuck, setStuck] = useState(false)
-	useEffect(() => {
-		const element = ref.current!
-		const update = () => {
-			if (!element.getClientRects().length) return
-			const top = parseFloat(getComputedStyle(element).top) || 0
-			setStuck(element.getBoundingClientRect().top <= top + 1)
-		}
-		window.addEventListener('scroll', update, { passive: true }); window.addEventListener('resize', update)
-		const observer = new ResizeObserver(update); observer.observe(element)
-		update()
-		return () => { observer.disconnect(); window.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
-	}, [])
-	useLayoutEffect(() => {
-		const element = ref.current!
-		const buttons = [...element.querySelectorAll<HTMLElement>('.action-buttons > button')]
-		const before = buttons.map(button => button.getBoundingClientRect())
-		element.classList.toggle('action-bar-stuck', stuck)
-		if (document.documentElement.dataset.motion !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) buttons.forEach((button, index) => {
-			const after = button.getBoundingClientRect(), dx = before[index].x - after.x
-			if (dx) button.animate([{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }], { duration: 240, easing: 'ease-out' })
-		})
-	}, [stuck])
-	return <div ref={ref} className="action-bar"><div className="action-buttons">{children}</div></div>
+	return <div className="action-bar"><div className="action-buttons">{children}</div></div>
 }
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon; variant?: string; loading?: boolean }

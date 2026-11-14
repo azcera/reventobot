@@ -257,6 +257,7 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 	}, [target, mode])
 	const saveButton = <div ref={saveElement} className="relative z-30 mx-auto w-fit max-w-full">{footer}</div>
 	return <div ref={workspace} className={`editor-workspace grid gap-4 editor-mode-${mode}`}>
+		{footer && <div className="editor-save-home">{target ? createPortal(saveButton, target) : saveButton}</div>}
 		<div className="editor-tabs" role="tablist" aria-label="Режим редактора" title="Переключить режим: Alt+Q" aria-keyshortcuts="Alt+Q" onKeyDown={event => {
 			if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
 			event.preventDefault()
@@ -267,6 +268,5 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 		</div>
 		<div role="tabpanel" id={`${id}-edit-panel`} aria-labelledby={`${id}-edit-tab`} hidden={mode !== 'edit'}>{children}</div>
 		{mode === 'preview' && <div role="tabpanel" id={`${id}-preview-panel`} aria-labelledby={`${id}-preview-tab`}>{preview}</div>}
-		{footer && <div className="editor-save-home">{target ? createPortal(saveButton, target) : saveButton}</div>}
 	</div>
 }

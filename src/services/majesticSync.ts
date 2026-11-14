@@ -128,7 +128,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, readDi
 		if (item.busy) throw problem(409, 'Синхронизация уже выполняется.')
 		item.busy = true
 		try {
-			await audit(actor, 'majestic.' + kind + '.request', guild.id)
+			if (kind !== 'sync') await audit(actor, 'majestic.' + kind + '.request', guild.id)
 			item.state.run = { id: randomUUID(), kind, status: 'running', startedAt: now(), total: 0, completed: 0, results: [], stopRequested: false }
 			await save(guild.id, item)
 		} catch (caught) {
@@ -147,7 +147,7 @@ function createMajesticSync({ pool, store, env = process.env, readFamily, readDi
 				item.state.run!.finishedAt = now()
 				try {
 					await save(guild.id, item)
-					await audit(actor, 'majestic.' + kind + '.result', guild.id, { runId: item.state.run!.id, status: item.state.run!.status, completed: item.state.run!.completed })
+					await audit(actor, kind === 'sync' ? 'majestic.sync' : 'majestic.' + kind + '.result', guild.id, { runId: item.state.run!.id, status: item.state.run!.status, completed: item.state.run!.completed })
 				} catch (caught) {
 			const error = getError(caught); logFailure('finalize.' + kind, guild.id, error); item.state.run!.status = 'failed'; item.state.run!.error = 'Не удалось сохранить результат в базе. Проверьте Discord перед повторным запуском.' }
 				item.busy = false

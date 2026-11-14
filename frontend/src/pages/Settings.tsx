@@ -2,7 +2,7 @@ import type { Config, Resources, SettingField, SettingValue, SettingsDraft, Role
 import { errorMessage } from '../types'
 import React, { useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
-import { ActionBar, SaveStatus, Button, Field, IconButton, Panel, useModal } from '../components/ui'
+import { ActionBar, Button, Field, IconButton, Panel, useModal } from '../components/ui'
 
 function MoveActions({ index, length, onMove, onRemove }: { index: number; length: number; onMove(direction: number): void; onRemove(): void }) {
 	return <div className="flex shrink-0 gap-1"><IconButton icon={ArrowUp} label="Повысить приоритет" disabled={index === 0} onClick={() => onMove(-1)} /><IconButton icon={ArrowDown} label="Понизить приоритет" disabled={index === length - 1} onClick={() => onMove(1)} /><IconButton icon={Trash2} label="Удалить из настройки" onClick={onRemove} /></div>
@@ -61,5 +61,5 @@ export function Settings({ config, setConfig, resources, draft, setDraft, api, r
 			: field.type === 'boolean' ? <label key={field.key} className="toggle-row"><span className="text-sm">{field.label}</span><input type="checkbox" role="switch" checked={Boolean(draft[field.key])} onChange={event => set(field.key, event.target.checked)} /><span className="toggle-track" aria-hidden="true" /></label>
 				: field.type === 'color' ? <Field key={field.key} label={field.label}><input type="color" value={String(draft[field.key] ?? '')} onChange={event => set(field.key, event.target.value)} /></Field>
 					: <OrderedChoices key={field.key} field={field} value={draft[field.key]} onChange={value => set(field.key, value)} resources={resources} hiddenRoles={access ? String(config.settings.find(item => item.key === 'ADMIN_ROLES')?.value ?? '').split(',').map(id => id.trim()).filter(Boolean) : []} />)}
-	</div></details>)}<ActionBar><SaveStatus dirty={fieldsForPage.some(field => JSON.stringify(field.value) !== JSON.stringify(draft[field.key]))} /><Button type="submit" variant="primary" icon={Save}>Сохранить настройки</Button></ActionBar></form>
+	</div></details>)}<ActionBar><Button type="submit" variant="primary" icon={Save}>Сохранить настройки</Button></ActionBar></form>
 }
