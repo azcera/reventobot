@@ -82,7 +82,7 @@ export function useMotion(enabled: boolean) {
 			root.dataset.effects = motion && (pointer.matches || mouseSeen) ? 'on' : 'off'
 			if (motion) {
 				lenis = new Lenis({ autoRaf: false, lerp: .09, syncTouch: false, autoToggle: true,
-					prevent: node => Boolean(node.closest('dialog, .sidebar, .role-picker, .mention-menu, textarea, [contenteditable], pre')) })
+					prevent: node => Boolean(node.closest('dialog, .sidebar, .role-picker, .mention-menu, textarea, pre')) })
 				lenis.on('virtual-scroll', wakeScroll)
 			}
 		}

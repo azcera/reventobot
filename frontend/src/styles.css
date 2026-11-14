@@ -421,9 +421,10 @@ details.panel > summary::-webkit-details-marker { display: none; }
 textarea, [contenteditable] { resize: none !important; }
 textarea { overflow-y: hidden; }
 input:not([type='checkbox']):not([type='radio']):focus-visible, textarea:focus-visible, select:focus-visible, [contenteditable]:focus-visible { outline: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line)); outline-offset: 0; box-shadow: none; border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
-.button, .icon-button, .editor-tabs button, .sidebar nav a, summary, .role-chip, .editor-chip { transition: scale .18s ease, background-color .18s, color .18s, border-color .18s; }
+.button, .icon-button, .editor-tabs button, .sidebar nav a, summary, details.panel, .role-chip, .editor-chip { transition: scale .18s ease, background-color .18s, color .18s, border-color .18s; }
 @media (hover: hover) and (pointer: fine) {
-	.button:not(:disabled):hover, .icon-button:not(:disabled):hover, .editor-tabs button:hover, summary:hover, .role-chip:hover, .editor-chip:hover { scale: 1.035; }
+	.button:not(:disabled):hover, .icon-button:not(:disabled):hover, .editor-tabs button:hover, summary:not(details.panel > summary):hover, .role-chip:hover, .editor-chip:hover { scale: 1.035; }
+	details.panel:has(> summary:hover) { scale: 1.008; }
 	.sidebar nav a:hover { scale: 1.015; }
 }
 @media (min-width: 1024px) {

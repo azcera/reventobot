@@ -188,6 +188,9 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 	const [mode, setMode] = useState('edit')
 	const workspace = useRef<HTMLDivElement>(null)
 	const [saveSlot, setSaveSlot] = useState<HTMLElement | null>(null)
+	const saveElement = useRef<HTMLDivElement>(null)
+	const saveTarget = useRef<HTMLElement | null>(null)
+	const savePosition = useRef<DOMRect | null>(null)
 	const [preview, setPreview] = useState<React.ReactNode>(null)
 	const previousKey = useRef(resetKey)
 	const id = useId()
@@ -227,6 +230,7 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 				const anchor = toolbar.previousElementSibling!.getBoundingClientRect()
 				if (anchor.top <= top && toolbar.parentElement!.getBoundingClientRect().bottom > top + 8) slot = toolbar.querySelector('.toolbar-save-slot')
 			}
+			if (slot !== saveTarget.current) savePosition.current = saveElement.current?.getBoundingClientRect() || null
 			setSaveSlot(previous => previous === slot ? previous : slot)
 		}
 		const schedule = () => { if (!frame) frame = requestAnimationFrame(update) }
@@ -237,6 +241,21 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 		return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule) }
 	}, [mode, resetKey, Boolean(footer)])
 	const target = mode === 'edit' && saveSlot?.isConnected ? saveSlot : null
+	useLayoutEffect(() => {
+		saveTarget.current = target
+		const element = saveElement.current, before = savePosition.current
+		savePosition.current = null
+		if (!element || !before || mode !== 'edit' || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+		const after = element.getBoundingClientRect()
+		// Keep the flight visible when the original button is outside the viewport.
+		const top = Math.max(-before.height, Math.min(before.top, window.innerHeight))
+		const animation = element.animate([
+			{ transform: `translate(${before.left - after.left}px, ${top - after.top}px)` },
+			{ transform: 'translate(0, 0)' }
+		], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+		return () => animation.cancel()
+	}, [target, mode])
+	const saveButton = <div ref={saveElement} className="relative z-30 mx-auto w-fit max-w-full">{footer}</div>
 	return <div ref={workspace} className={`editor-workspace grid gap-4 editor-mode-${mode}`}>
 		<div className="editor-tabs" role="tablist" aria-label="Режим редактора" title="Переключить режим: Alt+Q" aria-keyshortcuts="Alt+Q" onKeyDown={event => {
 			if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
@@ -248,6 +267,6 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 		</div>
 		<div role="tabpanel" id={`${id}-edit-panel`} aria-labelledby={`${id}-edit-tab`} hidden={mode !== 'edit'}>{children}</div>
 		{mode === 'preview' && <div role="tabpanel" id={`${id}-preview-panel`} aria-labelledby={`${id}-preview-tab`}>{preview}</div>}
-		{footer && <div className="editor-save-home">{target ? createPortal(footer, target) : footer}</div>}
+		{footer && <div className="editor-save-home">{target ? createPortal(saveButton, target) : saveButton}</div>}
 	</div>
 }

@@ -477,6 +477,15 @@ test('glass panels track light without moving the editor', async ({ page }, test
 	await expect.poll(() => panel.evaluate(el => getComputedStyle(el, '::before').opacity)).toBe('1')
 })
 
+test('settings category hover scales the container with its heading', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await setup(page, 'settings')
+	const panel = page.locator('.page-view:not([hidden]) details.panel').first()
+	await panel.locator('summary').hover()
+	await expect(panel).toHaveCSS('scale', '1.008')
+	await expect(panel.locator('summary')).toHaveCSS('scale', 'none')
+})
+
 test('smooth scrolling is progressive and stops with reduced motion', async ({ page }, testInfo) => {
 	test.skip(testInfo.project.name !== 'desktop')
 	await setup(page, 'templates', Array.from({ length: 120 }, (_, i) => `Строка ${i}`).join('\n'))
@@ -486,7 +495,8 @@ test('smooth scrolling is progressive and stops with reduced motion', async ({ p
 		;(window as any).__recordScroll = () => (window as any).__scrollPositions.push(scrollY)
 		window.addEventListener('scroll', (window as any).__recordScroll)
 	})
-	await page.mouse.move(1350, 200)
+	const editor = await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).boundingBox()
+	await page.mouse.move(editor!.x + editor!.width / 2, editor!.y + 24)
 	await page.mouse.wheel(0, 700)
 	await expect.poll(() => page.evaluate(() => new Set((window as any).__scrollPositions as number[]).size)).toBeGreaterThan(4)
 	const positions = await page.evaluate(() => { window.removeEventListener('scroll', (window as any).__recordScroll); return (window as any).__scrollPositions as number[] })
