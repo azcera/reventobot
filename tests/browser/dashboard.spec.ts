@@ -199,7 +199,7 @@ test('typing and Cyrillic undo keep visible caret and toolbar stable', async ({ 
 
 test('image and section dialogs keep independent fields and source when edited or deleted', async ({ page }) => {
 	const requests = await setup(page, 'templates', 'Текст')
-	await page.getByRole('button', { name: 'Инструменты форматирования' }).click()
+	if (await page.getByRole('button', { name: 'Инструменты форматирования' }).isVisible()) await page.getByRole('button', { name: 'Инструменты форматирования' }).click()
 	const editor = page.getByRole('textbox', { name: 'Текст сообщения' })
 	await editor.click(); await page.keyboard.press('End')
 	await page.getByRole('button', { name: 'Изображение', exact: true }).click()
@@ -536,7 +536,7 @@ test('glass transmits the scene and actually blurs the backdrop', async ({ page 
 	for (const theme of ['Тёмная', 'Светлая']) {
 		await page.getByRole('radio', { name: theme, exact: true }).check()
 		const alpha = await panel.evaluate(el => { const color = getComputedStyle(el).backgroundColor; return color.startsWith('rgba') ? Number(color.match(/([.\d]+)\)$/)?.[1]) : 1 })
-		if (theme === 'Тёмная') { expect(alpha).toBeGreaterThan(.85); expect(alpha).toBeLessThan(1) }
+		if (theme === 'Тёмная') { expect(alpha).toBeGreaterThan(.35); expect(alpha).toBeLessThan(.65) }
 		else expect(alpha).toBeLessThan(.25)
 		await page.locator('.ambient-scene').evaluate(el => {
 			el.style.backgroundImage = 'repeating-linear-gradient(90deg, #21324f 0 12px, #b6c0d8 12px 24px)'
@@ -678,7 +678,7 @@ test('pointer paints stay local and are capped at 30 Hz', async ({ page }, testI
 })
 
 
-test('dashboard shortcuts, compact tools and centered saving work', async ({ page }) => {
+test('dashboard shortcuts, compact tools and centered saving work', async ({ page }, testInfo) => {
 	await setup(page, 'overview')
 	await expect(page.getByRole('heading', { name: 'Центр управления', exact: true })).toBeVisible()
 	await page.keyboard.down('Alt')
@@ -686,16 +686,17 @@ test('dashboard shortcuts, compact tools and centered saving work', async ({ pag
 	await page.keyboard.press('Digit2')
 	await page.keyboard.up('Alt')
 	await expect(page.getByRole('heading', { name: 'Шаблоны сообщений', exact: true })).toBeVisible()
-	await expect(page.getByRole('button', { name: 'Изображение', exact: true })).toBeHidden()
-	await page.getByRole('button', { name: 'Инструменты форматирования' }).click()
+	if (testInfo.project.name === 'mobile') await expect(page.getByRole('button', { name: 'Изображение', exact: true })).toBeHidden()
+	else await expect(page.getByRole('button', { name: 'Инструменты форматирования' })).toBeHidden()
+	if (await page.getByRole('button', { name: 'Инструменты форматирования' }).isVisible()) await page.getByRole('button', { name: 'Инструменты форматирования' }).click()
 	await expect(page.getByRole('button', { name: 'Изображение', exact: true })).toBeVisible()
-	await page.keyboard.press('Alt+KeyP')
+	await page.keyboard.press('Alt+KeyQ')
 	await expect(page.getByRole('tab', { name: 'Просмотр', exact: true })).toHaveAttribute('aria-selected', 'true')
 	await expect(page.locator('.editor-footer button')).toHaveCount(1)
 	const button = await page.getByRole('button', { name: 'Сохранить шаблон' }).boundingBox()
 	const workspace = await page.locator('.page-view:not([hidden]) .editor-workspace').boundingBox()
 	expect(Math.abs(button!.x + button!.width / 2 - workspace!.x - workspace!.width / 2)).toBeLessThan(2)
-	await page.keyboard.press('Alt+KeyP')
+	await page.keyboard.press('Alt+KeyQ')
 	await expect(page.getByRole('textbox', { name: 'Текст сообщения' })).toBeVisible()
 })
 
@@ -732,4 +733,45 @@ test('tooltips stay inside viewport and logout does not overflow', async ({ page
 	expect(tooltip!.x + tooltip!.width).toBeLessThanOrEqual(viewport.width)
 	expect(tooltip!.y + tooltip!.height).toBeLessThanOrEqual(viewport.height)
 	expect(await page.locator('.sidebar').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+})
+
+
+test('saving joins the sticky toolbar only while editing', async ({ page }, testInfo) => {
+	const requests = await setup(page, 'templates', Array.from({ length: 140 }, (_, i) => `Строка ${i}`).join('\n'))
+	await page.getByRole('radio', { name: 'Тёмная', exact: true }).check()
+	const toolbar = page.getByRole('toolbar', { name: 'Форматирование Markdown' })
+	const save = page.getByRole('button', { name: 'Сохранить шаблон', exact: true })
+	const home = page.locator('.page-view:not([hidden]) .editor-save-home')
+	await expect(home.getByRole('button', { name: 'Сохранить шаблон' })).toBeVisible()
+	if (testInfo.project.name === 'desktop') {
+		await expect(toolbar.getByRole('button', { name: 'Изображение', exact: true })).toBeVisible()
+		await expect(toolbar.getByRole('button', { name: 'Инструменты форматирования' })).toBeHidden()
+	}
+	await page.evaluate(() => window.scrollTo({ top: 1000, behavior: 'instant' }))
+	await expect(toolbar.getByRole('button', { name: 'Сохранить шаблон' })).toBeVisible()
+	await expect(save).toHaveCount(1)
+	await expect(toolbar).toHaveCSS('border-radius', '0px')
+	await expect.poll(async () => (await toolbar.boundingBox())!.y).toBeLessThan(2)
+	await page.screenshot({ path: `output/dashboard-review/${testInfo.project.name}-joined-toolbar.png` })
+	await page.evaluate(() => window.scrollBy({ top: -80, behavior: 'instant' }))
+	await expect(page.locator('.topbar')).toHaveClass(/topbar-visible/)
+	await expect.poll(async () => (await toolbar.boundingBox())!.y).toBeGreaterThanOrEqual(71)
+	await page.keyboard.press('Alt+KeyQ')
+	await expect(page.getByRole('tab', { name: 'Просмотр', exact: true })).toHaveAttribute('aria-selected', 'true')
+	await expect(home.getByRole('button', { name: 'Сохранить шаблон' })).toBeVisible()
+	const button = await save.boundingBox(), workspace = await page.locator('.page-view:not([hidden]) .editor-workspace').boundingBox()
+	expect(Math.abs(button!.x + button!.width / 2 - workspace!.x - workspace!.width / 2)).toBeLessThan(2)
+	await page.screenshot({ path: `output/dashboard-review/${testInfo.project.name}-preview-save.png` })
+	await page.keyboard.press('Alt+KeyQ')
+	await expect(toolbar.getByRole('button', { name: 'Сохранить шаблон' })).toBeVisible()
+	await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+	await expect(home.getByRole('button', { name: 'Сохранить шаблон' })).toBeVisible()
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	await editor.focus()
+	await page.keyboard.press('Control+Home')
+	await page.keyboard.type('Правка ')
+	await page.evaluate(() => window.scrollTo({ top: 1000, behavior: 'instant' }))
+	await expect(toolbar.getByRole('button', { name: 'Сохранить шаблон' })).toBeVisible()
+	await save.click()
+	await expect.poll(() => requests.find(request => request.path === 'templates')?.body?.values?.['promotion.document']).toContain('Правка ')
 })

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import type { LucideIcon } from 'lucide-react'
 import type { Resources } from '../types'
 import { errorMessage } from '../types'
@@ -81,6 +82,13 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 	const [query, setQuery] = useState<ReturnType<typeof queryAt>>(null), [selected, setSelected] = useState(0)
 	const [renderVersion, updateHistory] = useState(0)
 	const [formatting, setFormatting] = useState(false)
+	const [desktop, setDesktop] = useState(() => matchMedia('(min-width: 1024px)').matches)
+	useEffect(() => {
+		const media = matchMedia('(min-width: 1024px)')
+		const change = () => setDesktop(media.matches)
+		media.addEventListener('change', change)
+		return () => media.removeEventListener('change', change)
+	}, [])
 	const modal = useModal(), found = suggestions(query, resources)
 	function remember() { const [start, end] = caretRange(ref.current!); lastSelection.current = [start, end]; stack.current[position.current] = { value, start, end } }
 	function change(next: string, start: number, end = start) {
@@ -143,12 +151,14 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 		replace(query.start, query.end, (query.kind === '@' ? `<@&${item.id}>` : `<#${item.id}>`) + ' ')
 	}
 	return <div className="relative min-w-0">
+		<div className="toolbar-anchor" aria-hidden="true" />
 		<div className="editor-toolbar" role="toolbar" aria-label="Форматирование Markdown" onPointerDown={event => event.preventDefault()}>
 			<IconButton icon={Undo2} label="Отменить (Ctrl+Z)" disabled={!position.current} onClick={() => restore(false)} />
 			<IconButton icon={Redo2} label="Повторить (Ctrl+Shift+Z)" disabled={position.current >= stack.current.length - 1} onClick={() => restore(true)} />
-			<IconButton icon={SlidersHorizontal} label="Инструменты форматирования" aria-expanded={formatting} onClick={() => setFormatting(value => !value)} /><div className="formatting-tools" hidden={!formatting}>
+			<IconButton className="formatting-toggle lg:hidden" icon={SlidersHorizontal} label="Инструменты форматирования" aria-expanded={formatting} onClick={() => setFormatting(value => !value)} /><div className="formatting-tools" hidden={!desktop && !formatting}>
 			{[...formats, ...(components ? componentFormats : [])].map(([Icon, label, ...args]) => <IconButton key={label} icon={Icon} label={label} onClick={() => Icon === Link ? openTag('link') : Icon === Image ? openTag('image') : Icon === PanelRight ? openTag('section') : insert(...args)} />)}
 			</div>
+			<div className="toolbar-save-slot" />
 		</div>
 		<div ref={ref} id={id} role="textbox" aria-label={props['aria-label'] || 'Текст сообщения'} aria-describedby={props['aria-describedby']} aria-multiline="true" contentEditable={!props.disabled} suppressContentEditableWarning className="markdown-source" spellCheck={false}
 			aria-autocomplete="list" aria-controls={found.length ? listId : undefined} aria-activedescendant={found.length ? `${listId}-${selected}` : undefined}
@@ -176,6 +186,8 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 
 export function EditorWorkspace({ children, renderPreview, footer, resetKey }: { children: React.ReactNode; renderPreview(): React.ReactNode; footer: React.ReactNode; resetKey: string | number }) {
 	const [mode, setMode] = useState('edit')
+	const workspace = useRef<HTMLDivElement>(null)
+	const [saveSlot, setSaveSlot] = useState<HTMLElement | null>(null)
 	const [preview, setPreview] = useState<React.ReactNode>(null)
 	const previousKey = useRef(resetKey)
 	const id = useId()
@@ -192,7 +204,7 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 	}
 	useEffect(() => {
 		const toggle = (event: KeyboardEvent) => {
-			if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.code !== 'KeyP' || event.repeat) return
+			if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.code !== 'KeyQ' || event.repeat) return
 			const tabs = document.getElementById(`${id}-edit-tab`)
 			if (!tabs?.getClientRects().length || tabs.closest('[hidden]') || tabs.closest('fieldset')?.disabled) return
 			const dialog = document.querySelector('dialog[open]')
@@ -202,8 +214,31 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 		window.addEventListener('keydown', toggle)
 		return () => window.removeEventListener('keydown', toggle)
 	})
-	return <div className="editor-workspace grid gap-4">
-		<div className="editor-tabs" role="tablist" aria-label="Режим редактора" title="Переключить режим: Alt+P" aria-keyshortcuts="Alt+P" onKeyDown={event => {
+	useEffect(() => {
+		if (mode !== 'edit' || !footer) { setSaveSlot(null); return }
+		const root = workspace.current!
+		let frame = 0
+		const update = () => {
+			frame = 0
+			let slot: HTMLElement | null = null
+			for (const toolbar of root.querySelectorAll<HTMLElement>('.editor-toolbar')) {
+				if (toolbar.closest('.editor-workspace') !== root || !toolbar.getClientRects().length) continue
+				const top = parseFloat(getComputedStyle(toolbar).top) || 0
+				const anchor = toolbar.previousElementSibling!.getBoundingClientRect()
+				if (anchor.top <= top && toolbar.parentElement!.getBoundingClientRect().bottom > top + 8) slot = toolbar.querySelector('.toolbar-save-slot')
+			}
+			setSaveSlot(previous => previous === slot ? previous : slot)
+		}
+		const schedule = () => { if (!frame) frame = requestAnimationFrame(update) }
+		const observer = new ResizeObserver(schedule)
+		observer.observe(root)
+		window.addEventListener('scroll', schedule, { passive: true }); window.addEventListener('resize', schedule)
+		schedule()
+		return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule) }
+	}, [mode, resetKey, Boolean(footer)])
+	const target = mode === 'edit' && saveSlot?.isConnected ? saveSlot : null
+	return <div ref={workspace} className={`editor-workspace grid gap-4 editor-mode-${mode}`}>
+		<div className="editor-tabs" role="tablist" aria-label="Режим редактора" title="Переключить режим: Alt+Q" aria-keyshortcuts="Alt+Q" onKeyDown={event => {
 			if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
 			event.preventDefault()
 			const next = event.key === 'Home' ? 'edit' : event.key === 'End' ? 'preview' : mode === 'edit' ? 'preview' : 'edit'
@@ -213,6 +248,6 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 		</div>
 		<div role="tabpanel" id={`${id}-edit-panel`} aria-labelledby={`${id}-edit-tab`} hidden={mode !== 'edit'}>{children}</div>
 		{mode === 'preview' && <div role="tabpanel" id={`${id}-preview-panel`} aria-labelledby={`${id}-preview-tab`}>{preview}</div>}
-		{footer}
+		{footer && <div className="editor-save-home">{target ? createPortal(footer, target) : footer}</div>}
 	</div>
 }
