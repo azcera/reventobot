@@ -39,8 +39,8 @@ export function useMotion(enabled: boolean) {
 			surface.style.setProperty('--light-y', `${Math.round(y - rect.top)}px`)
 			surface.style.setProperty('--light-angle', `${Math.round(115 + (x - rect.left) / rect.width * 35 - (y - rect.top) / rect.height * 20)}deg`)
 			if (tilt) {
-				tilt.style.setProperty('--tilt-x', `${Math.max(-12, Math.min(12, -(y - rect.top - rect.height / 2) / rect.height * 24)).toFixed(1)}deg`)
-				tilt.style.setProperty('--tilt-y', `${Math.max(-12, Math.min(12, (x - rect.left - rect.width / 2) / rect.width * 24)).toFixed(1)}deg`)
+				tilt.style.setProperty('--tilt-x', `${Math.max(-4, Math.min(4, -(y - rect.top - rect.height / 2) / rect.height * 8)).toFixed(1)}deg`)
+				tilt.style.setProperty('--tilt-y', `${Math.max(-4, Math.min(4, (x - rect.left - rect.width / 2) / rect.width * 8)).toFixed(1)}deg`)
 			}
 		}
 		const move = (event: PointerEvent) => {
@@ -49,10 +49,11 @@ export function useMotion(enabled: boolean) {
 			mouseSeen = true
 			if (root.dataset.effects !== 'on') root.dataset.effects = 'on'
 			x = event.clientX; y = event.clientY
-			const next = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-tilt], .panel, .overview-hero, .binding-strip, .login-card') : null
+			const inside = tilt && rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+			const next = inside ? surface : event.target instanceof Element ? event.target.closest<HTMLElement>('[data-tilt], .panel, .overview-hero, .binding-strip, .login-card') : null
 			if (next !== surface) {
 				clearSurface(); surface = next
-				if (surface) { rect = surface.getBoundingClientRect(); surface.classList.add('is-lit'); tilt = surface.hasAttribute('data-tilt') ? surface : null }
+				if (surface) { rect = surface.getBoundingClientRect(); if (surface.hasAttribute('data-tilt')) rect = new DOMRect(rect.left + (rect.width - surface.offsetWidth) / 2, rect.top + (rect.height - surface.offsetHeight) / 2, surface.offsetWidth, surface.offsetHeight); surface.classList.add('is-lit'); tilt = surface.hasAttribute('data-tilt') ? surface : null }
 			}
 			if (!frame) frame = requestAnimationFrame(paint)
 		}

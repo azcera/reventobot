@@ -16,14 +16,14 @@
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--bg: #0c0d16; --panel: #181b2b; --surface: #24283c; --input: #10131f;
+	--bg: #06070b; --panel: #10121b; --surface: #191d29; --input: #0a0c13;
 	--text: #f3f2fa; --muted: #b2b7cd; --line: #3c4156;
 	--brand: #ef9cde; --brand-hover: #f7bce9; --brand-soft: #3c2c46; --brand-ink: #30132c;
 	--danger: #ff9caf; --danger-color: #732b43; --danger-hover: #8a3550;
-	--cool: #91c8f1; --glass: #ffffff0f; --glass-border: #ffffff30;
-	--pink-haze: #a84cbd57; --blue-haze: #426bdc57; --shadow: 0 24px 70px #00000045;
-	--orb-pink: #883a9a; --orb-blue: #3151ad; --sheen: #ffffff12; --control: #151828d9;
-	--ribbon-edge: #ffffff36; --ribbon-face: #ffffff07; --glass-shell: #15182861; --specular: #ffffff55;
+	--cool: #91c8f1; --glass: #10121be8; --glass-border: #ffffff20;
+	--pink-haze: #a84cbd24; --blue-haze: #426bdc24; --shadow: 0 24px 70px #00000045;
+	--orb-pink: #883a9a; --orb-blue: #3151ad; --sheen: #ffffff12; --control: #0e111bef;
+	--ribbon-edge: #ffffff36; --ribbon-face: #ffffff07; --glass-shell: #090c14e8; --specular: #ffffff55;
 	--scrim: #090d21aa;
 }
 :root[data-theme='light'] {
@@ -306,11 +306,11 @@ input, select, textarea, [contenteditable] { scroll-margin-top: 180px; scroll-ma
 :root[data-effects='on'][data-cursor='on'] .cursor-aura { opacity: .18; }
 
 .panel, .metric, .quick-link, .overview-hero, .binding-strip, .login-card { position: relative; isolation: isolate; border-color: var(--glass-border); box-shadow: inset 0 1px 0 var(--sheen), var(--shadow); }
-.panel::before, [data-tilt]::before, .overview-hero::before, .binding-strip::before, .login-card::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: .35; background: radial-gradient(ellipse 360px 220px at var(--light-x, 20%) var(--light-y, 0%), var(--sheen), transparent 80%), linear-gradient(var(--light-angle, 125deg), transparent 25%, var(--sheen) 45%, transparent 62%); transition: opacity .5s; }
+.panel::before, [data-tilt]::before, .overview-hero::before, .binding-strip::before, .login-card::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: .35; background: none; transition: opacity .5s; }
 .panel::after, [data-tilt]::after, .overview-hero::after, .binding-strip::after, .login-card::after { content: ''; position: absolute; inset: 0; z-index: 2; padding: 1px; border-radius: inherit; pointer-events: none; opacity: .45; background: radial-gradient(240px circle at var(--light-x, 20%) var(--light-y, 0%), var(--specular), transparent 100%), linear-gradient(var(--light-angle, 125deg), var(--specular), transparent 38%, transparent 65%, var(--sheen)); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude; transition: opacity .5s; }
 .is-lit::before { opacity: 1; }.is-lit::after { opacity: .8; }
 .panel-heading { border-color: color-mix(in srgb, var(--line) 65%, transparent); }
-[data-tilt] { transform: perspective(680px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform .65s var(--ease-out), border-color .3s, box-shadow .3s; }
+[data-tilt] { transform: perspective(1100px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform .65s var(--ease-out), border-color .3s, box-shadow .3s; }
 [data-tilt].is-lit { transition: transform .12s var(--ease-out), border-color .3s, box-shadow .3s; border-color: color-mix(in srgb, var(--brand) 65%, var(--glass-border)); box-shadow: inset 0 1px 0 var(--sheen), 0 22px 60px color-mix(in srgb, var(--brand) 15%, transparent); }
 .metric { min-height: 132px; padding: 24px; }
 .metric strong { font-size: 23px; letter-spacing: -.04em; }
@@ -398,3 +398,35 @@ details.panel > summary::-webkit-details-marker { display: none; }
 }
 
 :root[data-reduced-motion='on'] .appearance-controls .icon-tooltip::after { content: 'Движение ограничено настройками системы'; display: block; max-width: 210px; margin-top: 4px; color: var(--muted); }
+
+/* Dashboard interaction and compact editor controls. */
+.topbar { background-color: var(--panel); position: sticky; top: 0; z-index: 29; transform: translateY(-100%); transition: transform .18s ease; }
+.topbar-visible { transform: translateY(0); }
+.editor-workspace > .editor-footer { justify-content: center; width: fit-content; max-width: 100%; justify-self: center; padding: 0; border: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.editor-workspace:has(> .editor-footer) .editor-toolbar { top: 68px; }
+.main-content:has(.topbar-visible) .editor-footer { top: 84px; }
+.main-content:has(.topbar-visible) .editor-toolbar { top: 140px; }
+.editor-toolbar { background-color: var(--panel); }
+.formatting-tools { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; padding-top: 4px; border-top: 1px solid var(--line); }
+.floating-tooltip { position: fixed; inset: auto; display: block; margin: 0; z-index: 100; width: max-content; max-width: min(240px, calc(100vw - 16px)); padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--input); color: var(--text); font: 11px/1.5 var(--font-sans); text-align: center; overflow-wrap: anywhere; pointer-events: none; box-shadow: var(--shadow); }
+.floating-tooltip::backdrop { display: none; }
+.scroll-top { position: fixed; right: 24px; bottom: 24px; z-index: 30; width: 42px; height: 42px; background: var(--panel); box-shadow: var(--shadow); }
+.sidebar nav a { position: relative; }
+.sidebar nav a > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.show-shortcuts .sidebar nav a { padding-right: 36px; }
+.nav-shortcut { position: absolute; right: 8px; background: var(--panel); margin-left: auto; min-width: 20px; padding: 1px 4px; border: 1px solid var(--line); border-radius: 5px; font-size: 10px; line-height: 1.5; text-align: center; opacity: 0; transition: opacity .15s; }
+.show-shortcuts .nav-shortcut { opacity: 1; }
+textarea, [contenteditable] { resize: none !important; }
+textarea { overflow-y: hidden; }
+input:not([type='checkbox']):not([type='radio']):focus-visible, textarea:focus-visible, select:focus-visible, [contenteditable]:focus-visible { outline: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line)); outline-offset: 0; box-shadow: none; border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+.button, .icon-button, .editor-tabs button, .sidebar nav a, summary, .role-chip, .editor-chip { transition: scale .18s ease, background-color .18s, color .18s, border-color .18s; }
+@media (hover: hover) and (pointer: fine) {
+	.button:not(:disabled):hover, .icon-button:not(:disabled):hover, .editor-tabs button:hover, summary:hover, .role-chip:hover, .editor-chip:hover { scale: 1.035; }
+	.sidebar nav a:hover { scale: 1.015; }
+}
+@media (min-width: 1024px) {
+	.theme-label { display: block; position: absolute; top: calc(100% + 12px); right: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--input); opacity: 0; transform: translateY(-4px); transition: opacity .18s, transform .18s; white-space: nowrap; }
+	.theme-switch label:hover .theme-label, .theme-switch label:has(:focus-visible) .theme-label { opacity: 1; transform: translateY(0); }
+	.theme-switch label > span { gap: 0; }
+}
+@media (max-width: 639px) { .scroll-top { right: 16px; bottom: 16px; } }

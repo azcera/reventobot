@@ -1,5 +1,6 @@
+import { createPortal } from 'react-dom'
 import type { LucideIcon } from 'lucide-react'
-import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AlertCircle, BookOpen, Check, CheckCircle2, Info, LoaderCircle, X } from 'lucide-react'
 
 export const BusyContext = createContext(false)
@@ -15,10 +16,44 @@ export function Button({ icon: Icon, children, variant = 'secondary', className 
 	</button>
 }
 
-export function IconButton({ icon: Icon, label, className = '', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string }) {
-	return <button type="button" aria-label={label} className={`icon-button group ${className}`} {...props}>
-		<Icon aria-hidden="true" /><span role="tooltip" className="icon-tooltip">{label}</span>
-	</button>
+function Tooltip({ anchor, label, id, close }: { anchor: HTMLButtonElement; label: string; id: string; close(): void }) {
+	const ref = useRef<HTMLSpanElement>(null)
+	useLayoutEffect(() => {
+		const tooltip = ref.current!
+		tooltip.showPopover?.()
+		const rect = anchor.getBoundingClientRect(), bounds = tooltip.getBoundingClientRect()
+		tooltip.style.left = `${Math.max(8, Math.min(innerWidth - bounds.width - 8, rect.left + rect.width / 2 - bounds.width / 2))}px`
+		tooltip.style.top = `${Math.max(8, Math.min(innerHeight - bounds.height - 8, rect.top > bounds.height + 16 ? rect.top - bounds.height - 8 : rect.bottom + 8))}px`
+		window.addEventListener('scroll', close, true); window.addEventListener('resize', close)
+		return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close) }
+	}, [anchor, close])
+	return createPortal(<span ref={ref} id={id} popover="manual" role="tooltip" className="floating-tooltip">{label}</span>, document.body)
+}
+
+export function IconButton({ icon: Icon, label, className = '', onPointerEnter, onPointerLeave, onPointerDown, onFocus, onBlur, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string }) {
+	const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null)
+	const id = useId()
+	const close = useCallback(() => setAnchor(null), [])
+	return <><button type="button" aria-label={label} aria-describedby={anchor ? id : undefined} className={`icon-button group ${className}`} {...props}
+		onPointerEnter={event => { if (event.pointerType !== 'touch') setAnchor(event.currentTarget); onPointerEnter?.(event) }}
+		onPointerLeave={event => { close(); onPointerLeave?.(event) }} onPointerDown={event => { close(); onPointerDown?.(event) }}
+		onFocus={event => { if (event.currentTarget.matches(':focus-visible')) setAnchor(event.currentTarget); onFocus?.(event) }} onBlur={event => { close(); onBlur?.(event) }}>
+		<Icon aria-hidden="true" />
+	</button>{anchor && !props.disabled && <Tooltip anchor={anchor} label={label} id={id} close={close} />}</>
+}
+
+export function AutoTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+	const ref = useRef<HTMLTextAreaElement>(null)
+	useLayoutEffect(() => {
+		const field = ref.current!
+		const resize = () => { if (field.clientWidth) { field.style.height = 'auto'; field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px` } }
+		resize()
+		let width = field.clientWidth
+		const observer = new ResizeObserver(() => { if (width !== field.clientWidth) { width = field.clientWidth; resize() } })
+		observer.observe(field)
+		return () => observer.disconnect()
+	}, [props.value])
+	return <textarea {...props} ref={ref} />
 }
 
 export function Panel({ title, action, children, className = '', ...props }: Omit<React.HTMLAttributes<HTMLElement>, 'title'> & { title?: React.ReactNode; action?: React.ReactNode }) {

@@ -1,11 +1,11 @@
 import type { LucideIcon } from 'lucide-react'
 import type { Resources } from '../types'
 import { errorMessage } from '../types'
-import React, { useId, useLayoutEffect, useRef, useState } from 'react'
-import { Bold, Code, CodeXml, Eye, Heading1, Heading2, Heading3, Image, Italic, Link, List, ListOrdered, Minus, PanelRight, Pilcrow, Quote, Redo2, SeparatorHorizontal, SquareDashed, Strikethrough, TextCursorInput, Underline, Undo2 } from 'lucide-react'
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { Bold, Code, CodeXml, Eye, Heading1, Heading2, Heading3, Image, Italic, Link, List, ListOrdered, Minus, SlidersHorizontal, PanelRight, Pilcrow, Quote, Redo2, SeparatorHorizontal, SquareDashed, Strikethrough, TextCursorInput, Underline, Undo2 } from 'lucide-react'
 import { queryAt, suggestions } from '../lib/mentions'
 import { editorTokens, type EditorToken } from '../lib/editorTokens'
-import { Button, Field, IconButton, useModal } from './ui'
+import { AutoTextarea, Button, Field, IconButton, useModal } from './ui'
 import { DiscordPreview, Markdown } from './DiscordPreview'
 
 type Format = [LucideIcon, string, string, string, string?, boolean?]
@@ -64,7 +64,7 @@ function TagForm({ token, selected, resources, onSubmit, close }: { token: Pick<
 			onSubmit(source); close()
 		} catch (error) { setError(errorMessage(error)) }
 	}}>
-		{token.kind !== 'image' && <Field label={token.kind === 'section' ? 'Текст секции' : 'Текст ссылки'}>{token.kind === 'section' ? <EditorWorkspace resetKey={token.source} footer={null} renderPreview={() => <DiscordPreview><Markdown source={text} /></DiscordPreview>}><MarkdownEditor aria-label="Текст секции" value={text} onChange={setText} resources={resources} components={false} /></EditorWorkspace> : <textarea required value={text} rows={4} onChange={event => setText(event.target.value)} />}</Field>}
+		{token.kind !== 'image' && <Field label={token.kind === 'section' ? 'Текст секции' : 'Текст ссылки'}>{token.kind === 'section' ? <EditorWorkspace resetKey={token.source} footer={null} renderPreview={() => <DiscordPreview><Markdown source={text} /></DiscordPreview>}><MarkdownEditor aria-label="Текст секции" value={text} onChange={setText} resources={resources} components={false} /></EditorWorkspace> : <AutoTextarea required value={text} rows={4} onChange={event => setText(event.target.value)} />}</Field>}
 		{token.kind === 'section' && <Field label="Название кнопки"><input required value={label} maxLength={80} onChange={event => setLabel(event.target.value)} /></Field>}
 		<Field label={token.kind === 'image' ? 'Ссылка на изображение' : token.kind === 'section' ? 'Ссылка кнопки' : 'Адрес ссылки'}><input required type="url" value={url} onChange={event => setUrl(event.target.value)} /></Field>
 		{error && <p role="alert" className="text-danger">{error}</p>}
@@ -80,6 +80,7 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 	const listId = useId()
 	const [query, setQuery] = useState<ReturnType<typeof queryAt>>(null), [selected, setSelected] = useState(0)
 	const [renderVersion, updateHistory] = useState(0)
+	const [formatting, setFormatting] = useState(false)
 	const modal = useModal(), found = suggestions(query, resources)
 	function remember() { const [start, end] = caretRange(ref.current!); lastSelection.current = [start, end]; stack.current[position.current] = { value, start, end } }
 	function change(next: string, start: number, end = start) {
@@ -145,8 +146,9 @@ export function MarkdownEditor({ id, value, onChange, maxLength = 16000, compone
 		<div className="editor-toolbar" role="toolbar" aria-label="Форматирование Markdown" onPointerDown={event => event.preventDefault()}>
 			<IconButton icon={Undo2} label="Отменить (Ctrl+Z)" disabled={!position.current} onClick={() => restore(false)} />
 			<IconButton icon={Redo2} label="Повторить (Ctrl+Shift+Z)" disabled={position.current >= stack.current.length - 1} onClick={() => restore(true)} />
-			<span className="toolbar-divider" />
+			<IconButton icon={SlidersHorizontal} label="Инструменты форматирования" aria-expanded={formatting} onClick={() => setFormatting(value => !value)} /><div className="formatting-tools" hidden={!formatting}>
 			{[...formats, ...(components ? componentFormats : [])].map(([Icon, label, ...args]) => <IconButton key={label} icon={Icon} label={label} onClick={() => Icon === Link ? openTag('link') : Icon === Image ? openTag('image') : Icon === PanelRight ? openTag('section') : insert(...args)} />)}
+			</div>
 		</div>
 		<div ref={ref} id={id} role="textbox" aria-label={props['aria-label'] || 'Текст сообщения'} aria-describedby={props['aria-describedby']} aria-multiline="true" contentEditable={!props.disabled} suppressContentEditableWarning className="markdown-source" spellCheck={false}
 			aria-autocomplete="list" aria-controls={found.length ? listId : undefined} aria-activedescendant={found.length ? `${listId}-${selected}` : undefined}
@@ -188,8 +190,20 @@ export function EditorWorkspace({ children, renderPreview, footer, resetKey }: {
 		}
 		setMode(next)
 	}
+	useEffect(() => {
+		const toggle = (event: KeyboardEvent) => {
+			if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.code !== 'KeyP' || event.repeat) return
+			const tabs = document.getElementById(`${id}-edit-tab`)
+			if (!tabs?.getClientRects().length || tabs.closest('[hidden]') || tabs.closest('fieldset')?.disabled) return
+			const dialog = document.querySelector('dialog[open]')
+			if (dialog && !dialog.contains(tabs)) return
+			event.preventDefault(); switchMode(mode === 'edit' ? 'preview' : 'edit')
+		}
+		window.addEventListener('keydown', toggle)
+		return () => window.removeEventListener('keydown', toggle)
+	})
 	return <div className="editor-workspace grid gap-4">
-		<div className="editor-tabs" role="tablist" aria-label="Режим редактора" onKeyDown={event => {
+		<div className="editor-tabs" role="tablist" aria-label="Режим редактора" title="Переключить режим: Alt+P" aria-keyshortcuts="Alt+P" onKeyDown={event => {
 			if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
 			event.preventDefault()
 			const next = event.key === 'Home' ? 'edit' : event.key === 'End' ? 'preview' : mode === 'edit' ? 'preview' : 'edit'

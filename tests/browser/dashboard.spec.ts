@@ -199,6 +199,7 @@ test('typing and Cyrillic undo keep visible caret and toolbar stable', async ({ 
 
 test('image and section dialogs keep independent fields and source when edited or deleted', async ({ page }) => {
 	const requests = await setup(page, 'templates', 'Текст')
+	await page.getByRole('button', { name: 'Инструменты форматирования' }).click()
 	const editor = page.getByRole('textbox', { name: 'Текст сообщения' })
 	await editor.click(); await page.keyboard.press('End')
 	await page.getByRole('button', { name: 'Изображение', exact: true }).click()
@@ -446,9 +447,15 @@ test('cursor produces a visible perspective tilt and resets it', async ({ page }
 	const bounds = await card.boundingBox()
 	await page.mouse.move(bounds!.x + bounds!.width * .85, bounds!.y + bounds!.height * .8)
 	await expect(card).toHaveClass(/is-lit/)
-	await expect.poll(() => card.evaluate(el => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))))).toBeGreaterThan(3)
+	await expect.poll(() => card.evaluate(el => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))))).toBeGreaterThan(1)
+	await expect.poll(() => card.evaluate(el => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))))).toBeLessThanOrEqual(4)
 	await expect(card).toHaveCSS('transform', /matrix3d/)
 	await page.screenshot({ path: `output/dashboard-review/motion/${testInfo.project.name}-perspective.png` })
+	for (const [dx, dy] of [[6, 6], [bounds!.width - 6, 6], [bounds!.width - 6, bounds!.height - 6], [6, bounds!.height - 6]]) {
+		for (let step = 0; step < 3; step++) await page.mouse.move(bounds!.x + dx + step, bounds!.y + dy)
+		await expect(card).toHaveClass(/is-lit/)
+		await expect.poll(() => card.evaluate(el => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))))).toBeLessThanOrEqual(4)
+	}
 	await page.mouse.move(900, 35)
 	await expect(card).not.toHaveClass(/is-lit/)
 	await expect.poll(() => card.evaluate(el => el.style.getPropertyValue('--tilt-y'))).toBe('')
@@ -529,7 +536,8 @@ test('glass transmits the scene and actually blurs the backdrop', async ({ page 
 	for (const theme of ['Тёмная', 'Светлая']) {
 		await page.getByRole('radio', { name: theme, exact: true }).check()
 		const alpha = await panel.evaluate(el => { const color = getComputedStyle(el).backgroundColor; return color.startsWith('rgba') ? Number(color.match(/([.\d]+)\)$/)?.[1]) : 1 })
-		expect(alpha).toBeLessThan(.25)
+		if (theme === 'Тёмная') { expect(alpha).toBeGreaterThan(.85); expect(alpha).toBeLessThan(1) }
+		else expect(alpha).toBeLessThan(.25)
 		await page.locator('.ambient-scene').evaluate(el => {
 			el.style.backgroundImage = 'repeating-linear-gradient(90deg, #21324f 0 12px, #b6c0d8 12px 24px)'
 			for (const child of Array.from(el.children)) (child as HTMLElement).style.visibility = 'hidden'
@@ -547,6 +555,8 @@ test('glass reflections follow the pointer while its aura stays subtle', async (
 	await setup(page, 'templates')
 	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
 	const panel = page.locator('.panel').filter({ has: editor })
+	await editor.scrollIntoViewIfNeeded()
+	await page.evaluate(() => new Promise(requestAnimationFrame))
 	await editor.hover({ position: { x: 50, y: 100 } })
 	await expect(panel).toHaveClass(/is-lit/)
 	const editorBounds = await editor.boundingBox()
@@ -665,4 +675,61 @@ test('pointer paints stay local and are capped at 30 Hz', async ({ page }, testI
 	expect(sample.paints).toBeGreaterThan(0)
 	expect(sample.paints).toBeLessThanOrEqual(Math.ceil(sample.duration * 30 / 1000) + 1)
 	expect(sample.rootWrites).toBe(0)
+})
+
+
+test('dashboard shortcuts, compact tools and centered saving work', async ({ page }) => {
+	await setup(page, 'overview')
+	await expect(page.getByRole('heading', { name: 'Центр управления', exact: true })).toBeVisible()
+	await page.keyboard.down('Alt')
+	await expect(page.locator('.nav-shortcut').first()).toHaveCSS('opacity', '1')
+	await page.keyboard.press('Digit2')
+	await page.keyboard.up('Alt')
+	await expect(page.getByRole('heading', { name: 'Шаблоны сообщений', exact: true })).toBeVisible()
+	await expect(page.getByRole('button', { name: 'Изображение', exact: true })).toBeHidden()
+	await page.getByRole('button', { name: 'Инструменты форматирования' }).click()
+	await expect(page.getByRole('button', { name: 'Изображение', exact: true })).toBeVisible()
+	await page.keyboard.press('Alt+KeyP')
+	await expect(page.getByRole('tab', { name: 'Просмотр', exact: true })).toHaveAttribute('aria-selected', 'true')
+	await expect(page.locator('.editor-footer button')).toHaveCount(1)
+	const button = await page.getByRole('button', { name: 'Сохранить шаблон' }).boundingBox()
+	const workspace = await page.locator('.page-view:not([hidden]) .editor-workspace').boundingBox()
+	expect(Math.abs(button!.x + button!.width / 2 - workspace!.x - workspace!.width / 2)).toBeLessThan(2)
+	await page.keyboard.press('Alt+KeyP')
+	await expect(page.getByRole('textbox', { name: 'Текст сообщения' })).toBeVisible()
+})
+
+test('scroll controls return early and textarea grows without manual resize', async ({ page }, testInfo) => {
+	await setup(page, 'templates', Array.from({ length: 100 }, (_, i) => `Строка ${i}`).join('\n'), { 'Система повышения': { price: '100' } })
+	await page.evaluate(() => window.scrollTo({ top: 900, behavior: 'instant' }))
+	await expect(page.getByRole('button', { name: 'Наверх', exact: true })).toBeVisible()
+	await expect(page.locator('.topbar')).not.toHaveClass(/topbar-visible/)
+	await page.evaluate(() => window.scrollBy({ top: -80, behavior: 'instant' }))
+	await expect(page.locator('.topbar')).toHaveClass(/topbar-visible/)
+	await page.screenshot({ path: `output/dashboard-review/${testInfo.project.name}-compact-editor.png` })
+	await page.getByRole('button', { name: 'Наверх', exact: true }).click()
+	await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5)
+	await page.keyboard.press('Alt+Digit3')
+	await expect(page.getByRole('heading', { name: 'Переменные шаблонов', exact: true })).toBeVisible()
+	const textarea = page.locator('.page-view:not([hidden])').getByLabel('Значение', { exact: true })
+	await textarea.fill(Array.from({ length: 15 }, () => 'Длинное значение').join('\n'))
+	await expect(textarea).toHaveCSS('resize', 'none')
+	await expect(textarea).toHaveCSS('box-shadow', 'none')
+	await expect(textarea).toHaveCSS('outline-width', '1px')
+	expect(await textarea.evaluate(el => el.clientHeight >= el.scrollHeight)).toBe(true)
+	await page.screenshot({ path: `output/dashboard-review/${testInfo.project.name}-variables.png` })
+})
+
+test('tooltips stay inside viewport and logout does not overflow', async ({ page }, testInfo) => {
+	await setup(page, 'overview')
+	if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: 'Открыть меню', exact: true }).click()
+	const logout = page.getByRole('button', { name: 'Выйти из аккаунта', exact: true })
+	await logout.hover()
+	await expect(page.getByRole('tooltip', { name: 'Выйти из аккаунта' })).toBeVisible()
+	const tooltip = await page.getByRole('tooltip', { name: 'Выйти из аккаунта' }).boundingBox()
+	const viewport = page.viewportSize()!
+	expect(tooltip!.x).toBeGreaterThanOrEqual(0)
+	expect(tooltip!.x + tooltip!.width).toBeLessThanOrEqual(viewport.width)
+	expect(tooltip!.y + tooltip!.height).toBeLessThanOrEqual(viewport.height)
+	expect(await page.locator('.sidebar').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 })
