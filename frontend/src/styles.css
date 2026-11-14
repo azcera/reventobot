@@ -258,9 +258,9 @@ input, select, textarea, [contenteditable] { scroll-margin-top: 180px; scroll-ma
 .appearance-controls .icon-tooltip { left: auto; right: 0; top: 100%; bottom: auto; transform: none; margin: 8px 0 0; }
 .login-appearance { position: absolute; top: 20px; right: 20px; z-index: 10; }
 .login-screen { padding-top: 90px; }
-@supports (backdrop-filter: blur(16px)) {
-	.sidebar, .topbar, .panel, .overview-hero, .login-card, .toast, .editor-footer, .action-bar { background-color: var(--glass); backdrop-filter: blur(16px) saturate(160%); }
-	.modal { background-color: var(--glass); backdrop-filter: blur(24px); }
+@supports (backdrop-filter: blur(12px)) {
+	.sidebar, .topbar, .panel, .overview-hero, .login-card, .toast, .editor-footer, .action-bar { background-color: var(--glass); backdrop-filter: blur(12px) saturate(160%); }
+	.modal { background-color: var(--glass); backdrop-filter: blur(16px); }
 }
 @media (max-width: 1023px) {
 	:root:has(.sidebar-open), :root:has(.sidebar-open) body { overflow: hidden; }
@@ -296,17 +296,14 @@ input, select, textarea, [contenteditable] { scroll-margin-top: 180px; scroll-ma
 /* A real backdrop gives transparent surfaces something to refract. */
 :root { --ease-out: cubic-bezier(.22, 1, .36, 1); }
 .ambient-scene { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-.ambient-orb { position: absolute; width: 65vw; height: 65vw; max-width: 1100px; max-height: 1100px; border-radius: 50%; filter: blur(85px); opacity: .42; transform: translate3d(var(--drift-x, 0px), var(--drift-y, 0px), 0); }
+.ambient-orb { position: absolute; width: 65vw; height: 65vw; max-width: 1100px; max-height: 1100px; border-radius: 50%; opacity: .42; }
 .ambient-orb-pink { top: -30vw; left: -18vw; background: radial-gradient(circle, var(--orb-pink), transparent 70%); }
 .ambient-orb-blue { bottom: -28vw; right: -16vw; background: radial-gradient(circle, var(--orb-blue), transparent 70%); }
-.ambient-ribbon { position: absolute; top: -35vh; left: 12vw; width: clamp(260px, 32vw, 560px); height: 170vh; border: 1px solid var(--ribbon-edge); border-radius: 180px; background: linear-gradient(95deg, transparent, var(--ribbon-face) 65%, transparent); box-shadow: inset 2px 0 8px var(--ribbon-face), 2px 0 12px var(--ribbon-face); transform: translate3d(var(--drift-x, 0px), var(--drift-y, 0px), 0) rotate(-28deg); }
+.ambient-ribbon { position: absolute; top: -35vh; left: 12vw; width: clamp(260px, 32vw, 560px); height: 170vh; border: 1px solid var(--ribbon-edge); border-radius: 180px; background: linear-gradient(95deg, transparent, var(--ribbon-face) 65%, transparent); box-shadow: inset 2px 0 8px var(--ribbon-face), 2px 0 12px var(--ribbon-face); transform: rotate(-28deg); }
 .ambient-ribbon-secondary { left: 55vw; top: -20vh; width: clamp(220px, 26vw, 440px); }
 .ambient-grid { position: absolute; inset: 0; background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 64px 64px; opacity: .14; mask-image: linear-gradient(140deg, #000, transparent 70%); }
-.cursor-aura { position: absolute; inset: 0; opacity: 0; background: radial-gradient(500px circle at var(--cursor-x, 50%) var(--cursor-y, 30%), var(--pink-haze), transparent 75%); transition: opacity .7s; mix-blend-mode: screen; }
+.cursor-aura { position: fixed; top: 0; left: 0; width: 360px; height: 360px; z-index: 25; pointer-events: none; opacity: 0; background: radial-gradient(circle, var(--pink-haze), transparent 70%); transition: opacity .3s; }
 :root[data-effects='on'][data-cursor='on'] .cursor-aura { opacity: .18; }
-:root[data-motion='on'] .ambient-orb-pink { animation: ambient-breathe 16s ease-in-out infinite alternate; }
-:root[data-motion='on'] .ambient-orb-blue { animation: ambient-breathe 21s ease-in-out -8s infinite alternate-reverse; }
-@keyframes ambient-breathe { from { scale: 1; opacity: .42; } to { scale: 1.25; opacity: .65; } }
 
 .panel, .metric, .quick-link, .overview-hero, .binding-strip, .login-card { position: relative; isolation: isolate; border-color: var(--glass-border); box-shadow: inset 0 1px 0 var(--sheen), var(--shadow); }
 .panel::before, [data-tilt]::before, .overview-hero::before, .binding-strip::before, .login-card::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: .35; background: radial-gradient(ellipse 360px 220px at var(--light-x, 20%) var(--light-y, 0%), var(--sheen), transparent 80%), linear-gradient(var(--light-angle, 125deg), transparent 25%, var(--sheen) 45%, transparent 62%); transition: opacity .5s; }
@@ -314,7 +311,7 @@ input, select, textarea, [contenteditable] { scroll-margin-top: 180px; scroll-ma
 .is-lit::before { opacity: 1; }.is-lit::after { opacity: .8; }
 .panel-heading { border-color: color-mix(in srgb, var(--line) 65%, transparent); }
 [data-tilt] { transform: perspective(680px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform .65s var(--ease-out), border-color .3s, box-shadow .3s; }
-[data-tilt].is-lit { transition: border-color .3s, box-shadow .3s; border-color: color-mix(in srgb, var(--brand) 65%, var(--glass-border)); box-shadow: inset 0 1px 0 var(--sheen), 0 22px 60px color-mix(in srgb, var(--brand) 15%, transparent); }
+[data-tilt].is-lit { transition: transform .12s var(--ease-out), border-color .3s, box-shadow .3s; border-color: color-mix(in srgb, var(--brand) 65%, var(--glass-border)); box-shadow: inset 0 1px 0 var(--sheen), 0 22px 60px color-mix(in srgb, var(--brand) 15%, transparent); }
 .metric { min-height: 132px; padding: 24px; }
 .metric strong { font-size: 23px; letter-spacing: -.04em; }
 .metric svg { padding: 8px; box-sizing: content-box; background: color-mix(in srgb, var(--cool) 9%, transparent); border-radius: 12px; }
@@ -329,12 +326,6 @@ input, select, textarea, [contenteditable] { scroll-margin-top: 180px; scroll-ma
 .hero-orbit-inner { inset: 20px; border-color: var(--cool); transform: rotateY(60deg) rotate(25deg); }
 .hero-spark { position: absolute; width: 9px; height: 9px; background: var(--brand); border-radius: 50%; box-shadow: 0 0 22px var(--brand); }
 .hero-spark-one { top: 30px; right: 35px; }.hero-spark-two { bottom: 35px; left: 28px; background: var(--cool); }
-:root[data-motion='on'] .hero-art img { animation: logo-float 6s ease-in-out infinite; }
-:root[data-motion='on'] .hero-orbit { animation: orbit-turn 18s linear infinite; }
-:root[data-motion='on'] .hero-orbit-inner { animation: orbit-turn-inner 24s linear infinite reverse; }
-@keyframes logo-float { 50% { transform: translateY(-12px) rotate(3deg); } }
-@keyframes orbit-turn { to { transform: rotateX(55deg) rotate(330deg); } }
-@keyframes orbit-turn-inner { to { transform: rotateY(60deg) rotate(385deg); } }
 
 .button, .icon-button { border-radius: 13px; border-color: var(--glass-border); box-shadow: inset 0 1px 0 var(--sheen); transition: background .2s, border-color .2s, box-shadow .2s; }
 .button-primary { background-image: linear-gradient(135deg, #ffffff25, transparent 65%); box-shadow: inset 0 1px 0 #ffffff40, 0 5px 22px color-mix(in srgb, var(--brand) 20%, transparent); }
@@ -367,7 +358,7 @@ input[type='checkbox']:not([role='switch']):checked::before { content: ''; width
 .role-search > svg { position: absolute; left: 13px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
 .role-search > svg:last-child { right: 13px; left: auto; transition: transform .25s; }
 .role-search input { padding-left: 40px !important; padding-right: 40px !important; }
-.role-options { position: absolute; top: 76px; left: 0; right: 0; z-index: 28; max-height: 240px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--glass-border); border-radius: 16px; padding: 5px; background: var(--control); box-shadow: var(--shadow); backdrop-filter: blur(30px); }
+.role-options { position: absolute; top: 76px; left: 0; right: 0; z-index: 28; max-height: 240px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--glass-border); border-radius: 16px; padding: 5px; background: var(--control); box-shadow: var(--shadow); backdrop-filter: blur(16px); }
 .role-option { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 11px; font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
 .role-option > span:nth-child(2) { flex: 1; min-width: 0; }.role-option > svg { width: 14px; height: 14px; opacity: 0; }
 .role-option[aria-selected='true'] { background: var(--brand-soft); color: var(--brand); }.role-option[aria-selected='true'] > svg { opacity: 1; }
@@ -385,9 +376,9 @@ details.panel > summary::-webkit-details-marker { display: none; }
 	details.panel[open]::details-content { height: auto; }
 }
 @supports (backdrop-filter: blur(20px)) {
-	.metric, .quick-link, .binding-strip { background-color: var(--glass); backdrop-filter: blur(16px) saturate(160%); }
-	.sidebar, .topbar { background-color: var(--glass-shell); backdrop-filter: blur(24px) saturate(160%); }
-	.action-bar, .editor-footer { background-color: var(--control); backdrop-filter: blur(24px) saturate(150%); }
+	.metric, .quick-link, .binding-strip { background-color: var(--glass); backdrop-filter: blur(12px) saturate(160%); }
+	.sidebar, .topbar { background-color: var(--glass-shell); backdrop-filter: blur(16px) saturate(160%); }
+	.action-bar, .editor-footer { background-color: var(--control); backdrop-filter: blur(16px) saturate(150%); }
 }
 :root[data-motion='on'] .page-view:not([hidden]), :root[data-motion='on'] [role='tabpanel']:not([hidden]) { animation: panel-enter .5s var(--ease-out) backwards; }
 :root[data-motion='on'] .metric, :root[data-motion='on'] .quick-link { animation: card-enter .65s var(--ease-out) backwards; }
@@ -405,3 +396,5 @@ details.panel > summary::-webkit-details-marker { display: none; }
 	.metric svg { padding: 5px; }.theme-switch label > span { min-height: 32px; }
 	.quick-link { min-height: 170px; }.ambient-orb { width: 140vw; height: 140vw; }
 }
+
+:root[data-reduced-motion='on'] .appearance-controls .icon-tooltip::after { content: 'Движение ограничено настройками системы'; display: block; max-width: 210px; margin-top: 4px; color: var(--muted); }

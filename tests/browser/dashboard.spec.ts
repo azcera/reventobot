@@ -284,11 +284,12 @@ test('appearance follows system, persists choices and keeps Discord colors', asy
 test('effects persist and respect reduced motion and touch', async ({ page }, testInfo) => {
 	await setup(page, 'settings')
 	const effects = page.getByRole('button', { name: 'Декоративные эффекты' })
-	await effects.click()
+	const toggle = () => testInfo.project.name === 'mobile' ? effects.tap() : effects.click()
+	await toggle()
 	await page.reload()
 	await expect(effects).toHaveAttribute('aria-pressed', 'false')
 	await expect(page.locator('html')).toHaveAttribute('data-effects', 'off')
-	await effects.click()
+	await toggle()
 	await page.emulateMedia({ reducedMotion: 'reduce' })
 	await expect(page.locator('html')).toHaveAttribute('data-effects', 'off')
 	await page.emulateMedia({ reducedMotion: 'no-preference' })
@@ -296,7 +297,7 @@ test('effects persist and respect reduced motion and touch', async ({ page }, te
 	if (testInfo.project.name === 'desktop') {
 		await page.mouse.move(650, 300)
 		await expect(page.locator('html')).toHaveAttribute('data-cursor', 'on')
-		await effects.click()
+		await toggle()
 		await expect(page.locator('html')).toHaveAttribute('data-cursor', 'off')
 		await expect.poll(() => page.locator('html').evaluate(el => el.style.getPropertyValue('--drift-x'))).toBe('')
 	}
@@ -473,14 +474,15 @@ test('smooth scrolling is progressive and stops with reduced motion', async ({ p
 	test.skip(testInfo.project.name !== 'desktop')
 	await setup(page, 'templates', Array.from({ length: 120 }, (_, i) => `Строка ${i}`).join('\n'))
 	await expect(page.locator('html')).toHaveClass(/lenis/)
+	await page.evaluate(() => {
+		;(window as any).__scrollPositions = []
+		;(window as any).__recordScroll = () => (window as any).__scrollPositions.push(scrollY)
+		window.addEventListener('scroll', (window as any).__recordScroll)
+	})
 	await page.mouse.move(1350, 200)
 	await page.mouse.wheel(0, 700)
-	const positions = await page.evaluate(() => new Promise<number[]>(resolve => {
-		const samples: number[] = []
-		function sample() { samples.push(scrollY); if (samples.length === 24) resolve(samples); else requestAnimationFrame(sample) }
-		requestAnimationFrame(sample)
-	}))
-	expect(new Set(positions.map(Math.round)).size).toBeGreaterThan(4)
+	await expect.poll(() => page.evaluate(() => new Set((window as any).__scrollPositions as number[]).size)).toBeGreaterThan(4)
+	const positions = await page.evaluate(() => { window.removeEventListener('scroll', (window as any).__recordScroll); return (window as any).__scrollPositions as number[] })
 	expect(positions.at(-1)!).toBeGreaterThan(positions[0])
 	await page.emulateMedia({ reducedMotion: 'reduce' })
 	await expect(page.locator('html')).not.toHaveClass(/lenis/)
@@ -563,4 +565,104 @@ test('glass reflections follow the pointer while its aura stays subtle', async (
 	await page.getByRole('button', { name: 'Декоративные эффекты' }).click()
 	await expect(panel).not.toHaveClass(/is-lit/)
 	await expect.poll(() => panel.evaluate(el => el.style.getPropertyValue('--light-angle'))).toBe('')
+})
+
+
+test('theme bootstrap works under production CSP before the app loads', async ({ page }) => {
+	await page.addInitScript(() => {
+		localStorage.setItem('revento-theme', 'dark')
+		;(window as any).__cspViolations = []
+		document.addEventListener('securitypolicyviolation', event => (window as any).__cspViolations.push(event.blockedURI))
+	})
+	let release!: () => void
+	const gate = new Promise<void>(resolve => { release = resolve })
+	await page.route(/\/dashboard\/assets\/.*\.js$/, async route => { await gate; await route.continue() })
+	try {
+		await page.goto('/', { waitUntil: 'commit' })
+		await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+		expect(await page.evaluate(() => (window as any).__cspViolations)).toEqual([])
+	} finally { release() }
+})
+
+test('a real mouse enables effects when primary pointer media reports touch', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await page.addInitScript(() => {
+		const original = window.matchMedia.bind(window)
+		window.matchMedia = query => {
+			const result = original(query)
+			if (query.includes('pointer: fine') || query.includes('hover: hover')) Object.defineProperty(result, 'matches', { value: false })
+			return result
+		}
+	})
+	await setup(page, 'overview')
+	const card = page.locator('.metric').first()
+	await card.scrollIntoViewIfNeeded()
+	await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+	await card.hover({ position: { x: 35, y: 40 } })
+	await expect(card).toHaveClass(/is-lit/)
+	await expect(page.locator('html')).toHaveAttribute('data-effects', 'on')
+	await page.emulateMedia({ reducedMotion: 'reduce' })
+	await card.hover({ position: { x: 70, y: 60 } })
+	await expect(card).not.toHaveClass(/is-lit/)
+})
+
+test('effects do not keep rendering or changing root styles while idle', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await page.addInitScript(() => {
+		;(window as any).__motionFrames = 0
+		;(window as any).__rootStyleWrites = 0
+		new MutationObserver(records => { (window as any).__rootStyleWrites += records.filter(record => record.target === document.documentElement).length }).observe(document, { subtree: true, attributes: true, attributeFilter: ['style'] })
+		const original = window.requestAnimationFrame.bind(window)
+		window.requestAnimationFrame = callback => original(time => { (window as any).__motionFrames++; callback(time) })
+	})
+	await setup(page, 'overview')
+	await page.mouse.move(900, 35)
+	await page.waitForTimeout(1500)
+	const client = page.context().browser()?.browserType().name() === 'chromium' ? await page.context().newCDPSession(page) : null
+	await client?.send('Performance.enable')
+	const beforeCpu = client ? (await client.send('Performance.getMetrics')).metrics.find(metric => metric.name === 'TaskDuration')!.value : 0
+	const before = await page.evaluate(() => ({ frames: (window as any).__motionFrames as number, rootWrites: (window as any).__rootStyleWrites as number }))
+	await page.waitForTimeout(1000)
+	const after = await page.evaluate(() => ({ frames: (window as any).__motionFrames as number, rootWrites: (window as any).__rootStyleWrites as number }))
+	const taskMs = client ? ((await client.send('Performance.getMetrics')).metrics.find(metric => metric.name === 'TaskDuration')!.value - beforeCpu) * 1000 : null
+	console.log(JSON.stringify({ idleFrames: after.frames - before.frames, idleRootStyleWrites: after.rootWrites - before.rootWrites, idleTaskMs: taskMs === null ? null : Math.round(taskMs) }))
+	expect(after.frames - before.frames).toBeLessThanOrEqual(1)
+	expect(after.rootWrites - before.rootWrites).toBe(0)
+	expect(await page.evaluate(() => document.getAnimations().filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations === Infinity).length)).toBe(0)
+	await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')) })
+	await expect(page.locator('html')).toHaveAttribute('data-motion', 'off')
+	await expect(page.locator('html')).not.toHaveClass(/lenis/)
+
+})
+
+
+test('pointer paints stay local and are capped at 30 Hz', async ({ page }, testInfo) => {
+	test.skip(testInfo.project.name !== 'desktop')
+	await setup(page, 'overview')
+	const sample = await page.locator('.metric').first().evaluate(async card => {
+		const rect = card.getBoundingClientRect()
+		const original = CSSStyleDeclaration.prototype.setProperty
+		let paints = 0, rootWrites = 0
+		const observer = new MutationObserver(records => { rootWrites += records.length })
+		observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
+		CSSStyleDeclaration.prototype.setProperty = function(property, value, priority) {
+			if (this === card.style && property === '--light-x') paints++
+			return original.call(this, property, value, priority)
+		}
+		const start = performance.now()
+		try {
+			await new Promise<void>(resolve => {
+				let frame = 0
+				const move = () => {
+					card.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', clientX: rect.left + 20 + frame, clientY: rect.top + 30 }))
+					if (++frame === 30) resolve(); else requestAnimationFrame(move)
+				}
+				requestAnimationFrame(move)
+			})
+			return { paints, rootWrites, duration: performance.now() - start }
+		} finally { CSSStyleDeclaration.prototype.setProperty = original; observer.disconnect() }
+	})
+	expect(sample.paints).toBeGreaterThan(0)
+	expect(sample.paints).toBeLessThanOrEqual(Math.ceil(sample.duration * 30 / 1000) + 1)
+	expect(sample.rootWrites).toBe(0)
 })

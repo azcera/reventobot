@@ -91,6 +91,9 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
   Для точечного сценария: после сборки `npx playwright test tests/browser/dashboard.spec.ts -g "название"`.
   Конфигурация проверяет desktop и mobile, сервер фикстур — `tests/browser/server.ts` (компилируется в `dist/`), порт 4173.
   Chromium при необходимости устанавливается через `npx playwright install chromium`.
+- Для проверки desktop в Edge установи `PLAYWRIGHT_CHANNEL=msedge`, в Firefox —
+  `PLAYWRIGHT_BROWSER=firefox`, затем запускай Playwright с `--project=desktop`.
+  Для Firefox нужен браузер Playwright: `npx playwright install firefox`.
 - Общие фикстуры дашборда: `tests/helpers/dashboardFixture.ts`.
 - Проверка типов: `npm run typecheck` (сервер, React, тесты и конфигурации). Отдельного lint нет.
 - Для правок только документации достаточно проверить точность путей, команд и diff;

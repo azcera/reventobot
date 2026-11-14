@@ -7,5 +7,5 @@ export default defineConfig({
 	publicDir: false,
 	plugins: [tailwindcss()],
 	build: { outDir: '../public/dashboard', emptyOutDir: true },
-	server: { proxy: Object.fromEntries(['/api', '/auth', '/template-images', '/theme.css', '/markdown.js', '/component-markdown.js', '/revento-logo.png'].map(path => [path, 'http://localhost:3000'])) }
+	server: { proxy: Object.fromEntries(['/api', '/auth', '/template-images', '/theme.css', '/dashboard-appearance.js', '/markdown.js', '/component-markdown.js', '/revento-logo.png'].map(path => [path, 'http://localhost:3000'])) }
 })
