@@ -42,6 +42,7 @@ const databasePath = require.resolve('../src/services/database')
 const previousDatabase = require.cache[databasePath]
 require.cache[databasePath] = { exports: database } as NodeModule
 const captures = require('../src/features/capture/captureManager') as typeof import('../src/features/capture/captureManager')
+const { handleCapturePanel } = require('../src/features/capture/captureApprovalPanel') as typeof import('../src/features/capture/captureApprovalPanel')
 const groups = require('../src/features/capture/groupInteractions') as typeof import('../src/features/capture/groupInteractions')
 if (previousDatabase) require.cache[databasePath] = previousDatabase
 else delete require.cache[databasePath]
@@ -58,10 +59,12 @@ function reset(main: string[] = [], reserve: string[] = []) {
 function fixture(userId: string, customId = 'capt_join') {
 	const replies: any[] = [], edits: any[] = [], dms: string[] = []
 	const interaction = {
-		customId, user: { id: userId }, message: { id: 'message', url: 'https://discord.com/channels/guild/channel/message' },
+		customId, channelId: 'channel', user: { id: userId }, message: { id: 'message', url: 'https://discord.com/channels/guild/channel/message' },
 		guild: { id: 'guild', members: { cache: new Collection() } }, member: { permissions: { has: () => true } },
 		client: { users: { fetch: async (id: string) => ({ send: async () => { dms.push(id) } }) } },
-		isButton: () => true, isStringSelectMenu: () => false, deferUpdate: async () => {},
+		isButton: () => true, isStringSelectMenu: () => false, deferUpdate: async () => {}, deferReply: async () => {},
+		reply: async (payload: any) => { replies.push(payload) },
+		channel: { messages: { fetch: async (id: string) => ({ id, url: 'https://discord.com/channels/guild/channel/message', edit: async (payload: any) => { assert.equal(connections, 0); edits.push(payload) } }) } },
 		followUp: async (payload: any) => { replies.push(payload) },
 		editReply: async (payload: any) => { assert.equal(connections, 0); edits.push(payload) }
 	}
@@ -125,16 +128,146 @@ test('failed Discord refresh and closed DMs never roll back a committed promotio
 	assert.ok(f.replies.some(reply => /Запись сохранена/.test(reply.content)))
 })
 
-test('manual approval also notifies users promoted from reserve, after releasing the transaction', async () => {
+function panelComponents(f: ReturnType<typeof fixture>) {
+	return JSON.parse(JSON.stringify(f.edits.at(-1))).components[0].components.flatMap((c: any) => c.components || [])
+}
+
+async function openPanel(userId = 'admin') {
+	const f = fixture(userId, 'capt_manage')
+	await handleCapturePanel(f.interaction)
+	const control = panelComponents(f).find((c: any) => c.custom_id?.endsWith('_refresh'))
+	return { f, prefix: control.custom_id.slice(0, -'refresh'.length) as string }
+}
+
+async function panelAction(panel: Awaited<ReturnType<typeof openPanel>>, action: string, values?: string[]) {
+	Object.assign(panel.f.interaction, { customId: panel.prefix + action, values: values || [], isStringSelectMenu: () => values !== undefined })
+	await handleCapturePanel(panel.f.interaction)
+}
+
+test('manual panel approval notifies promoted users after releasing the transaction', async () => {
 	reset(['first'], ['second'])
-	const f = fixture('admin')
-	const payload = JSON.parse(JSON.stringify(captures.buildCaptureMessage(row.discord_timestamp, row.main_list, row.reserve_list, [], row.target, 1,
-		f.interaction.guild, row.main_list_meta, row.reserve_list_meta, [], 0, 'time')))
-	const menu = payload.components.flatMap((component: any) => component.components || []).find((component: any) => component.custom_id?.startsWith('capt_approve_'))
-	Object.assign(f.interaction, { customId: menu.custom_id, values: ['second'], isStringSelectMenu: () => true })
-	await captures.handleApproval(f.interaction as unknown as StringSelectMenuInteraction<'cached'>)
+	const panel = await openPanel()
+	await panelAction(panel, 'add:second')
 	assert.deepEqual(row.main_list, ['second'])
-	assert.deepEqual(f.dms, ['second'])
+	assert.deepEqual(panel.f.dms, ['second'])
+	assert.equal(queries.includes('BEGIN'), true)
+	assert.ok(queries.some(sql => sql.endsWith('FOR UPDATE')))
+})
+
+test('batch approval survives new joins and skips departed players without losing other selections', async () => {
+	reset(['first'], ['second', 'third'])
+	row.max_main = 3
+	const panel = await openPanel()
+	await panelAction(panel, 'select', ['first', 'second', 'third'])
+	await captures.handleButton(fixture('new').interaction)
+	await captures.handleButton(fixture('second', 'capt_leave').interaction)
+	await panelAction(panel, 'add')
+	assert.deepEqual(row.approved_users, ['first', 'third'])
+	assert.ok(row.reserve_list.includes('new'))
+	assert.match(JSON.stringify(panel.f.edits.at(-1)), /Вышли: 1/)
+	assert.equal(panelComponents(panel.f).some((c: any) => c.options?.some((o: any) => o.value === 'new')), false)
+	await panelAction(panel, 'refresh')
+	assert.equal(panelComponents(panel.f).some((c: any) => c.options?.some((o: any) => o.value === 'new')), true)
+})
+
+test('independent administrator panels preserve approvals, enforce capacity and remove only requested players', async () => {
+	reset(['first'], ['second', 'third'])
+	row.max_main = 2
+	const one = await openPanel('admin1')
+	const two = await openPanel('admin2')
+	await panelAction(one, 'add:first')
+	await panelAction(two, 'select', ['first', 'second', 'third'])
+	await panelAction(two, 'add')
+	assert.deepEqual(row.approved_users, ['first', 'second'])
+	assert.match(JSON.stringify(two.f.edits.at(-1)), /Не хватило мест: 1/)
+	await panelAction(one, 'add:first')
+	assert.deepEqual(row.approved_users, ['first', 'second'])
+	await panelAction(one, 'remove:first')
+	assert.deepEqual(row.approved_users, ['second'])
+})
+
+test('simultaneous administrator confirmations read the latest state under the row lock', async t => {
+	reset(['first'], ['second'])
+	const one = await openPanel('admin1')
+	const two = await openPanel('admin2')
+	let tail = Promise.resolve()
+	t.mock.method(database, 'connect', async () => {
+		connections++
+		let unlock: (() => void) | undefined
+		return {
+			async query(sql: string, values?: any[]) {
+				if (sql.endsWith('FOR UPDATE')) {
+					const previous = tail
+					tail = new Promise<void>(resolve => { unlock = resolve })
+					await previous
+				}
+				const result = await database.query(sql, values)
+				if (sql === 'COMMIT' || sql === 'ROLLBACK') unlock?.()
+				return result
+			},
+			release() { connections--; unlock?.() }
+		}
+	})
+	await Promise.all([panelAction(one, 'add:first'), panelAction(two, 'add:second')])
+	assert.deepEqual(row.approved_users, ['first'])
+	assert.match(JSON.stringify(two.f.edits.at(-1)), /Не хватило мест: 1/)
+	assert.equal(connections, 0)
+})
+
+test('public refresh failure preserves committed batch changes and the private panel', async t => {
+	t.mock.method(console, 'error', () => {})
+	reset(['first'], ['second'])
+	const panel = await openPanel()
+	Object.assign(panel.f.interaction, { channel: { messages: { fetch: async () => { throw new Error('Discord unavailable') } } } })
+	await panelAction(panel, 'select', ['second'])
+	await panelAction(panel, 'add')
+	assert.deepEqual(row.approved_users, ['second'])
+	assert.match(panel.f.replies.at(-1).content, /Изменения сохранены/)
+	assert.match(JSON.stringify(panel.f.edits.at(-1)), /Изменено: 1/)
+	assert.equal(queries.includes('ROLLBACK'), false)
+})
+
+test('panel pages are private snapshots; navigation clears selection and never changes the public page', async () => {
+	reset(['first'], ['second', 'third', 'fourth', 'fifth', 'sixth'])
+	const panel = await openPanel()
+	await panelAction(panel, 'select', ['first'])
+	await panelAction(panel, 'next')
+	const menu = panelComponents(panel.f).find((c: any) => c.options)
+	assert.deepEqual(menu.options.map((o: any) => o.value), ['sixth'])
+	await panelAction(panel, 'add')
+	assert.deepEqual(row.approved_users, [])
+	assert.equal(row.approval_page, 0)
+	assert.equal(panelComponents(panel.f).filter((c: any) => c.options).length, 1)
+})
+
+test('panel checks permissions, owner, expiry and current registration deadline', async t => {
+	reset(['first'])
+	const denied = fixture('user', 'capt_manage')
+	Object.assign(denied.interaction.member, { permissions: { has: () => false } })
+	Object.assign(denied.interaction.member, { roles: { cache: new Collection() } })
+	await handleCapturePanel(denied.interaction)
+	assert.match(denied.replies[0].content, /нет прав/)
+	const panel = await openPanel()
+	const other = fixture('other', panel.prefix + 'add:first')
+	await handleCapturePanel(other.interaction)
+	assert.match(other.replies[0].content, /устарела/)
+	row.discord_timestamp = `<t:${Math.floor(Date.now() / 1000) - 3601}:F>`
+	await panelAction(panel, 'add:first')
+	assert.deepEqual(row.approved_users, [])
+	assert.match(JSON.stringify(panel.f.edits.at(-1)), /Сбор завершён/)
+	t.mock.method(Date, 'now', () => new Date().getTime() + 16 * 60_000)
+	await panelAction(panel, 'refresh')
+	assert.match(panel.f.replies.at(-1).content, /устарела/)
+})
+
+test('public registration exposes management instead of approval menus; legacy menus open a panel', async () => {
+	reset(['first'])
+	const payload = JSON.stringify(captures.buildCaptureMessage(row.discord_timestamp, ['first'], [], [], 'Тест', 1))
+	assert.match(payload, /capt_manage/)
+	assert.doesNotMatch(payload, /capt_approve_/)
+	const legacy = fixture('admin', 'capt_approve_oldhash')
+	await handleCapturePanel(legacy.interaction)
+	assert.ok(panelComponents(legacy).some((c: any) => c.custom_id?.endsWith('_add:first')))
 })
 
 test('group success follows publication, repeated creation sends again, unavailable channels never report success', async t => {

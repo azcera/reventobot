@@ -15,11 +15,9 @@ import {
 	TextDisplayBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	StringSelectMenuBuilder,
 	PermissionFlagsBits,
 	ChannelType
 } from 'discord.js'
-import { createHash } from 'node:crypto'
 import { captureExpired } from './captureExpiry'
 require('dotenv').config()
 
@@ -61,33 +59,6 @@ function redistributeApproved(
 		mainMeta: main,
 		reserveMeta: reserve
 	}
-}
-
-function approvalGroups(
-	mainList: string[],
-	reserveList: string[],
-	page: number,
-	mainMeta: JoinedPlayer[] = [],
-	reserveMeta: JoinedPlayer[] = [],
-	guild: import('discord.js').Guild | undefined,
-	sortMode: string = 'priority'
-) {
-	const joined = joinedPlayers(mainList, reserveList, mainMeta, reserveMeta)
-	const ordered = guild && sortMode !== 'time'
-		? sortByRolePriority(joined, guild)
-		: joined.map(player => player.userId)
-	const players = ordered.slice(page * APPROVAL_PAGE_SIZE, (page + 1) * APPROVAL_PAGE_SIZE)
-	const groups = []
-	for (let i = 0; i < players.length; i += 25)
-		groups.push(players.slice(i, i + 25))
-	return groups
-}
-
-function approvalId(group: string[]) {
-	return (
-		'capt_approve_' +
-		createHash('sha256').update(group.join(',')).digest('hex').slice(0, 20)
-	)
 }
 
 // Parse PRIORITY_ROLES from env: comma-separated role IDs, highest priority first
@@ -201,6 +172,9 @@ function buildCaptureMessage(
 			.setDisabled(expired)
 			.setStyle(ButtonStyle.Secondary)
 	)
+	containerComponent.addActionRowComponents(new ActionRowBuilder<import('discord.js').MessageActionRowComponentBuilder>().addComponents(
+		new ButtonBuilder().setCustomId('capt_manage').setLabel('Управление составом').setStyle(ButtonStyle.Primary).setDisabled(expired)
+	))
 	const pageCount = Math.ceil(
 		(mainList.length + reserveList.length) / APPROVAL_PAGE_SIZE
 	)
@@ -217,39 +191,10 @@ function buildCaptureMessage(
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(approvalPage >= pageCount - 1)
 		)
-	const menus = approvalGroups(
-		mainList,
-		reserveList,
-		approvalPage,
-		mainListMeta,
-		reserveListMeta,
-		guild,
-		sortMode
-	).map((group, index) => {
-		const start = approvalPage * APPROVAL_PAGE_SIZE + index * 25 + 1
-		const menu = new StringSelectMenuBuilder()
-			.setCustomId(approvalId(group))
-			.setPlaceholder(
-				`Одобрить участников ${start}–${start + group.length - 1}`
-			)
-			.setMinValues(0)
-			.setMaxValues(group.length)
-			.addOptions(
-				group.map((id, index) => ({
-					label: `${start + index}. ${guild?.members.cache.get(id)?.displayName || id}`.slice(
-						0,
-						100
-					),
-					value: id,
-					default: approved.has(id)
-				}))
-			)
-		return new ActionRowBuilder<import('discord.js').MessageActionRowComponentBuilder>().addComponents(menu)
-	})
 
 	return {
 		flags: MessageFlags.IsComponentsV2 as const,
-		components: [dashboard.decorate('registration', containerComponent), buttonsRow, ...menus]
+		components: [dashboard.decorate('registration', containerComponent), buttonsRow]
 	}
 }
 
@@ -421,8 +366,8 @@ type CaptureInteraction = import('discord.js').ButtonInteraction<'cached'> | imp
 const captureRefreshes = new Map<string, { revision: number; promise: Promise<void> }>()
 
 // Serialize Discord writes, reading the latest committed state inside the queue.
-async function refreshCapture(interaction: CaptureInteraction) {
-	const id = interaction.message.id
+async function refreshCapture(interaction: CaptureInteraction, message?: import('discord.js').Message<true>) {
+	const id = message?.id ?? interaction.message.id
 	const pending = captureRefreshes.get(id)
 	if (pending) {
 		pending.revision++
@@ -432,10 +377,12 @@ async function refreshCapture(interaction: CaptureInteraction) {
 		const { rows } = await pool.query('SELECT * FROM active_captures WHERE message_id = $1', [id])
 		const row = rows[0]
 		if (!row) return
-		await interaction.editReply(buildCaptureMessage(row.discord_timestamp,
+		const payload = buildCaptureMessage(row.discord_timestamp,
 			readIds(row.main_list), readIds(row.reserve_list), readIds(row.left_list), row.target,
 			row.max_main || 20, interaction.guild, readMeta(row.main_list_meta), readMeta(row.reserve_list_meta),
-			readIds(row.approved_users), row.approval_page || 0, row.sort_mode))
+			readIds(row.approved_users), row.approval_page || 0, row.sort_mode)
+		if (message) await message.edit(payload)
+		else await interaction.editReply(payload)
 	}
 	const state = { revision: 0, promise: Promise.resolve() }
 	state.promise = Promise.resolve().then(async () => {
@@ -449,9 +396,9 @@ async function refreshCapture(interaction: CaptureInteraction) {
 	return state.promise
 }
 
-async function completeCaptureChange(interaction: CaptureInteraction, promoted: string[], content?: string) {
+async function completeCaptureChange(interaction: CaptureInteraction, promoted: string[], content?: string, message?: import('discord.js').Message<true>) {
 	await Promise.all([
-		refreshCapture(interaction).catch(async error => {
+		refreshCapture(interaction, message).catch(async error => {
 			console.error('[Capture refresh]', error)
 			await interaction.followUp({ content: 'Запись сохранена, но обновить общий список пока не удалось.', flags: MessageFlags.Ephemeral }).catch(console.error)
 		}),
@@ -459,7 +406,7 @@ async function completeCaptureChange(interaction: CaptureInteraction, promoted: 
 		...promoted.map(async id => {
 			try {
 				const user = await interaction.client.users.fetch(id)
-				await user.send({ content: `✅ Вы переведены из резерва в основной состав!\n${interaction.message.url}`, allowedMentions: { parse: [] } })
+				await user.send({ content: `✅ Вы переведены из резерва в основной состав!\n${message?.url ?? interaction.message.url}`, allowedMentions: { parse: [] } })
 			} catch (error) { console.error('[Capture promotion DM]', id, getError(error).message) }
 		})
 	])
@@ -625,7 +572,7 @@ async function handleButton(interaction: import('discord.js').ButtonInteraction<
 	}
 }
 
-async function handleApproval(interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').StringSelectMenuInteraction<'cached'>) {
+async function handleApproval(interaction: import('discord.js').ButtonInteraction<'cached'>) {
 	const adminRoles = (dashboard.getSetting('ADMIN_ROLES') || '')
 		.split(',')
 		.map(id => id.trim())
@@ -677,46 +624,6 @@ async function handleApproval(interaction: import('discord.js').ButtonInteractio
 		)
 		if (interaction.customId === 'capt_sort_toggle') {
 			sortMode = sortMode === 'time' ? 'priority' : 'time'
-		} else if (interaction.isStringSelectMenu()) {
-			const group = approvalGroups(
-				main,
-				reserve,
-				page,
-				mainMeta,
-				reserveMeta,
-				interaction.guild,
-				sortMode
-			).find(items => approvalId(items) === interaction.customId)
-			if (!group || interaction.values.some(id => !group.includes(id))) {
-				await client.query('ROLLBACK')
-				return interaction.followUp({
-					content: 'Список изменился. Обновите сообщение и попробуйте снова.',
-					flags: MessageFlags.Ephemeral as const
-				})
-			}
-			approved = [
-				...approved.filter(id => !group.includes(id)),
-				...interaction.values
-			]
-			if (approved.length > (row.max_main || 20)) {
-				await client.query('ROLLBACK')
-				return interaction.followUp({
-					content: `❌ Можно одобрить не более ${row.max_main || 20} участников.`,
-					flags: MessageFlags.Ephemeral as const
-				})
-			}
-			const lists = redistributeApproved(
-				main,
-				reserve,
-				mainMeta,
-				reserveMeta,
-				approved,
-				row.max_main || 20
-			)
-			main = lists.mainList
-			reserve = lists.reserveList
-			mainMeta = lists.mainMeta
-			reserveMeta = lists.reserveMeta
 		} else {
 			const requestedPage = Number(
 				interaction.customId.slice('capt_approval_page_'.length)
@@ -770,5 +677,8 @@ export {
 	updateCollectionTime,
 	sendCollection,
 	handleButton,
-	handleApproval
+	handleApproval,
+	joinedPlayers,
+	sortByRolePriority,
+	completeCaptureChange
 }

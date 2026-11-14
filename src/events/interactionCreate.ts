@@ -2,6 +2,7 @@ import { getError } from '../utils/errors'
 import { MessageFlags } from 'discord.js'
 import { store as dashboard } from '../dashboard/store'
 import { authorize, MOVED_BUTTON_IDS } from '../services/adminApplicationCommands'
+import { handleCapturePanel } from '../features/capture/captureApprovalPanel'
 import captureManager = require('../features/capture/captureManager')
 import groupInteractions = require('../features/capture/groupInteractions')
 import captureInteractions = require('../features/capture/captureInteractions')
@@ -77,9 +78,12 @@ export = (client: import('discord.js').Client) => {
 			return await captureManager.handleButton(interaction)
 		}
 
+		if ((interaction.isButton() || interaction.isStringSelectMenu()) &&
+			(interaction.customId === 'capt_manage' || interaction.customId.startsWith('capt_panel_') || interaction.customId.startsWith('capt_approve_'))) {
+			return await handleCapturePanel(interaction)
+		}
+
 		if (
-			(interaction.isStringSelectMenu() &&
-				interaction.customId.startsWith('capt_approve_')) ||
 			(interaction.isButton() &&
 				(interaction.customId.startsWith('capt_approval_page_') ||
 					interaction.customId === 'capt_sort_toggle'))
