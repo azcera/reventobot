@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Collection, ContainerBuilder, type Client, type Message, TextDisplayBuilder } from 'discord.js'
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Collection, ContainerBuilder, type Client, type Message, TextDisplayBuilder } from 'discord.js'
 import type { Pool } from 'pg'
 import { createCaptureResults, matchesCapture, captureResultText } from '../src/services/captureResults'
 import { normalizeWar, rulesFromEnv } from '../src/features/capture/familyWarData'
@@ -30,8 +30,8 @@ test('matches Moscow time with up to 20 minutes delay, opponent and our side; ig
 	assert.equal(matchesCapture(notice, defense), false)
 	const text = captureResultText(war)
 	assert.match(text, /Победа/)
-	assert.match(text, /Damage \/ 10 — \*\*500 \| 1\*\* ⭐/)
-	assert.match(text, /Kills \/ 20 — \*\*100 \| 5\*\*/)
+	assert.match(text, /Damage \/ 10 - \*\*500 \| 1\*\* ⭐/)
+	assert.match(text, /Kills \/ 20 - \*\*100 \| 5\*\*/)
 	assert.ok(text.indexOf('Kills /') < text.indexOf('Damage /'))
 	assert.doesNotMatch(text, /Enemy MVP/)
 	assert.match(captureResultText(normalizeWar({ ...raw(), winner: 2 }, rulesFromEnv())!), /Поражение/)
@@ -40,7 +40,12 @@ test('matches Moscow time with up to 20 minutes delay, opponent and our side; ig
 function fixture() {
 	const rows: any[] = [], edits: any[] = []
 	let captures = [raw()], fail = true, fetches = 0
-	const original = new ContainerBuilder().setAccentColor(0x5865f2).addTextDisplayComponents(new TextDisplayBuilder().setContent('Telegram announcement and registration')).toJSON()
+	const original = new ContainerBuilder().setAccentColor(0x5865f2)
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent('Telegram announcement and registration @everyone'))
+		.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder().setCustomId('capt_tg_enemy_time').setLabel('Создать регу').setStyle(ButtonStyle.Success),
+			new ButtonBuilder().setCustomId('unrelated').setLabel('Другая кнопка').setStyle(ButtonStyle.Secondary)
+		)).toJSON()
 	const message = { author: { id: 'bot' }, components: [{ toJSON: () => original }], async edit(payload: any) {
 		if (fail) throw new Error('Discord unavailable')
 		edits.push(payload)
@@ -94,10 +99,15 @@ test('only processes null IDs, retries failed edits after restart and stops poll
 	assert.equal(rows[0].api_id, '1')
 	assert.match(rows[0].version, /Победа/)
 	assert.match(rows[0].version, /<@bound>/)
-	assert.deepEqual(edits[0].components[0].components, original.components)
+	const expected = structuredClone(original)
+	const buttons = expected.components[1] as { components: { disabled?: boolean }[] }
+	buttons.components[0].disabled = true
+	assert.deepEqual(edits[0].components[0].components, expected.components)
+	assert.match(rows[0].version, /<@bound> - \*\*500 \| 1\*\*/)
+	assert.doesNotMatch(rows[0].version, /Damage/)
 	assert.equal(edits[0].components[0].accent_color, 0x57f287)
 	assert.equal(edits[0].components[1].accent_color, 0x57f287)
-	assert.deepEqual(edits[0].allowedMentions, { parse: [] })
+	assert.deepEqual(edits[0].allowedMentions, { parse: ['everyone'] })
 	await restarted.poll()
 	assert.equal(edits.length, 1)
 	captures[0].winner = 2
@@ -155,10 +165,11 @@ test('sorts equal kills by damage, stars ties and uses only unique, nonexcluded 
 		{ id: 'excluded', nickname: 'Player | 50', user: { bot: false } }
 	]
 	const text = captureResultText(normalizeWar(value, rulesFromEnv())!, members as any, { explicit: { static: '10' }, excluded: { excluded: true } })
-	assert.match(text, /Tie \/ <@unique> — \*\*500 \| 5\*\* ⭐/)
-	assert.match(text, /Damage \/ <@explicit> — \*\*500 \| 1\*\* ⭐/)
+	assert.match(text, /<@unique> - \*\*500 \| 5\*\* ⭐/)
+	assert.match(text, /<@explicit> - \*\*500 \| 1\*\* ⭐/)
+	assert.doesNotMatch(text, /Tie|Damage/)
 	assert.match(text, /Kills \/ 20/)
-	assert.ok(text.indexOf('Tie /') < text.indexOf('Kills /'))
+	assert.ok(text.indexOf('<@unique>') < text.indexOf('Kills /'))
 	assert.doesNotMatch(text, /@everyone|<@duplicate|<@excluded/)
 	assert.match(captureResultText(normalizeWar({ ...raw(), status: 'pending', players: {} }, rulesFromEnv())!), /Капт не завершён[\s\S]*Состав пока не получен/)
 })

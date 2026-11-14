@@ -45,7 +45,7 @@ function applyFields(message: T.MessageShape, values: unknown, { expandMarkdown 
 	const current = snapshot(message)
 	if (!values || typeof values !== 'object' || Array.isArray(values)) throw problem(400, 'Некорректные поля сообщения.')
 	const payload: { components: T.RawComponent[]; allowedMentions: D.MessageMentionOptions; content?: string } = { components: message.components.map(component => structuredClone(componentJSON(component))),
-		allowedMentions: { parse: ['roles'], repliedUser: false } }
+		allowedMentions: { parse: ['roles', 'everyone'], repliedUser: false } }
 	const allowed = new Map(current.fields.map(field => [field.path, field]))
 	for (const [path, value] of Object.entries(values)) {
 		const field = allowed.get(path)

@@ -1,6 +1,6 @@
 import { ComponentType, ContainerBuilder, TextDisplayBuilder, escapeMarkdown, type Client } from 'discord.js'
 import type { Pool } from 'pg'
-import type { Env } from '../types'
+import type { Env, RawComponent } from '../types'
 import type { BindingMember, Decisions, RawWar, War } from '../features/capture/familyWarTypes'
 import { battleSummary, bindingIndex, FAMILY_ID, normalizeWar, rulesFromEnv, SERVER } from '../features/capture/familyWarData'
 import { loadDiscordMembers } from './discordMembers'
@@ -8,6 +8,11 @@ import { loadDiscordMembers } from './discordMembers'
 interface CaptureNotice { attack: boolean; enemy: string; startTime: string; zone: string }
 interface NoticeRow { message_id: string; channel_id: string; guild_id: string; notice: CaptureNotice; api_id: string | null; version: string | null }
 const RESULT_ID = 1698001
+function disableRegistration(component: RawComponent) {
+	if (component.type === ComponentType.Button && component.custom_id?.startsWith('capt_tg_')) component.disabled = true
+	component.components?.forEach(disableRegistration)
+	if (component.accessory) disableRegistration(component.accessory)
+}
 const SCHEMA = `CREATE TABLE IF NOT EXISTS telegram_capture_results (
 	message_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, guild_id TEXT NOT NULL,
 	notice JSONB NOT NULL, version TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -37,9 +42,9 @@ export function captureResultText(war: War, members: Iterable<BindingMember> = [
 	const lines = players.map(player => {
 		const ids = bindings.get(String(player.id)) || []
 		const name = escapeMarkdown(String(player.name || 'Неизвестный игрок').replace(/\s+/g, ' ').slice(0, 150)).replace(/@/g, '＠')
-		const identity = `${name} / ${ids.length === 1 ? `<@${ids[0]}>` : player.id}`
+		const identity = ids.length === 1 ? `<@${ids[0]}>` : `${name} / ${player.id}`
 		const star = battle.damageMvp && player.damage === battle.damageMvp.damage ? ' ⭐' : ''
-		return `${identity} — **${stat(player.damage) < 0 ? '—' : player.damage} | ${stat(player.kills) < 0 ? '—' : player.kills}**${star}`
+		return `${identity} - **${stat(player.damage) < 0 ? '—' : player.damage} | ${stat(player.kills) < 0 ? '—' : player.kills}**${star}`
 	})
 	return `### ${war.status === 'finished' ? `Результат капта: ${battle.result}` : 'Капт не завершён'}\nУрон | Киллы\n${lines.join('\n') || 'Состав пока не получен.'}`
 }
@@ -99,6 +104,7 @@ export function createCaptureResults({ client, pool, env = process.env, fetchImp
 				const color = result === 'Неопределено' ? undefined : result === 'Победа' ? 0x57f287 : 0xed4245
 				const components = message.components.map(component => component.toJSON()).filter(component => component.id !== RESULT_ID)
 					.map(component => component.type === ComponentType.Container && color !== undefined ? { ...component, accent_color: color } : component)
+				components.forEach(disableRegistration)
 				const container = new ContainerBuilder().setId(RESULT_ID).setAccentColor(color)
 				// Discord limits an individual text display to 4000 characters.
 				let chunk = ''
@@ -111,7 +117,7 @@ export function createCaptureResults({ client, pool, env = process.env, fetchImp
 				}
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(chunk))
 				components.push(container.toJSON())
-				await message.edit({ components, allowedMentions: { parse: [] } })
+				await message.edit({ components, allowedMentions: { parse: ['everyone'] } })
 				await pool.query(`UPDATE telegram_capture_results SET api_id = $2, version = $3
 					WHERE message_id = $1 AND api_id IS NULL`, [row.message_id, war.apiId, version])
 			} catch (error) { logger.error('[CaptureResults]', row.message_id, error) }

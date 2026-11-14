@@ -132,7 +132,7 @@ async function updateMessage(kind: string, binding: T.Binding, client: D.Client,
 
 		if (definition(kind)!.command) {
 			const built = await (require('../commands/admin/' + definition(kind)!.command) as { buildPayload(): Promise<T.MutableMessagePayload> }).buildPayload()
-			payload = { components: built.components.map(component => componentJSON(component)), ...(kind === 'rules' ? { attachments: [] } : {}), allowedMentions: { parse: ['roles'], repliedUser: false } }
+			payload = { components: built.components.map(component => componentJSON(component)), ...(kind === 'rules' ? { attachments: [] } : {}), allowedMentions: { parse: ['roles', 'everyone'], repliedUser: false } }
 			const files = new Set<NonNullable<D.MessageCreateOptions['files']>[number]>()
 			const resolveMedia = (components: T.RawComponent[]): void => {
 				for (const component of components) {

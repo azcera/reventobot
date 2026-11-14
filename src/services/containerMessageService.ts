@@ -96,7 +96,7 @@ function buildEditPayload(data: T.ContainerData, allowMentions = false) {
 	try {
 		const payload = buildWebContainer(data)
 		payload.components[0].toJSON()
-		payload.allowedMentions = { parse: allowMentions ? ['users', 'roles', 'everyone'] : ['roles'], repliedUser: false }
+		payload.allowedMentions = { parse: allowMentions ? ['users', 'roles', 'everyone'] : ['roles', 'everyone'], repliedUser: false }
 		return payload
 	} catch {
 		fail(400, 'Проверьте содержимое компонентов, ссылки, длину текста и подписи кнопок.')
