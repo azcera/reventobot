@@ -49,6 +49,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | Стили и подсказки UI | `frontend/src/styles.css`, `frontend/src/guides.tsx`, `public/theme.css` |
 | Общий Markdown и документы шаблонов | `public/markdown.ts`, `public/component-markdown.ts`, `public/template-document.ts`, `public/template-layout.ts`, `src/services/markdownContainer.ts` |
 | Диагностика Majestic | `scripts/check-majestic.ts`, `scripts/preview-majestic.ts`; назначение и ограничения — в README |
+| Диагностика задержек процесса и пула БД | `src/services/runtimeDiagnostics.ts`, запуск и остановка в `index.ts`; минутные записи `[Runtime]` в серверном логе |
 
 ## Как экономить контекст
 

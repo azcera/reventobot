@@ -20,6 +20,8 @@ import loadCommands = require('./src/utils/loadCommands')
 import { store as dashboard } from './src/dashboard/store'
 import { registerDashboard } from './src/dashboard/routes'
 import pool = require('./src/services/database')
+import { startRuntimeDiagnostics } from './src/services/runtimeDiagnostics'
+const stopRuntimeDiagnostics = startRuntimeDiagnostics(pool)
 const dashboardReady = dashboard.init(pool).catch(error => {
 	console.error('[Dashboard] Не удалось загрузить настройки:', error.code || error.message)
 })
@@ -160,6 +162,7 @@ const server = app.listen(port, () => {
 
 // --- GRACEFUL SHUTDOWN (корректное завершение работы) ---
 const shutdown = async () => {
+	stopRuntimeDiagnostics()
 	console.log('\n🛑 Получен сигнал остановки. Завершаю работу...')
 	await client.stopTelegramBroadcast?.()
 	await client.familyWars?.stop()

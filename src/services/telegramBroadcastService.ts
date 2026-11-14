@@ -48,6 +48,30 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 	const { signal } = controller
 	let tasks: Promise<void>[] = []
 	const pause = (ms: number) => delay(ms, undefined, { signal })
+	function logFailure(context: string, caught: unknown) {
+		const error = broadcastError(caught)
+		const safe = (value: unknown) => /^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
+		const cause = error.cause && typeof error.cause === 'object' ? error.cause : undefined
+		console.error(context, {
+			name: safe(error.name), code: safe(error.code),
+			causeCode: safe(cause && 'code' in cause ? cause.code : undefined),
+			connectionTimeout: /connection timeout/i.test(error.message),
+			connectionTerminated: /connection terminated/i.test(error.message),
+			pool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }
+		})
+	}
+
+	async function supervise(name: string, run: () => Promise<void>) {
+		while (!signal.aborted) {
+			try { await run() }
+			catch (error) {
+				if (signal.aborted) return
+				logFailure(`[Telegram broadcast] ${name}: перезапуск через 5 секунд`, error)
+			}
+			if (signal.aborted) return
+			try { await pause(5000) } catch { return }
+		}
+	}
 
 	async function api<K extends keyof TelegramResults>(method: K, body: object): Promise<TelegramResults[K]> {
 		const response = await request(`https://api.telegram.org/bot${token}/${method}`, {
@@ -150,10 +174,7 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 			} catch (caught) {
 			const error = broadcastError(caught)
 				if (signal.aborted) break
-				const safe = (value: unknown) => /^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
-				console.error('[Telegram broadcast] Получение команд:', {
-					name: safe(error?.name), code: safe(error?.code), causeCode: safe(error.cause && typeof error.cause === 'object' && 'code' in error.cause ? error.cause.code : undefined)
-				})
+				logFailure('[Telegram broadcast] Получение команд:', error)
 				await pause(Math.max(5, error.retryAfter || 0) * 1000)
 			}
 		}
@@ -204,7 +225,7 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 			} catch (caught) {
 			const error = broadcastError(caught)
 				if (signal.aborted) break
-				console.error('[Telegram broadcast] Очередь:', error.code || 'network/database error')
+				logFailure('[Telegram broadcast] Очередь:', error)
 				await pause(5000)
 			}
 		}
@@ -217,9 +238,7 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 			const webhook = await api('getWebhookInfo', {})
 			if (webhook.url) throw new Error('У Telegram-бота активен webhook; polling не запущен')
 			majesticSession.start()
-			tasks = [poll(), worker()].map(task => task.catch(error => {
-				if (!signal.aborted) console.error('[Telegram broadcast] Обработчик остановлен:', error.code || 'network/database error')
-			}))
+			tasks = [supervise('Получение команд', poll), supervise('Очередь', worker)]
 		},
 		async stop() {
 			majesticSession.stop()
