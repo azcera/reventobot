@@ -21,7 +21,6 @@ import {
 } from 'discord.js'
 import { createHash } from 'node:crypto'
 import { captureExpired } from './captureExpiry'
-import { publishCollectionOnce } from './collectionCreation'
 require('dotenv').config()
 
 import pool = require('../../services/database.js')
@@ -389,29 +388,23 @@ async function sendCollection(
 		mainListMeta,
 		reserveListMeta
 	)
-	const url = await publishCollectionOnce(pool,
-		['capture', guild.id, channel.id, target.trim().toLocaleLowerCase(), discordTimestamp.replace(/:[A-Za-z]>/, '>')],
-		Number(/<t:(\d+)/.exec(discordTimestamp)?.[1] || 0) * 1000 + 3600000,
-		async () => {
-			const message = await channel.send(messageData)
-			await pool.query(
-				`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, main_list_meta, reserve_list_meta, target, max_main, channel_id)
+	const message = await channel.send(messageData)
+	await pool.query(
+		`INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list, main_list_meta, reserve_list_meta, target, max_main, channel_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-				[
-					message.id,
-					discordTimestamp,
-					JSON.stringify(mainList),
-					JSON.stringify(reserveList),
-					JSON.stringify(leftList),
-					JSON.stringify(mainListMeta),
-					JSON.stringify(reserveListMeta),
-					target,
-					maxMain,
-					channel.id
-				]
-			)
-			return message.url
-		})
+		[
+			message.id,
+			discordTimestamp,
+			JSON.stringify(mainList),
+			JSON.stringify(reserveList),
+			JSON.stringify(leftList),
+			JSON.stringify(mainListMeta),
+			JSON.stringify(reserveListMeta),
+			target,
+			maxMain,
+			channel.id
+		]
+	)
 	if (sendReminders) {
 		try {
 			for (let i = 0; i < 3; i++) {
@@ -421,7 +414,7 @@ async function sendCollection(
 			console.error('Не удалось отправить напоминания о наборе:', error)
 		}
 	}
-	return url
+	return message.url
 }
 
 type CaptureInteraction = import('discord.js').ButtonInteraction<'cached'> | import('discord.js').StringSelectMenuInteraction<'cached'>

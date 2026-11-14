@@ -12,8 +12,7 @@ import { parseDateTime, getMskTimeString } from '../../utils/dateUtils'
 import { optionsMap } from '../../features/capture/groupOptions'
 import { sendEphemeralWithAutoDelete } from '../../utils/autoDelete'
 import { attackEventAt } from '../../services/eventSchedule'
-import pool = require('../../services/database')
-import { publishCollectionOnce, collectionCreationError } from './collectionCreation'
+import { collectionCreationError } from './collectionCreation'
 
 /**
  * Показывает модалку (время/цель/код) в зависимости от выбранного значения.
@@ -132,10 +131,7 @@ async function submitGroupModal(interaction: import('discord.js').ModalSubmitInt
 			code: code ? ` 🔑 Код группы: \`${code}\`` : ''
 		})
 
-		const url = await publishCollectionOnce(pool,
-			['group', interaction.guildId, pingChannelId, target.trim().toLocaleLowerCase(), groupKind === 'supply' ? code : parsedDate!.getTime()],
-			groupKind === 'supply' ? Date.now() + 10 * 60000 : parsedDate!.getTime() + 3600000,
-			async () => (await pingChannel.send(msgContent)).url)
+		const url = (await pingChannel.send(msgContent)).url
 		let warning = ''
 		try {
 			for (let i = 0; i < 2; i++) await pingChannel.send(msgContent)

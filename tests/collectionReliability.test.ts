@@ -2,7 +2,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Collection, MessageFlags, type ButtonInteraction, type ModalSubmitInteraction, type StringSelectMenuInteraction } from 'discord.js'
 import { store } from '../src/dashboard/store'
-import { DuplicateCollectionError, publishCollectionOnce } from '../src/features/capture/collectionCreation'
 
 let row: any
 let connections = 0
@@ -68,27 +67,6 @@ function fixture(userId: string, customId = 'capt_join') {
 	}
 	return { interaction: interaction as unknown as ButtonInteraction<'cached'>, replies, edits, dms }
 }
-
-test('creation claim blocks concurrent and repeated publication, returns the existing link and survives a failed send', async () => {
-	reset()
-	let release!: () => void
-	const pending = new Promise<void>(resolve => { release = resolve })
-	let sends = 0
-	const publish = async () => { sends++; await pending; return 'https://discord.com/message' }
-	const first = publishCollectionOnce(database as any, ['same'], Date.now() + 3600000, publish)
-	await assert.rejects(publishCollectionOnce(database as any, ['same'], Date.now() + 3600000, publish), DuplicateCollectionError)
-	release()
-	await first
-	await assert.rejects(publishCollectionOnce(database as any, ['same'], Date.now() + 3600000, publish), /https:\/\/discord.com\/message/)
-	assert.equal(sends, 1)
-	await assert.rejects(publishCollectionOnce(database as any, ['uncertain'], Date.now() + 3600000, async () => { throw new Error('timeout') }), /timeout/)
-	await assert.rejects(publishCollectionOnce(database as any, ['uncertain'], Date.now() + 3600000, publish), DuplicateCollectionError)
-	// Expired claims can be used again; different channels/events do not collide.
-	for (const claim of claims.values()) claim.expires = 0
-	await publishCollectionOnce(database as any, ['same'], Date.now() + 3600000, publish)
-	await publishCollectionOnce(database as any, ['different'], Date.now() + 3600000, publish)
-	assert.equal(sends, 3)
-})
 
 test('joining confirms main/reserve privately after commit, leaving promotes and notifies the reserve', async () => {
 	reset()
@@ -159,14 +137,14 @@ test('manual approval also notifies users promoted from reserve, after releasing
 	assert.deepEqual(f.dms, ['second'])
 })
 
-test('group success follows publication, duplicates do not ping again, unavailable channels never report success', async t => {
+test('group success follows publication, repeated creation sends again, unavailable channels never report success', async t => {
 	t.mock.timers.enable({ apis: ['setTimeout'] })
 	t.mock.method(console, 'error', () => {})
 	t.mock.method(store, 'getSetting', () => 'ping')
 	reset()
 	const replies: string[] = []
 	let sends = 0
-	const channel = { isSendable: () => true, async send() { assert.equal(replies.length, 0); sends++; return { url: 'https://discord.com/group' } } }
+	const channel = { isSendable: () => true, async send() { assert.equal(replies.length, Math.floor(sends / 3)); sends++; return { url: 'https://discord.com/group' } } }
 	const interaction = { guildId: 'guild', customId: 'modal_group_schedule_supply', member: {}, deferred: true,
 		deferReply: async () => {}, editReply: async (payload: any) => { replies.push(payload.content) }, deleteReply: async () => {},
 		fields: { getTextInputValue: () => '' },
@@ -176,8 +154,8 @@ test('group success follows publication, duplicates do not ping again, unavailab
 	assert.match(replies[0], /Группа создана.*\nhttps:\/\/discord.com\/group/s)
 	assert.equal(sends, 3)
 	await groups.submitGroupModal(interaction)
-	assert.match(replies[1], /уже создан/)
-	assert.equal(sends, 3)
+	assert.match(replies[1], /Группа создана/)
+	assert.equal(sends, 6)
 	claims.clear(); replies.length = 0
 	channel.send = async () => { throw new Error('timeout') }
 	await groups.submitGroupModal(interaction)
@@ -189,22 +167,22 @@ test('group success follows publication, duplicates do not ping again, unavailab
 	assert.match(replies[0], /не опубликована/)
 })
 
-test('collection creation saves before reminders, rejects duplicates and propagates persistence errors', async t => {
+test('collection creation saves before reminders, allows repeats and propagates persistence errors', async t => {
 	reset()
 	let sends = 0
 	const channel = { id: 'channel', isSendable: () => true, async send() { sends++; return { id: 'message', url: 'https://discord.com/collection' } } }
 	const interaction = { guild: { id: 'guild', channels: { fetch: async () => channel } } } as unknown as ModalSubmitInteraction<'cached'>
 	assert.equal(await captures.sendCollection(interaction, row.discord_timestamp, 'Цель', 20, true, 'channel'), 'https://discord.com/collection')
 	assert.equal(sends, 4)
-	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, ' цель ', 30, true, 'channel'), DuplicateCollectionError)
-	assert.equal(sends, 4)
+	assert.equal(await captures.sendCollection(interaction, row.discord_timestamp, ' цель ', 30, true, 'channel'), 'https://discord.com/collection')
+	assert.equal(sends, 8)
 	const query = database.query.bind(database)
 	t.mock.method(database, 'query', async (sql: string, values: any[] = []) => {
 		if (sql.startsWith('INSERT INTO active_captures')) throw new Error('database unavailable')
 		return query(sql, values)
 	})
 	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, 'Другая цель', 20, true, 'channel'), /database unavailable/)
-	assert.equal(sends, 5) // The failed creation sends no reminders and cannot be published twice.
-	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, 'Другая цель', 20, true, 'channel'), DuplicateCollectionError)
-	assert.equal(sends, 5)
+	assert.equal(sends, 9) // The failed creation sends no reminders.
+	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, 'Другая цель', 20, true, 'channel'), /database unavailable/)
+	assert.equal(sends, 10)
 })
