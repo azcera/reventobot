@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "N286xbViTNBGzNDq7CXQn"
+uri = "file://generated-artifacts/deployment-logs-2026-11-15-0000-1200-msk.txt"
+type = "text"
+title = "Deployment logs — 15 Nov 2026, 00:00–12:00 MSK"
+description = "Production deployment log export for the requested Moscow-time interval. Credential-like values redacted where detected."
+logical_id = "87aac678-5a75-4458-ae2d-07c7398dba16"
+content_hash = "sha256:881b615848191336921a9dd7298debbf96844efcbb6a62e4ff191d485f23fcb2"
+size = 6049
+mtime_ms = 1794734810082
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:e637dcc3-2aec-4b08-a969-36aeb777e1aa/87aac678-5a75-4458-ae2d-07c7398dba16/83c32eb8-2341-43a0-816a-2d8ccb2bc2a5"
+storage_version_token = "1794734810561566"
+content_type = "text/plain"
