@@ -6,7 +6,9 @@ export interface OperationError extends Error {
 
 /** Preserve known diagnostic fields without trusting arbitrary thrown values. */
 export function getError(value: unknown): OperationError {
-  const error: OperationError = value instanceof Error ? value : new Error(String(value));
+  // Native errors can expose read-only fields (for example DOMException.code).
+  if (value instanceof Error) return value;
+  const error: OperationError = new Error(String(value));
   if (typeof value === 'object' && value !== null) {
     if ('code' in value && (typeof value.code === 'string' || typeof value.code === 'number')) error.code = value.code;
     if ('status' in value && typeof value.status === 'number') error.status = value.status;

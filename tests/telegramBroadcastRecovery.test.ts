@@ -54,6 +54,45 @@ for (const stopBeforeRetry of [false, true]) test(`polling state failure recover
 	assert.equal(errors.mock.calls.length, 1)
 })
 
+test('polling retries native timeouts without restarting or losing the offset', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	const errors = t.mock.method(console, 'error', () => {})
+	let reads = 0, polls = 0
+	const pool = {
+		totalCount: 1, idleCount: 1, waitingCount: 0,
+		async query(sql: string) {
+			if (sql.startsWith('SELECT update_offset')) {
+				reads++
+				return { rows: [{ update_offset: 42 }] }
+			}
+			return { rows: [] }
+		}
+	} as unknown as Pool
+	const request: typeof fetch = async (url, init) => {
+		if (!String(url).endsWith('/getUpdates')) return new Response(JSON.stringify({ ok: true, result: { url: '' } }))
+		polls++
+		assert.equal(JSON.parse(String(init?.body)).offset, 42)
+		if (polls === 1) throw new DOMException('Request timed out', 'TimeoutError')
+		return new Promise((_resolve, reject) => {
+			init!.signal!.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), { once: true })
+		})
+	}
+	const service = createBroadcastService({ pool, token: 'fixture', request })
+	t.after(() => service.stop())
+	await service.start()
+	await flush()
+	assert.equal(errors.mock.calls.length, 1)
+	const args = errors.mock.calls[0].arguments as unknown[]
+	assert.equal(args[0], '[Telegram broadcast] Получение команд:')
+	assert.equal((args[1] as { name: string }).name, 'TimeoutError')
+	t.mock.timers.tick(5000)
+	await flush()
+	assert.equal(polls, 2)
+	assert.equal(reads, 1)
+	await service.stop()
+	assert.equal(errors.mock.calls.length, 1)
+})
+
 test('runtime diagnostics logs pool state locally and stops on shutdown', t => {
 	t.mock.timers.enable({ apis: ['setInterval'] })
 	const logs = t.mock.method(console, 'log', () => {})
