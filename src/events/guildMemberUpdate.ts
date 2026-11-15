@@ -5,7 +5,7 @@ import {
 	Events
 } from 'discord.js'
 import { parseDisplayName } from '../utils/parseDisplayName'
-import { adminPrefix } from '../utils/adminPrefix'
+import { adminPrefix, stripRolePrefix } from '../utils/adminPrefix'
 
 
 /**
@@ -28,7 +28,7 @@ let handleMakeAdmin = async (oldMember: import('discord.js').GuildMember | impor
 
 	if (!addedRole && !removedRole) return
 
-	const cleanName = newMember.displayName.replace(/^\[[^\]]*\]\s*/, '').trim()
+	const cleanName = stripRolePrefix(newMember.displayName, rolePrefixes)
 
 	const newPrefix = adminPrefix([...newMember.roles.cache.keys()], dashboard.roleIds('ADMIN_ROLES'), rolePrefixes)
 	const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32)
