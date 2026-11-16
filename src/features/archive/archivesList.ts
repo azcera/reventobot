@@ -40,11 +40,6 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 		if (member.user.bot) return false
 		if (!member.roles.cache.has(dashboard.getSetting('AUTO_ROLE'))) return false
 
-		// Исключаем админов
-		if (member.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))) {
-			return false
-		}
-
 		return true
 	})
 

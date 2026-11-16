@@ -24,6 +24,30 @@ function fixture(count: number, roleCount = 1) {
 	return { guild, members, roles }
 }
 
+test('archive lists include moderators with role prefixes and preserve membership filters', async t => {
+	const f = fixture(7)
+	const members = [...f.members.values()]
+	const adminRole = { id: 'admin', position: 10 } as Role
+	for (const member of members.slice(0, 3)) {
+		member.roles.cache.set(adminRole.id, adminRole)
+		if (member.displayName.includes('|')) Object.assign(member, { displayName: `[Mod] ${member.displayName}` })
+	}
+	Object.assign(members[4].user, { bot: true })
+	members[5].roles.cache.delete('auto')
+	members[6].roles.cache.delete(f.roles.first()!.id)
+	t.mock.method(store, 'getSetting', (key: string) => key === 'AUTO_ROLE' ? 'auto' : key === 'ROLE_PREFIXES' ? [{ roleId: 'admin', prefix: '[Mod]' }] : '')
+	t.mock.method(store, 'roleIds', (key: string) => key === 'ARCHIVE_GROUP_ROLES' ? [...f.roles.keys()] : key === 'ADMIN_ROLES' ? ['admin'] : [])
+	const result = await getArchivesLists(f.guild)
+	assert.ok(result)
+	const text = result.parts.flatMap(part => part.toJSON().components.flatMap(component =>
+		component.type === 10 ? [component.content] : [])).join('\n')
+	assert.match(text, /### Архивы\n1\. <@100000000000000000> → <#100000000000000000>/)
+	assert.match(text, /### Нет архива\n1\. <@100000000000000001>/)
+	assert.match(text, /### Некорректный никнейм\n1\. <@100000000000000002>/)
+	for (const member of members.slice(0, 4)) assert.equal(text.split(`<@${member.id}>`).length - 1, 1)
+	for (const member of members.slice(4)) assert.ok(!text.includes(`<@${member.id}>`))
+})
+
 test('archive sections omit repeated statuses and split large roles without losing members', async t => {
 	t.mock.method(store, 'getSetting', (key: string) => key === 'AUTO_ROLE' ? 'auto' : '')
 	for (const [count, roleCount] of [[3, 1], [900, 1], [60, 60], [180, 3]]) {

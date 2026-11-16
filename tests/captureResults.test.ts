@@ -30,9 +30,10 @@ test('matches Moscow time with up to 20 minutes delay, opponent and our side; ig
 	assert.equal(matchesCapture(notice, defense), false)
 	const text = captureResultText(war)
 	assert.match(text, /Победа/)
-	assert.match(text, /Damage \/ 10 - \*\*500 \| 1\*\* ⭐/)
-	assert.match(text, /Kills \/ 20 - \*\*100 \| 5\*\*/)
-	assert.ok(text.indexOf('Kills /') < text.indexOf('Damage /'))
+	assert.match(text, /\*\*Участников: 2 · Киллы: 6 · Урон: 600\*\*/)
+	assert.match(text, /⭐ \*\*Урон:\*\* Damage \/ 10 — \*\*500\*\*/)
+	assert.match(text, /🎯 \*\*Киллы:\*\* Kills \/ 20 — \*\*5\*\*/)
+	assert.match(text, /`# │ Киллы │ Урон` Игрок\n`1 │     5 │  100` Kills \/ 20\n`2 │     1 │  500` Damage \/ 10 ⭐/)
 	assert.doesNotMatch(text, /Enemy MVP/)
 	assert.match(captureResultText(normalizeWar({ ...raw(), winner: 2 }, rulesFromEnv())!), /Поражение/)
 })
@@ -139,7 +140,7 @@ test('only processes null IDs, retries failed edits after restart and stops poll
 	const buttons = expected.components[1] as { components: { disabled?: boolean }[] }
 	buttons.components[0].disabled = true
 	assert.deepEqual(edits[0].components[0].components, expected.components)
-	assert.match(rows[0].version, /<@bound> - \*\*500 \| 1\*\*/)
+	assert.match(rows[0].version, /`2 │     1 │  500` <@bound> ⭐/)
 	assert.doesNotMatch(rows[0].version, /Damage/)
 	assert.equal(edits[0].components[0].accent_color, 0x57f287)
 	assert.equal(edits[0].components[1].accent_color, 0x57f287)
@@ -201,11 +202,24 @@ test('sorts equal kills by damage, stars ties and uses only unique, nonexcluded 
 		{ id: 'excluded', nickname: 'Player | 50', user: { bot: false } }
 	]
 	const text = captureResultText(normalizeWar(value, rulesFromEnv())!, members as any, { explicit: { static: '10' }, excluded: { excluded: true } })
-	assert.match(text, /<@unique> - \*\*500 \| 5\*\* ⭐/)
-	assert.match(text, /<@explicit> - \*\*500 \| 1\*\* ⭐/)
+	assert.match(text, /`1 │     5 │  500` <@unique> ⭐/)
+	assert.match(text, /`3 │     1 │  500` <@explicit> ⭐/)
 	assert.doesNotMatch(text, /Tie|Damage/)
 	assert.match(text, /Kills \/ 20/)
-	assert.ok(text.indexOf('<@unique>') < text.indexOf('Kills /'))
+	assert.ok(text.indexOf('`1 │') < text.indexOf('`2 │'))
 	assert.doesNotMatch(text, /@everyone|<@duplicate|<@excluded/)
 	assert.match(captureResultText(normalizeWar({ ...raw(), status: 'pending', players: {} }, rulesFromEnv())!), /Капт не завершён[\s\S]*Состав пока не получен/)
+})
+
+test('aligns numeric columns, keeps mentions outside code and marks incomplete totals', () => {
+	const value = raw()
+	value.players!['1698'] = [
+		{ id: 10, name: 'Player', damage: 14250, kills: 12 },
+		{ id: 20, name: 'Unknown', damage: -1 }
+	]
+	const members = [{ id: '123', nickname: 'Player | 10', user: { bot: false } }]
+	const text = captureResultText(normalizeWar(value, rulesFromEnv())!, members as any)
+	assert.match(text, /Участников: 2 · Киллы: — · Урон: —/)
+	assert.match(text, /`# │ Киллы │   Урон` Игрок\n`1 │    12 │ 14 250` <@123> ⭐\n`2 │     — │      —` Unknown \/ 20/)
+	assert.doesNotMatch(text, /^`[^`\n]*<@/m)
 })

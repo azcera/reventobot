@@ -1,7 +1,7 @@
 import { ComponentType, ContainerBuilder, TextDisplayBuilder, escapeMarkdown, type Client } from 'discord.js'
 import type { Pool } from 'pg'
 import type { Env, RawComponent } from '../types'
-import type { BindingMember, Decisions, RawWar, War } from '../features/capture/familyWarTypes'
+import type { BindingMember, Decisions, RawWar, War, WarPlayer } from '../features/capture/familyWarTypes'
 import { battleSummary, bindingIndex, FAMILY_ID, normalizeWar, rulesFromEnv, SERVER } from '../features/capture/familyWarData'
 import { loadDiscordMembers } from './discordMembers'
 import events = require('../config/eventSchedule')
@@ -40,14 +40,32 @@ export function captureResultText(war: War, members: Iterable<BindingMember> = [
 	const players = (war.raw.players?.[String(FAMILY_ID)] || []).filter(player => player &&
 		Number.isSafeInteger(player.id) && player.id > 0 && (player.familyId === undefined || player.familyId === FAMILY_ID))
 		.slice().sort((a, b) => stat(b.kills) - stat(a.kills) || stat(b.damage) - stat(a.damage) || a.id - b.id)
-	const lines = players.map(player => {
+	const identity = (player: WarPlayer) => {
 		const ids = bindings.get(String(player.id)) || []
 		const name = escapeMarkdown(String(player.name || 'Неизвестный игрок').replace(/\s+/g, ' ').slice(0, 150)).replace(/@/g, '＠')
-		const identity = ids.length === 1 ? `<@${ids[0]}>` : `${name} / ${player.id}`
+		return ids.length === 1 ? `<@${ids[0]}>` : `${name} / ${player.id}`
+	}
+	const format = (value: number | undefined) => stat(value) < 0 ? '—' : value!.toLocaleString('ru-RU').replace(/\s/g, ' ')
+	const total = (field: 'kills' | 'damage') => players.length && players.every(player => stat(player[field]) >= 0)
+		? format(players.reduce((sum, player) => sum + player[field]!, 0)) : '—'
+	const widths = [String(players.length).length, Math.max(5, ...players.map(player => format(player.kills).length)),
+		Math.max(4, ...players.map(player => format(player.damage).length))]
+	const columns = (values: string[]) => '`' + values.map((value, index) => value.padStart(widths[index])).join(' │ ') + '`'
+	const lines = players.map((player, index) => {
 		const star = battle.damageMvp && player.damage === battle.damageMvp.damage ? ' ⭐' : ''
-		return `${identity} - **${stat(player.damage) < 0 ? '—' : player.damage} | ${stat(player.kills) < 0 ? '—' : player.kills}**${star}`
+		return `${columns([String(index + 1), format(player.kills), format(player.damage)])} ${identity(player)}${star}`
 	})
-	return `### ${war.status === 'finished' ? `Результат капта: ${battle.result}` : 'Капт не завершён'}\nУрон | Киллы\n${lines.join('\n') || 'Состав пока не получен.'}`
+	const leaders = [
+		battle.damageMvp ? `⭐ **Урон:** ${identity(battle.damageMvp)} — **${format(battle.damageMvp.damage)}**` : '',
+		battle.killsMvp ? `🎯 **Киллы:** ${identity(battle.killsMvp)} — **${format(battle.killsMvp.kills)}**` : ''
+	].filter(Boolean)
+	return [
+		`### ${war.status === 'finished' ? `Результат капта: ${battle.result}` : 'Капт не завершён'}`,
+		`**Участников: ${players.length} · Киллы: ${total('kills')} · Урон: ${total('damage')}**`,
+		...leaders,
+		'',
+		players.length ? `${columns(['#', 'Киллы', 'Урон'])} Игрок\n${lines.join('\n')}` : 'Состав пока не получен.'
+	].join('\n')
 }
 
 export function createCaptureResults({ client, pool, env = process.env, fetchImpl = fetch, logger = console, now = Date.now }: {
