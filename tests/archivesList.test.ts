@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { Collection, type Guild, type GuildMember, type Role, type ThreadChannel } from 'discord.js'
 import { store } from '../src/dashboard/store'
 import { getArchivesLists } from '../src/features/archive/archivesList'
+import { parseDisplayName } from '../src/utils/parseDisplayName'
 
 function fixture(count: number, roleCount = 1) {
 	const roles = new Collection<string, Role>(Array.from({ length: roleCount }, (_, i) => {
@@ -46,6 +47,25 @@ test('archive lists include moderators with role prefixes and preserve membershi
 	assert.match(text, /### Некорректный никнейм\n1\. <@100000000000000002>/)
 	for (const member of members.slice(0, 4)) assert.equal(text.split(`<@${member.id}>`).length - 1, 1)
 	for (const member of members.slice(4)) assert.ok(!text.includes(`<@${member.id}>`))
+})
+
+test('archive lookup accepts hash prefixes even when absent from dashboard settings', async t => {
+	for (const prefix of ['#H', '#D', '#Rec']) {
+		for (const prefixes of [[], [{ roleId: 'admin', prefix }]]) {
+			const f = fixture(1)
+			Object.assign(f.members.first()!, { displayName: `${prefix} Siriel | 1` })
+			t.mock.method(store, 'getSetting', (key: string) => key === 'AUTO_ROLE' ? 'auto' : key === 'ROLE_PREFIXES' ? prefixes : '')
+			t.mock.method(store, 'roleIds', (key: string) => key === 'ARCHIVE_GROUP_ROLES' ? [...f.roles.keys()] : [])
+			const result = await getArchivesLists(f.guild)
+			assert.ok(result)
+			const text = JSON.stringify(result.parts.map(part => part.toJSON()))
+			assert.ok(text.includes('<@100000000000000000> → <#100000000000000000>'), prefix)
+			assert.ok(!text.includes('Некорректный никнейм'), prefix)
+		}
+	}
+	assert.deepEqual(parseDisplayName('[Old] Siriel | 1', []), { memberName: 'Siriel', memberStatic: '1' })
+	assert.equal(parseDisplayName('#H | 1', []), null)
+	assert.equal(parseDisplayName('Siriel #H | 1', []), null)
 })
 
 test('archive sections omit repeated statuses and split large roles without losing members', async t => {
