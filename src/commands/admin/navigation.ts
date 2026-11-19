@@ -18,7 +18,9 @@ export = {
 			flags: MessageFlags.IsComponentsV2 as const,
 			components: [getNavigationContainer(null, false)]
 		})
-		await (require('../../dashboard/navigationMessages') as typeof import('../../dashboard/navigationMessages')).rememberSent(sent)
+		await (
+			require('../../dashboard/navigationMessages') as typeof import('../../dashboard/navigationMessages')
+		).rememberSent(sent)
 		return sent
 	}
 }

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ContainerBuilder, MessageFlagsBitField, TextDisplayBuilder } from 'discord.js'
 import { applyFields } from '../src/dashboard/messageEditor'
-import { buildEditPayload } from '../src/services/containerMessageService'
+import { buildEditPayload, buildSendPayload } from '../src/services/containerMessageService'
 import type { MessageShape } from '../src/types'
 
 const text = 'Объявление @everyone <@&123456789012345678>'
@@ -28,4 +28,10 @@ test('editing a container preserves everyone and role mentions alongside its tex
 	assert.match(JSON.stringify(payload.components), /@everyone/)
 	assert.ok(payload.allowedMentions?.parse?.includes('everyone'))
 	assert.ok(payload.allowedMentions?.parse?.includes('roles'))
+})
+
+test('manual publication always allows roles and gates users, everyone and here', () => {
+	const data = { items: [{ type: 'text' as const, value: text + ' @here <@123456789012345678>' }] }
+	assert.deepEqual(buildSendPayload(data, false).allowedMentions?.parse, ['roles'])
+	assert.deepEqual(buildSendPayload(data, true).allowedMentions?.parse, ['users', 'roles', 'everyone'])
 })

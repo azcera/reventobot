@@ -1,5 +1,9 @@
-import { MessageFlags } from 'discord.js'
-import { Channel, ChannelType, ComponentBuilder } from 'discord.js'
+import {
+	Channel,
+	ChannelType,
+	ComponentBuilder,
+	MessageFlags
+} from 'discord.js'
 
 import pool = require('../services/database')
 /**
@@ -9,7 +13,12 @@ import pool = require('../services/database')
  * @param {'all' | 'unanswered'} type
  * @param {1 | 2 | 3} part
  */
-async function createMessage(channel: import('discord.js').Channel, component: import('discord.js').ContainerBuilder, type: 'all' | 'unanswered', part: 1 | 2 | 3) {
+async function createMessage(
+	channel: import('discord.js').Channel,
+	component: import('discord.js').ContainerBuilder,
+	type: 'all' | 'unanswered',
+	part: 1 | 2 | 3
+) {
 	if (channel.type !== ChannelType.GuildText) return
 	const message = await channel.send({
 		components: [component],

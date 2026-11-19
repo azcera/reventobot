@@ -1,9 +1,24 @@
-import type { Client, Guild, GuildMember, Collection, Message, RepliableInteraction, SlashCommandBuilder, ContextMenuCommandBuilder } from 'discord.js'
+import type {
+	Client,
+	Collection,
+	ContextMenuCommandBuilder,
+	Guild,
+	GuildMember,
+	Message,
+	RepliableInteraction,
+	SlashCommandBuilder
+} from 'discord.js'
 import type { Pool } from 'pg'
 
 export type Env = NodeJS.ProcessEnv
-export interface Actor { id: string; name?: string }
-export interface RolePrefix { roleId: string; prefix: string }
+export interface Actor {
+	id: string
+	name?: string
+}
+export interface RolePrefix {
+	roleId: string
+	prefix: string
+}
 export interface TemplateField {
 	key?: string
 	group: string
@@ -42,7 +57,10 @@ export interface MclList {
 	addName: string
 	removeName: string
 }
-export interface RoleCurator { roleId: string; managedRoleIds: string[] }
+export interface RoleCurator {
+	roleId: string
+	managedRoleIds: string[]
+}
 export type SettingValue = string | boolean | RolePrefix[]
 /** Editable subset of Discord JSON. Unrecognised properties are checked by import validation. */
 export interface RawComponent {
@@ -56,7 +74,11 @@ export interface RawComponent {
 	style?: number
 	components?: RawComponent[]
 	accessory?: RawComponent
-	items?: { media: { url: string }; description?: string | null; spoiler?: boolean }[]
+	items?: {
+		media: { url: string }
+		description?: string | null
+		spoiler?: boolean
+	}[]
 	accent_color?: number | null
 	spacing?: number
 	divider?: boolean
@@ -65,7 +87,14 @@ export interface RawComponent {
 	spoiler?: boolean
 }
 export type ComponentSource = RawComponent | { toJSON(): RawComponent }
-export interface MutableMessagePayload { components: ComponentSource[]; content?: string; flags?: import('discord.js').MessageFlags; allowedMentions?: import('discord.js').MessageMentionOptions; attachments?: import('discord.js').MessageEditOptions['attachments']; files?: import('discord.js').MessageCreateOptions['files'] }
+export interface MutableMessagePayload {
+	components: ComponentSource[]
+	content?: string
+	flags?: import('discord.js').MessageFlags
+	allowedMentions?: import('discord.js').MessageMentionOptions
+	attachments?: import('discord.js').MessageEditOptions['attachments']
+	files?: import('discord.js').MessageCreateOptions['files']
+}
 export interface MessageShape {
 	components: ComponentSource[]
 	flags: Pick<import('discord.js').MessageFlagsBitField, 'has' | 'bitfield'>
@@ -75,9 +104,29 @@ export interface MessageShape {
 	editedTimestamp?: number | null
 	url?: string
 }
-export interface EditorItem { id?: string; type: string; value?: string; btnLabel?: string; btnLink?: string; spacing?: string; divider?: boolean; large?: boolean }
-export interface ContainerData { noColor?: boolean; accentColor?: string; items: EditorItem[] }
-export interface EditableField { path: string; label: string; value: string; maxLength: number; type: string; components?: boolean }
+export interface EditorItem {
+	id?: string
+	type: string
+	value?: string
+	btnLabel?: string
+	btnLink?: string
+	spacing?: string
+	divider?: boolean
+	large?: boolean
+}
+export interface ContainerData {
+	noColor?: boolean
+	accentColor?: string
+	items: EditorItem[]
+}
+export interface EditableField {
+	path: string
+	label: string
+	value: string
+	maxLength: number
+	type: string
+	components?: boolean
+}
 export interface DashboardState {
 	templates: Record<string, string>
 	templateVariables?: Record<string, Record<string, string>>
@@ -97,22 +146,48 @@ export interface SettingDefinition {
 	default?: boolean | string
 }
 export type Store = ReturnType<typeof import('./dashboard/store').createStore>
-export interface ServiceOptions { client: Client; pool: Pool; store: Store; env?: Env; logger?: Pick<Console, 'log' | 'error' | 'warn'> }
+export interface ServiceOptions {
+	client: Client
+	pool: Pool
+	store: Store
+	env?: Env
+	logger?: Pick<Console, 'log' | 'error' | 'warn'>
+}
 export interface MembershipSnapshot {
 	members: Collection<string, GuildMember>
 	statics: Set<string>
 	missingMembers?: FamilyCharacter[]
 	linked: Map<string, string>
 	bindings: Record<string, string>
-	confirmed?: Record<string, { static: string; seenAt: number; joinedAt: number }>
+	confirmed?: Record<
+		string,
+		{ static: string; seenAt: number; joinedAt: number }
+	>
 	dismissals?: FamilyDismissal[]
 	autoKickSince?: number
 	source: string
 }
-export interface FamilyDismissal { id: number; type: 'logs.family_log.uninviteFrom'; date: string; account: { id: number } }
-export interface FamilyCharacter { id: number; login: string; rankId: number; rankName: string }
-export interface FamilyMembers { total: number; items: FamilyCharacter[] }
-export interface MemberDecision { static?: string; excluded?: boolean; tierRoleId?: string }
+export interface FamilyDismissal {
+	id: number
+	type: 'logs.family_log.uninviteFrom'
+	date: string
+	account: { id: number }
+}
+export interface FamilyCharacter {
+	id: number
+	login: string
+	rankId: number
+	rankName: string
+}
+export interface FamilyMembers {
+	total: number
+	items: FamilyCharacter[]
+}
+export interface MemberDecision {
+	static?: string
+	excluded?: boolean
+	tierRoleId?: string
+}
 export interface PreviewRow {
 	discordId: string
 	currentNickname: string | null
@@ -129,32 +204,72 @@ export interface PreviewRow {
 	error?: string
 }
 export type GuildInteraction = RepliableInteraction<'cached'>
-export interface PrefixCommand { name: string; description?: string; execute(message: Message<true>, args: string[]): unknown }
-export interface ApplicationCommand { data: SlashCommandBuilder | ContextMenuCommandBuilder; execute(interaction: GuildInteraction): unknown }
+export interface PrefixCommand {
+	name: string
+	description?: string
+	execute(message: Message<true>, args: string[]): unknown
+}
+export interface ApplicationCommand {
+	data: SlashCommandBuilder | ContextMenuCommandBuilder
+	execute(interaction: GuildInteraction): unknown
+}
 export type BotCommand = PrefixCommand | ApplicationCommand
 
 declare module 'discord.js' {
 	interface Client<Ready extends boolean = boolean> {
 		commands: Collection<string, BotCommand>
-		roleCurators?: ReturnType<typeof import('./services/roleCurators').createRoleCurators>
-		capturePresets?: ReturnType<typeof import('./features/capture/capturePresets').createCapturePresets>
-		familyWars?: ReturnType<typeof import('./services/familyWars').createFamilyWars> | null
-		captureResults?: ReturnType<typeof import('./services/captureResults').createCaptureResults>
-		majesticSync?: ReturnType<typeof import('./services/majesticSync').createMajesticSync>
-		majesticNicknames?: ReturnType<typeof import('./services/majesticNicknameScheduler').createMajesticNicknameScheduler>
-		familyMembership?: ReturnType<typeof import('./services/familyMembership').createFamilyMembership> | null
-		eventSchedule?: ReturnType<typeof import('./services/eventSchedule').createEventSchedule> | null
+		roleCurators?: ReturnType<
+			typeof import('./services/roleCurators').createRoleCurators
+		>
+		capturePresets?: ReturnType<
+			typeof import('./features/capture/capturePresets').createCapturePresets
+		>
+		familyWars?: ReturnType<
+			typeof import('./services/familyWars').createFamilyWars
+		> | null
+		captureExpiry?: ReturnType<
+			typeof import('./services/captureExpiry').createCaptureExpiry
+		>
+		captureResults?: ReturnType<
+			typeof import('./services/captureResults').createCaptureResults
+		>
+		majesticSync?: ReturnType<
+			typeof import('./services/majesticSync').createMajesticSync
+		>
+		majesticNicknames?: ReturnType<
+			typeof import('./services/majesticNicknameScheduler').createMajesticNicknameScheduler
+		>
+		familyMembership?: ReturnType<
+			typeof import('./services/familyMembership').createFamilyMembership
+		> | null
+		eventSchedule?: ReturnType<
+			typeof import('./services/eventSchedule').createEventSchedule
+		> | null
+		stopReconciliation?: () => Promise<void>
+		stopTelegramNotifications?: () => Promise<void>
+		stopTelegramCaptures?: () => Promise<void>
 		stopTelegramBroadcast?: () => Promise<void>
 	}
 }
 
 declare global {
 	namespace Express {
-		interface Request { guild: Guild; dashboardUser: Actor; csrf: string }
+		interface Request {
+			guild: Guild
+			dashboardUser: Actor
+			csrf: string
+		}
 	}
 }
 
 export function componentJSON(component: ComponentSource): RawComponent {
- return (component.toJSON ? component.toJSON() : component) as RawComponent
+	return (component.toJSON ? component.toJSON() : component) as RawComponent
 }
-export interface SyncResult { kind: string; ok: boolean; error?: string; logError?: string; updated?: number; failures?: unknown[] }
+export interface SyncResult {
+	kind: string
+	ok: boolean
+	error?: string
+	logError?: string
+	updated?: number
+	failures?: unknown[]
+}

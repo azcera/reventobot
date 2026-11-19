@@ -38,7 +38,7 @@ function loadCommands(client: import('discord.js').Client, directory: string) {
 					)
 				}
 			} catch (caught) {
- const error = getError(caught);
+				const error = getError(caught)
 				console.error(
 					`❌ Ошибка загрузки команды из файла ${file}:`,
 					error.message

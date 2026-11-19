@@ -1,26 +1,49 @@
-import { componentJSON } from '../types'
-import { getError } from '../utils/errors'
 import type * as D from 'discord.js'
-import type * as T from '../types'
-import type * as E from 'express'
-import type * as Pg from 'pg'
 import { MessageFlags } from 'discord.js'
 import { messageRevision } from '../services/containerMessageService'
+import type * as T from '../types'
+import { componentJSON } from '../types'
+import { getError } from '../utils/errors'
 import { problem } from './auth'
 
 function isHttpsUrl(value: string) {
 	try {
 		const url = new URL(value)
-		return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password
-	} catch { return false }
+		return (
+			url.protocol === 'https:' &&
+			Boolean(url.hostname) &&
+			!url.username &&
+			!url.password
+		)
+	} catch {
+		return false
+	}
 }
 
 // Only exposed fields may change. Markdown may expand direct container text; actions and attachments stay on the server.
-function editableFields(components: T.RawComponent[], prefix = 'components', result: T.EditableField[] = [], parentType?: number) {
+function editableFields(
+	components: T.RawComponent[],
+	prefix = 'components',
+	result: T.EditableField[] = [],
+	parentType?: number
+) {
 	components.forEach((component, index) => {
 		const path = `${prefix}.${index}`
-		const add = (property: 'content' | 'label' | 'url', label: string, maxLength: number, type = 'text') => {
-			if (typeof component[property] === 'string') result.push({ path: `${path}.${property}`, label, value: component[property], maxLength, type, ...(property === 'content' ? { components: parentType === 17 } : {}) })
+		const add = (
+			property: 'content' | 'label' | 'url',
+			label: string,
+			maxLength: number,
+			type = 'text'
+		) => {
+			if (typeof component[property] === 'string')
+				result.push({
+					path: `${path}.${property}`,
+					label,
+					value: component[property],
+					maxLength,
+					type,
+					...(property === 'content' ? { components: parentType === 17 } : {})
+				})
 		}
 		if (component.type === 10) add('content', 'Текст', 4000)
 		if (component.type === 2) {
@@ -28,30 +51,68 @@ function editableFields(components: T.RawComponent[], prefix = 'components', res
 			if (component.style === 5) add('url', 'Ссылка кнопки', 512, 'url')
 		}
 
-		if (component.components) editableFields(component.components, path + '.components', result, component.type)
-		if (component.accessory) editableFields([component.accessory], path + '.accessory', result)
+		if (component.components)
+			editableFields(
+				component.components,
+				path + '.components',
+				result,
+				component.type
+			)
+		if (component.accessory)
+			editableFields([component.accessory], path + '.accessory', result)
 	})
 	return result
 }
 
 function snapshot(message: T.MessageShape) {
-	const components = message.components.map(component => componentJSON(component))
+	const components = message.components.map(component =>
+		componentJSON(component)
+	)
 	const fields = editableFields(components)
-	if (!message.flags.has(MessageFlags.IsComponentsV2)) fields.unshift({ path: 'content', label: 'Текст сообщения', value: message.content, maxLength: 2000, type: 'text', components: false })
+	if (!message.flags.has(MessageFlags.IsComponentsV2))
+		fields.unshift({
+			path: 'content',
+			label: 'Текст сообщения',
+			value: message.content,
+			maxLength: 2000,
+			type: 'text',
+			components: false
+		})
 	return { revision: messageRevision(message), fields, url: message.url }
 }
 
-function applyFields(message: T.MessageShape, values: unknown, { expandMarkdown = true } = {}) {
+function applyFields(
+	message: T.MessageShape,
+	values: unknown,
+	{ expandMarkdown = true } = {}
+) {
 	const current = snapshot(message)
-	if (!values || typeof values !== 'object' || Array.isArray(values)) throw problem(400, 'Некорректные поля сообщения.')
-	const payload: { components: T.RawComponent[]; allowedMentions: D.MessageMentionOptions; content?: string } = { components: message.components.map(component => structuredClone(componentJSON(component))),
-		allowedMentions: { parse: ['roles', 'everyone'], repliedUser: false } }
+	if (!values || typeof values !== 'object' || Array.isArray(values))
+		throw problem(400, 'Некорректные поля сообщения.')
+	const payload: {
+		components: T.RawComponent[]
+		allowedMentions: D.MessageMentionOptions
+		content?: string
+	} = {
+		components: message.components.map(component =>
+			structuredClone(componentJSON(component))
+		),
+		allowedMentions: { parse: ['roles', 'everyone'], repliedUser: false }
+	}
 	const allowed = new Map(current.fields.map(field => [field.path, field]))
 	for (const [path, value] of Object.entries(values)) {
 		const field = allowed.get(path)
-		if (!field || typeof value !== 'string' || value.length > field.maxLength || (!value.trim() && field.type !== 'color' && path !== 'content')) throw problem(400, 'Недопустимое поле, пустой или слишком длинный текст.')
-		if (field.type === 'url' && !isHttpsUrl(value)) throw problem(400, 'Для кнопки нужна HTTPS-ссылка.')
-		if (field.type === 'color' && value && !/^#[a-f0-9]{6}$/i.test(value)) throw problem(400, 'Цвет должен иметь вид #5865f2.')
+		if (
+			!field ||
+			typeof value !== 'string' ||
+			value.length > field.maxLength ||
+			(!value.trim() && field.type !== 'color' && path !== 'content')
+		)
+			throw problem(400, 'Недопустимое поле, пустой или слишком длинный текст.')
+		if (field.type === 'url' && !isHttpsUrl(value))
+			throw problem(400, 'Для кнопки нужна HTTPS-ссылка.')
+		if (field.type === 'color' && value && !/^#[a-f0-9]{6}$/i.test(value))
+			throw problem(400, 'Цвет должен иметь вид #5865f2.')
 		let target = payload as unknown as Record<string, unknown>
 		const parts = path.split('.')
 		for (const part of parts.slice(0, -1)) {
@@ -59,13 +120,23 @@ function applyFields(message: T.MessageShape, values: unknown, { expandMarkdown 
 			if (part === '0' && target.type) continue
 			target = target[part] as Record<string, unknown>
 		}
-		target[parts.at(-1)!] = field.type === 'color' ? value ? parseInt(value.slice(1), 16) : null : value
+		target[parts.at(-1)!] =
+			field.type === 'color'
+				? value
+					? parseInt(value.slice(1), 16)
+					: null
+				: value
 	}
-	const { expand } = (require('../services/markdownContainer') as typeof import('../services/markdownContainer'))
-	try { for (const component of payload.components) if (expandMarkdown && component.type === 17) component.components = expand(component.components || []) }
-	catch (caughtError) {
- const error = getError(caughtError)
- throw problem(400, error.message) }
+	const { expand } =
+		require('../services/markdownContainer') as typeof import('../services/markdownContainer')
+	try {
+		for (const component of payload.components)
+			if (expandMarkdown && component.type === 17)
+				component.components = expand(component.components || [])
+	} catch (caughtError) {
+		const error = getError(caughtError)
+		throw problem(400, error.message)
+	}
 	let textLength = 0
 	function count(components: T.RawComponent[]) {
 		for (const component of components) {
@@ -75,15 +146,37 @@ function applyFields(message: T.MessageShape, values: unknown, { expandMarkdown 
 		}
 	}
 	count(payload.components)
-	if (textLength > 4000) throw problem(400, 'Общая длина текста компонентов не должна превышать 4000 символов.')
-	for (const component of payload.components) if (component.type === 17) component.accent_color = null
+	if (textLength > 4000)
+		throw problem(
+			400,
+			'Общая длина текста компонентов не должна превышать 4000 символов.'
+		)
+	for (const component of payload.components)
+		if (component.type === 17) component.accent_color = null
 	let componentCount = 0
-	const inspect = (components: T.RawComponent[]): void => { for (const component of components) { componentCount++; if (component.components) inspect(component.components); if (component.accessory) inspect([component.accessory]) } }
+	const inspect = (components: T.RawComponent[]): void => {
+		for (const component of components) {
+			componentCount++
+			if (component.components) inspect(component.components)
+			if (component.accessory) inspect([component.accessory])
+		}
+	}
 	inspect(payload.components)
-	if (componentCount > 40) throw problem(400, 'В сообщении допускается до 40 компонентов.')
-	try { for (const component of payload.components) if (expandMarkdown && component.type === 17) new ((require('discord.js') as typeof import('discord.js')).ContainerBuilder)(component).toJSON() }
-	catch { throw problem(400, 'Проверьте разметку, ссылки и ограничения компонентов Discord.') }
+	if (componentCount > 40)
+		throw problem(400, 'В сообщении допускается до 40 компонентов.')
+	try {
+		for (const component of payload.components)
+			if (expandMarkdown && component.type === 17)
+				new (
+					require('discord.js') as typeof import('discord.js')
+				).ContainerBuilder(component).toJSON()
+	} catch {
+		throw problem(
+			400,
+			'Проверьте разметку, ссылки и ограничения компонентов Discord.'
+		)
+	}
 	return payload
 }
 
-export { editableFields, snapshot, applyFields, isHttpsUrl }
+export { applyFields, editableFields, isHttpsUrl, snapshot }

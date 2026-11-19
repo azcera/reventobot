@@ -1,6 +1,9 @@
 import { StringSelectMenuOptionBuilder } from 'discord.js'
 
-const optionsMap: Record<string, { icon: string; target: string; time: string }> = {
+const optionsMap: Record<
+	string,
+	{ icon: string; target: string; time: string }
+> = {
 	drop1: { icon: '🎈', target: 'ДРОП', time: '00:00' },
 	drop2: { icon: '🎈', target: 'ДРОП', time: '04:00' },
 	drop3: { icon: '🎈', target: 'ДРОП', time: '08:00' },

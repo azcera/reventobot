@@ -106,7 +106,7 @@ test('variable changes save', async ({ page }) => {
 test('variable without saved label displays its existing key', async ({ page }) => {
 	await setup(page, 'variables', undefined, { 'Система повышения': { old_key: 'old value' } })
 	await expect(page.getByText('old_key', { exact: true })).toBeVisible()
-	await expect(page.getByRole('textbox', { name: 'Значение · old_key', exact: true })).toHaveValue('old value')
+	await expect(page.getByRole('textbox', { name: 'old_key', exact: true })).toHaveValue('old value')
 })
 
 test('channel mentions display names in editors and preserve source through copy, deletion and undo', async ({ page }) => {
@@ -453,6 +453,9 @@ test('cursor produces a visible perspective tilt and resets it', async ({ page }
 	await setup(page, 'overview')
 	const card = page.locator('.metric').first()
 	await expect(card).toBeVisible()
+	await card.evaluate(async element => {
+		await Promise.all(element.closest('.page-view')?.getAnimations().map(animation => animation.finished) ?? [])
+	})
 	const bounds = await card.boundingBox()
 	await page.mouse.move(bounds!.x + bounds!.width * .85, bounds!.y + bounds!.height * .8)
 	await expect(card).toHaveClass(/is-lit/)
@@ -478,7 +481,13 @@ test('panels track light without moving or blurring the editor', async ({ page }
 	test.skip(testInfo.project.name !== 'desktop')
 	await setup(page, 'templates')
 	const panel = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Содержимое сообщения', exact: true }) })
-	await page.getByRole('textbox', { name: 'Текст сообщения', exact: true }).hover({ position: { x: 180, y: 100 } })
+	const editor = page.getByRole('textbox', { name: 'Текст сообщения', exact: true })
+	await editor.scrollIntoViewIfNeeded()
+	await panel.evaluate(async element => {
+		await Promise.all(element.closest('.page-view')?.getAnimations().map(animation => animation.finished) ?? [])
+		await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+	})
+	await editor.hover({ position: { x: 180, y: 100 } })
 	await expect(panel).toHaveClass(/is-lit/)
 	await expect.poll(() => panel.evaluate(el => parseFloat(el.style.getPropertyValue('--light-x')))).toBeGreaterThan(0)
 	await expect(panel).toHaveCSS('backdrop-filter', 'none')
@@ -557,11 +566,15 @@ test('custom role picker supports search, keyboard, chips and explicit save', as
 
 
 test('glass transmits the scene and actually blurs the backdrop', async ({ page }) => {
-	await setup(page, 'templates')
-	const panel = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Содержимое сообщения', exact: true }) })
+	await setup(page, 'overview')
+	const panel = page.locator('.overview-hero')
 	for (const theme of ['Тёмная', 'Светлая']) {
 		await page.getByRole('radio', { name: theme, exact: true }).check()
-		const alpha = await panel.evaluate(el => { const color = getComputedStyle(el).backgroundColor; return color.startsWith('rgba') ? Number(color.match(/([.\d]+)\)$/)?.[1]) : 1 })
+		const alpha = await panel.evaluate(el => { const canvas = document.createElement('canvas')
+			const context = canvas.getContext('2d')!
+			context.fillStyle = getComputedStyle(el).backgroundColor
+			context.fillRect(0, 0, 1, 1)
+			return context.getImageData(0, 0, 1, 1).data[3] / 255 })
 		if (theme === 'Тёмная') { expect(alpha).toBeGreaterThan(.35); expect(alpha).toBeLessThan(.65) }
 		else expect(alpha).toBeLessThan(.25)
 		await page.locator('.ambient-scene').evaluate(el => {
@@ -738,7 +751,7 @@ test('scroll controls return early and textarea grows without manual resize', as
 	await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5)
 	await page.keyboard.press('Alt+Digit3')
 	await expect(page.getByRole('heading', { name: 'Переменные шаблонов', exact: true })).toBeVisible()
-	const textarea = page.locator('.page-view:not([hidden])').getByLabel('Значение · price', { exact: true })
+	const textarea = page.locator('.page-view:not([hidden])').getByLabel('price', { exact: true })
 	await textarea.fill(Array.from({ length: 15 }, () => 'Длинное значение').join('\n'))
 	await expect(textarea).toHaveCSS('resize', 'none')
 	await expect(textarea).toHaveCSS('box-shadow', 'none')
@@ -803,16 +816,36 @@ test('saving joins the sticky toolbar only while editing', async ({ page }, test
 })
 
 
+test('variable draft survives saving settings and cancelling a refresh', async ({ page }) => {
+	const requests = await setup(page, 'variables', undefined, { 'Система повышения': { price: '1000' } })
+	const draft = page.getByRole('textbox', { name: 'price', exact: true })
+	await draft.fill('1250')
+	await page.evaluate(() => { location.hash = 'settings' })
+	const archives = page.locator('details').filter({ hasText: 'Архивы' })
+	await archives.locator('summary').click()
+	await archives.getByRole('switch', { name: /Автоматически удалять пустые архивы/ }).click()
+	await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
+	await expect.poll(() => requests.some(request => request.path === 'settings')).toBe(true)
+	await expect(page.getByText('Настройки сохранены и применены.', { exact: true })).toBeVisible()
+	await page.evaluate(() => { location.hash = 'variables' })
+	await expect(draft).toHaveValue('1250')
+	await page.getByRole('button', { name: 'Обновить данные', exact: true }).click()
+	const dialog = page.getByRole('dialog')
+	await expect(dialog.getByText(/Несохранённые правки/)).toBeVisible()
+	await dialog.getByRole('button', { name: 'Отмена', exact: true }).click()
+	await expect(draft).toHaveValue('1250')
+})
+
 test('variables search filters rows without keys and saves every draft including hidden rows', async ({ page }) => {
 	const requests = await setup(page, 'variables', undefined, { 'Система повышения': { secret_key: 'Первое', other_key: 'Второе' } })
-	await page.getByLabel('Значение · secret_key', { exact: true }).fill('Изменено первое')
-	await page.getByLabel('Значение · other_key', { exact: true }).fill('Изменено второе')
+	await page.getByLabel('secret_key', { exact: true }).fill('Изменено первое')
+	await page.getByLabel('other_key', { exact: true }).fill('Изменено второе')
 	const search = page.getByRole('searchbox', { name: 'Поиск переменных' })
 	await search.fill('secret_key')
 	await expect(page.getByText('Переменные не найдены.', { exact: true })).toBeVisible()
 	await search.fill('первое')
-	await expect(page.getByLabel('Значение · secret_key', { exact: true })).toBeVisible()
-	await expect(page.getByLabel('Значение · other_key', { exact: true })).toHaveCount(0)
+	await expect(page.getByLabel('secret_key', { exact: true })).toBeVisible()
+	await expect(page.getByLabel('other_key', { exact: true })).toHaveCount(0)
 	await page.getByRole('button', { name: 'Сохранить переменные', exact: true }).click()
 	await expect.poll(() => requests.find(item => item.path === 'template-variables')?.body).toEqual({ groups: { 'Система повышения': { secret_key: 'Изменено первое', other_key: 'Изменено второе' } }, revision: 3 })
 })
@@ -917,7 +950,7 @@ test('history loads pages near the end and exports unloaded entries', async ({ p
 test('variables use the full panel width with a single value label', async ({ page }) => {
 	await setup(page, 'variables', undefined, { 'Система повышения': { price: '1000' } })
 	await expect(page.locator('.page-view:not([hidden])').getByText('Название переменной', { exact: true })).toHaveCount(0)
-	const input = page.getByLabel('Значение · price', { exact: true })
+	const input = page.getByLabel('price', { exact: true })
 	await expect(input).toBeVisible()
 	expect(await input.evaluate(element => element.getBoundingClientRect().width / element.closest('.panel')!.getBoundingClientRect().width)).toBeGreaterThan(.8)
 })

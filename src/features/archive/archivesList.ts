@@ -1,28 +1,30 @@
-import { loadDiscordMembers } from '../../services/discordMembers'
-import { store as dashboard } from '../../dashboard/store'
-import { ContainerBuilder } from '../../services/markdownContainer'
 import {
-	GuildMember,
 	Guild,
 	GuildChannel,
-	TextDisplayBuilder,
-	SeparatorBuilder
+	GuildMember,
+	SeparatorBuilder,
+	TextDisplayBuilder
 } from 'discord.js'
+import { store as dashboard } from '../../dashboard/store'
+import { loadDiscordMembers } from '../../services/discordMembers'
+import { ContainerBuilder } from '../../services/markdownContainer'
 import { parseDisplayName } from '../../utils/parseDisplayName'
+import { fetchArchiveThreads } from './unusedArchives'
 
 require('dotenv').config()
-
-
-
-
 
 /**
  * Создает сообщение со списком всех участников и их архивов
  * @param {Guild} guild
  */
 async function getArchivesLists(guild: import('discord.js').Guild) {
-	if (!dashboard.roleIds('ARCHIVE_GROUP_ROLES').length || !dashboard.getSetting('AUTO_ROLE')) {
-		console.error('❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в настройках дашборда')
+	if (
+		!dashboard.roleIds('ARCHIVE_GROUP_ROLES').length ||
+		!dashboard.getSetting('AUTO_ROLE')
+	) {
+		console.error(
+			'❌ Не заданы ARCHIVE_GROUP_ROLES или AUTO_ROLE в настройках дашборда'
+		)
 		return
 	}
 
@@ -31,29 +33,36 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 	/**
 	 * @type {Object.<string, Array<{member: GuildMember, archiveChannel: GuildChannel|null, staticId: number, hasValidArchive: boolean, isInvalidNick: boolean}>>}
 	 */
-	const groupings: Record<string, { member: GuildMember; archiveChannel: import('discord.js').ThreadChannel | null; staticId: number; hasValidArchive: boolean; isInvalidNick: boolean }[]> = {}
+	const groupings: Record<
+		string,
+		{
+			member: GuildMember
+			archiveChannel: import('discord.js').ThreadChannel | null
+			staticId: number
+			hasValidArchive: boolean
+			isInvalidNick: boolean
+		}[]
+	> = {}
 	dashboard.roleIds('ARCHIVE_GROUP_ROLES').forEach(roleId => {
 		groupings[roleId] = []
 	})
 
-	const filteredMembers = guild.members.cache.filter((member: import('discord.js').GuildMember) => {
-		if (member.user.bot) return false
-		if (!member.roles.cache.has(dashboard.getSetting('AUTO_ROLE'))) return false
+	const filteredMembers = guild.members.cache.filter(
+		(member: import('discord.js').GuildMember) => {
+			if (member.user.bot) return false
+			if (!member.roles.cache.has(dashboard.getSetting('AUTO_ROLE')))
+				return false
 
-		return true
-	})
+			return true
+		}
+	)
 
-	// Получаем все ветки из канала с архивами
-	const parentChannel = await guild.channels.fetch(dashboard.getSetting('PARENT_CHANNEL_ID'))
-	if (!parentChannel || !('threads' in parentChannel)) {
-		console.error('❌ Не найден канал с архивами')
-		return
-	}
-
-	const active = await parentChannel.threads.fetchActive()
-	const archived = await parentChannel.threads.fetchArchived({ limit: 100 })
-
-	const guildChannels = new Map([...active.threads, ...archived.threads])
+	const threads = await fetchArchiveThreads(guild)
+	const guildChannels = new Map(
+		[...threads.values()]
+			.reverse()
+			.map(thread => [thread.name.toLowerCase(), thread])
+	)
 
 	filteredMembers.forEach((member: import('discord.js').GuildMember) => {
 		const sortedMemberRoles = member.roles.cache.sort(
@@ -75,14 +84,8 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 
 		if (parsedDisplayName && !isInvalidNick) {
 			archiveChannel =
-				[...guildChannels.values()].find(
-					ch =>
-						ch.name ===
-						[
-							'archive',
-							parsedDisplayName.memberName.toLowerCase(),
-							parsedDisplayName.memberStatic
-						].join(' ')
+				guildChannels.get(
+					`archive ${parsedDisplayName.memberName.toLowerCase()} ${parsedDisplayName.memberStatic}`
 				) || null
 
 			if (archiveChannel) {
@@ -128,17 +131,35 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 		})
 
 		const sections = [
-			{ title: 'Архивы', items: sortedItems.filter(item => !item.isInvalidNick && item.archiveChannel) },
-			{ title: 'Нет архива', items: sortedItems.filter(item => !item.isInvalidNick && !item.archiveChannel) },
-			{ title: 'Некорректный никнейм', items: sortedItems.filter(item => item.isInvalidNick) }
+			{
+				title: 'Архивы',
+				items: sortedItems.filter(
+					item => !item.isInvalidNick && item.archiveChannel
+				)
+			},
+			{
+				title: 'Нет архива',
+				items: sortedItems.filter(
+					item => !item.isInvalidNick && !item.archiveChannel
+				)
+			},
+			{
+				title: 'Некорректный никнейм',
+				items: sortedItems.filter(item => item.isInvalidNick)
+			}
 		]
 		const roleHeading = `## <@&${role.id}>`
 		let block = roleHeading
 		for (const section of sections) {
 			if (!section.items.length) continue
 			const heading = `### ${section.title}`
-			const lines = section.items.map((item, index) => `${index + 1}. <@${item.member.id}>` +
-				(item.archiveChannel && !item.isInvalidNick ? ` → <#${item.archiveChannel.id}>` : ''))
+			const lines = section.items.map(
+				(item, index) =>
+					`${index + 1}. <@${item.member.id}>` +
+					(item.archiveChannel && !item.isInvalidNick
+						? ` → <#${item.archiveChannel.id}>`
+						: '')
+			)
 			const sectionText = `${heading}\n${lines.join('\n')}`
 			if (block.length + 1 + sectionText.length <= maxBlockLength) {
 				block += `\n${sectionText}`
@@ -161,21 +182,20 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 	const parts = []
 
 	let currentContainer = new ContainerBuilder()
-		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent(title)
-		)
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(title))
 		.addSeparatorComponents(new SeparatorBuilder())
 
 	let currentLength = title.length
 
 	for (const block of blocks) {
-		if (currentLength + block.length > MAX_TOTAL_TEXT || currentContainer.components.length >= 36) {
+		if (
+			currentLength + block.length > MAX_TOTAL_TEXT ||
+			currentContainer.components.length >= 36
+		) {
 			parts.push(currentContainer)
 
 			currentContainer = new ContainerBuilder()
-				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(title)
-				)
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(title))
 				.addSeparatorComponents(new SeparatorBuilder())
 
 			currentLength = title.length

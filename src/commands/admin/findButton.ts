@@ -1,16 +1,13 @@
-import { replyWithAutoDelete } from '../../utils/autoDelete'
-import { getError } from '../../utils/errors'
 import {
-	MessageFlags,
-	ButtonInteraction,
-	Message,
+	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	ActionRowBuilder,
-	ContainerBuilder,
+	Message,
+	MessageFlags,
 	PermissionFlagsBits
 } from 'discord.js'
-import { getNavigationContainer } from './navigationBuilder'
+import { replyWithAutoDelete } from '../../utils/autoDelete'
+import { getError } from '../../utils/errors'
 require('dotenv').config()
 
 /**
@@ -55,14 +52,16 @@ export = {
 				.setLabel('🔎 НАЙТИ АРХИВ')
 				.setStyle(ButtonStyle.Primary)
 
-			const row = new ActionRowBuilder<ButtonBuilder>().addComponents(searchButton)
+			const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+				searchButton
+			)
 
 			await lastMessage.edit({
 				components: [...lastMessage.components, row],
 				flags: MessageFlags.IsComponentsV2 as const
 			})
 		} catch (caught) {
- const error = getError(caught);
+			const error = getError(caught)
 			console.error('Ошибка при работе с сообщением:', error)
 		}
 	}

@@ -1,3 +1,4 @@
+import pool = require('../src/services/database')
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ChannelType, Collection, ContainerBuilder, TextDisplayBuilder, type Guild } from 'discord.js'
@@ -21,25 +22,45 @@ test('archive cleanup list is first; list updates preserve human and membership 
 		return [container('unused')]
 	})
 	t.mock.method(archives, 'getArchivesLists', async () => ({ parts: [container('archives')], count: 1 }))
-	t.mock.method(unanswered, 'getUnansweredList', async () => container('unanswered'))
+	t.mock.method(unanswered, 'getUnansweredList', async () => [container('unanswered')])
 	const message = (id: string, authorId: string, content: string, createdTimestamp: number) => ({ id, author: { id: authorId }, createdTimestamp,
 		components: [{ toJSON: () => ({ type: 10, content }) }],
 		edit: async (payload: any) => { edited.push(payload) }, delete: async () => { deleted.push(id) } })
 	const messages = new Collection([
 		['human', message('human', 'human', 'hello', 4)],
 		['membership', message('membership', 'bot', '## В семье, но нет в Discord и привязках', 3)],
-		['old', message('old', 'bot', 'previous archive list', 1)]
+		['old', message('old', 'bot', 'previous archive list', 1)],
+		['unrelated', message('unrelated', 'bot', 'another bot publication', 2)],
+		['expired', message('expired', 'bot', 'surplus archive page', 0)]
 	])
-	const channel = { type: ChannelType.GuildText, messages: { fetch: async () => messages }, send: async (payload: any) => { sent.push(payload) } }
-	const guild = { client: { user: { id: 'bot' } }, channels: { cache: new Collection([['configured', channel]]) } } as unknown as Guild
+	const registry = [
+		{ message_id: 'old', type: 'unused', part: 1, channel_id: 'configured' },
+		{ message_id: 'expired', type: 'unused', part: 2, channel_id: 'configured' }
+	]
+	t.mock.method(pool, 'query', async (sql: string, values: any[]) => {
+		if (sql.trimStart().startsWith('SELECT')) return { rows: [...registry] }
+		if (sql.startsWith('INSERT')) registry.push({ message_id: values[0], type: values[2], part: values[3], channel_id: values[5] })
+		if (sql.startsWith('DELETE')) registry.splice(registry.findIndex(row => row.message_id === values[0]), 1)
+		return { rows: [] }
+	})
+	const channel = { id: 'configured', type: ChannelType.GuildText, messages: { fetch: async ({ message: id }: { message: string }) => {
+		assert.ok(id, 'refresh must fetch only registered IDs')
+		return messages.get(id)
+	} }, send: async (payload: any) => {
+		sent.push(payload)
+		const sentMessage = message('new' + sent.length, 'bot', 'managed', 10 + sent.length)
+		messages.set(sentMessage.id, sentMessage)
+		return sentMessage
+	} }
+	const guild = { id: 'guild', client: { user: { id: 'bot' } }, channels: { cache: new Collection([['configured', channel]]) } } as unknown as Guild
 	const first = updateLists(guild)
 	const second = updateLists(guild)
 	release()
 	await Promise.all([first, second])
 	assert.equal(runs, 2)
 	assert.equal(maximum, 1)
-	assert.equal(edited.length, 2)
-	assert.ok(edited.every(payload => payload.components[0].toJSON().components[0].content === 'unused'))
-	assert.deepEqual(sent.slice(0, 2).map(payload => payload.components[0].toJSON().components[0].content), ['archives', 'unanswered'])
-	assert.deepEqual(deleted, [])
+	assert.equal(edited.length, 4)
+	assert.equal(edited.filter(payload => payload.components[0].toJSON().components[0].content === 'unused').length, 2)
+	assert.deepEqual(sent.map(payload => payload.components[0].toJSON().components[0].content), ['archives', 'unanswered'])
+	assert.deepEqual(deleted, ['expired'])
 })

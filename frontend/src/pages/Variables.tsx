@@ -1,5 +1,5 @@
 import { ArrowUpRight, Plus, Save, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { templateVariableName } from '../../../shared/templateVariables'
 import {
 	ActionBar,
@@ -9,8 +9,38 @@ import {
 	IconButton,
 	Panel
 } from '../components/ui'
+import { useFormDraft } from '../lib/drafts'
 import { syncNotice } from '../lib/templates'
-import type { Config, PageServices, Setter } from '../types'
+import {
+	errorStatus,
+	type Api,
+	type Config,
+	type PageServices,
+	type Setter
+} from '../types'
+
+async function saveVariables(
+	api: Api,
+	setConfig: Setter<Config | null>,
+	body:
+		| {
+				revision: number
+				group: string
+				values: Record<string, string>
+				labels: Record<string, string>
+		  }
+		| { revision: number; groups: Record<string, Record<string, string>> }
+) {
+	try {
+		return await api('template-variables', body)
+	} catch (error) {
+		if (errorStatus(error) === 409) {
+			const latest = await api('config').catch(() => null)
+			if (latest) setConfig(latest)
+		}
+		throw error
+	}
+}
 
 export function TemplateVariables({
 	group,
@@ -34,11 +64,13 @@ export function TemplateVariables({
 				label: config.templateVariableLabels?.[group]?.[key] || key
 			})
 		)
-	const [entries, setEntries] = useState(savedEntries)
+	const {
+		value: entries,
+		setValue: setEntries,
+		reset,
+		conflict
+	} = useFormDraft('template-variables:' + group, savedEntries())
 	const [validate, setValidate] = useState(false)
-	useEffect(() => {
-		setEntries(savedEntries())
-	}, [config.templateVariables, config.templateVariableLabels, group])
 	function edit(
 		index: number,
 		column: 'key' | 'label' | 'value',
@@ -66,6 +98,11 @@ export function TemplateVariables({
 			}
 		>
 			<div className='panel-body grid gap-4'>
+				{conflict && (
+					<Button onClick={reset}>
+						Заменить черновик переменных актуальными данными
+					</Button>
+				)}
 				<p className='field-hint'>
 					{overview ? (
 						'Названия и значения переменных. Для изменения ключей открой шаблон по кнопке в заголовке.'
@@ -153,6 +190,7 @@ export function TemplateVariables({
 					<IconButton
 						label='Сохранить переменные'
 						icon={Save}
+						disabled={conflict}
 						onClick={() => {
 							setValidate(true)
 							if (
@@ -162,7 +200,7 @@ export function TemplateVariables({
 							if (entries.some(entry => !templateVariableName.test(entry.key)))
 								return
 							run(async () => {
-								const next = await api('template-variables', {
+								const next = await saveVariables(api, setConfig, {
 									group,
 									values: Object.fromEntries(
 										entries.map(entry => [entry.key, entry.value])
@@ -176,6 +214,7 @@ export function TemplateVariables({
 									revision: config.revision
 								})
 								setConfig(next)
+								reset()
 								const notice = syncNotice(
 									next,
 									'Переменные сохранены. Публикации обновлены.'
@@ -198,10 +237,12 @@ export function Variables({
 	notify
 }: PageServices & { config: Config; setConfig: Setter<Config | null> }) {
 	const [search, setSearch] = useState('')
-	const [draft, setDraft] = useState(config.templateVariables || {})
-	useEffect(() => {
-		setDraft(config.templateVariables || {})
-	}, [config.templateVariables])
+	const {
+		value: draft,
+		setValue: setDraft,
+		reset,
+		conflict
+	} = useFormDraft('variable-values', config.templateVariables || {})
 	const groups = [
 		...new Set(config.templates.map(field => field.group))
 	].filter(group => Object.keys(draft[group] || {}).length > 0)
@@ -220,17 +261,24 @@ export function Variables({
 		.filter(item => item.entries.length)
 	return (
 		<div className='page-stack'>
+			{conflict && (
+				<Button onClick={reset}>
+					Заменить черновик переменных актуальными данными
+				</Button>
+			)}
 			<ActionBar>
 				<Button
 					variant='primary'
 					icon={Save}
+					disabled={conflict}
 					onClick={() =>
 						run(async () => {
-							const next = await api('template-variables', {
+							const next = await saveVariables(api, setConfig, {
 								groups: draft,
 								revision: config.revision
 							})
 							setConfig(next)
+							reset()
 							const notice = syncNotice(
 								next,
 								'Переменные сохранены. Публикации обновлены.'

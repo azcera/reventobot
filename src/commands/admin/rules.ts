@@ -1,11 +1,11 @@
-import { store as dashboard } from '../../dashboard/store'
-import { ContainerBuilder } from '../../services/markdownContainer'
 import {
 	MessageFlags,
 	PermissionFlagsBits,
 	SeparatorBuilder,
 	TextDisplayBuilder
 } from 'discord.js'
+import { store as dashboard } from '../../dashboard/store'
+import { ContainerBuilder } from '../../services/markdownContainer'
 import { replyWithAutoDelete } from '../../utils/autoDelete'
 
 /**
@@ -25,15 +25,12 @@ export = {
 		}
 		const payload = await this.buildPayload()
 		const sent = await message.channel.send(payload)
-		await (require('../../dashboard/permanentMessages') as typeof import('../../dashboard/permanentMessages')).rememberSent(
-			'rules',
-			sent
-		)
+		await (
+			require('../../dashboard/permanentMessages') as typeof import('../../dashboard/permanentMessages')
+		).rememberSent('rules', sent)
 		await message.delete().catch(() => {})
 	},
 	async buildPayload() {
-
-
 		const templates = dashboard.snapshot().templates
 		const document = templates.find(field => field.key === 'rules.document')
 		const fields = document

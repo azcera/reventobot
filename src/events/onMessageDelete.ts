@@ -1,9 +1,8 @@
+import { Client, Events, PermissionFlagsBits } from 'discord.js'
 import { store as dashboard } from '../dashboard/store'
-import { Message, Events, Client, PermissionFlagsBits } from 'discord.js'
 import { updateLists } from '../features/archive/updateLists'
 
 require('dotenv').config()
-
 
 /**
  * Обработчик удаления сообщений
@@ -11,7 +10,7 @@ require('dotenv').config()
  */
 export = (client: import('discord.js').Client) => {
 	client.on(Events.MessageDelete, async message => {
- if (!message.inGuild()) return
+		if (!message.inGuild()) return
 		if (!message.author || message.author.bot) return
 
 		if (
@@ -26,7 +25,9 @@ export = (client: import('discord.js').Client) => {
 
 			const authorHasAdminRole =
 				member?.permissions.has(PermissionFlagsBits.Administrator) ||
-				member?.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))
+				member?.roles.cache.some(role =>
+					dashboard.roleIds('ADMIN_ROLES').includes(role.id)
+				)
 
 			const messageHasUserMention = message.mentions.users.size > 0
 			const messageHasRoleMention = message.mentions.roles.size > 0

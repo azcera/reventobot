@@ -1,118 +1,133 @@
-import { getError } from '../../utils/errors'
+import {
+	ChannelType,
+	Guild,
+	MessageType,
+	PermissionFlagsBits,
+	SeparatorBuilder,
+	TextDisplayBuilder,
+	type ThreadChannel
+} from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
 import { ContainerBuilder } from '../../services/markdownContainer'
-import {
-	TextDisplayBuilder,
-	Guild,
-	ChannelType,
-	PermissionFlagsBits,
-	MessageType,
-	SeparatorBuilder
-} from 'discord.js'
+import { getError } from '../../utils/errors'
 require('dotenv').config()
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000 // 7 дней в миллисекундах
 
-/**
- * Функция определяющая список неотвеченных архивов
- *
- * @param {Guild} guild
- */
-async function getUnansweredList(guild: import('discord.js').Guild) {
-	/**
-	 * Список архивов без ответа
-	 *
-	 * @type {{id: number, name: string}[]}
-	 */
-	let unansweredList = []
+type Latest = {
+	id: string | null
+	expires: number
+	unanswered: Promise<boolean>
+}
+const latest = new WeakMap<Guild, Map<string, Latest>>()
 
-	let archiveChannel =
-		guild.channels.cache.get(dashboard.getSetting('PARENT_CHANNEL_ID')) ||
-		(await guild.channels.fetch(dashboard.getSetting('PARENT_CHANNEL_ID')))
+function invalidateUnanswered(guild: Guild, threadId: string) {
+	latest.get(guild)?.delete(threadId)
+}
 
-	if (!archiveChannel || archiveChannel?.type != ChannelType.GuildText) {
+async function needsAnswer(thread: ThreadChannel) {
+	const messages = await thread.messages.fetch({ limit: 1, cache: false })
+	const last = messages.first()
+	if (!last || Date.now() - last.createdTimestamp > SEVEN_DAYS) return false
+	const author =
+		last.member ?? (await thread.guild.members.fetch(last.author.id))
+	const repliedUserId =
+		last.type === MessageType.Reply ? last.mentions.repliedUser?.id : undefined
+	const hasMention =
+		last.mentions.everyone ||
+		last.mentions.roles.size > 0 ||
+		last.mentions.users.some(user => user.id !== repliedUserId)
+	const isAdmin =
+		author.permissions.has(PermissionFlagsBits.Administrator) ||
+		author.roles.cache.some(role =>
+			dashboard.roleIds('ADMIN_ROLES').includes(role.id)
+		)
+	return (!last.author.bot && hasMention) || !isAdmin
+}
+
+async function getUnansweredList(guild: Guild) {
+	const channelId = dashboard.getSetting('PARENT_CHANNEL_ID')
+	const archiveChannel =
+		guild.channels.cache.get(channelId) ??
+		(await guild.channels.fetch(channelId))
+	if (archiveChannel?.type !== ChannelType.GuildText) {
 		console.error('❌ Неправильно настроен канал с архивами.')
 		return
 	}
-
-	const { threads } = await archiveChannel.threads.fetchActive(true)
-
-	for (const [_, thread] of archiveChannel.threads.cache) {
-		try {
-			const messages = await thread.messages.fetch({ limit: 1 })
-			const lastMessage = messages.first()
-
-			if (!lastMessage) continue
-
-			const messageAge = Date.now() - lastMessage.createdTimestamp
-			if (messageAge > SEVEN_DAYS) continue
-
-			const author =
-				lastMessage.member ??
-				(await thread.guild.members
-					.fetch(lastMessage.author.id)
-					.catch(() => null))
-			if (!author) continue
-
-			const hasRoleMention = lastMessage.mentions.roles.size > 0
-			const hasEveryone = lastMessage.mentions.everyone
-
-			const isReply = lastMessage.type === MessageType.Reply
-
-			let hasUserMention = lastMessage.mentions.users.size > 0
-
-			if (isReply && hasUserMention) {
-					const repliedUserId = lastMessage.mentions.repliedUser?.id
-
-					if (repliedUserId) {
-							const realMentions = lastMessage.mentions.users.filter(user => user.id !== repliedUserId)
-					
-							hasUserMention = realMentions.size > 0
+	const { threads } = await archiveChannel.threads.fetchActive()
+	const cache = latest.get(guild) ?? new Map<string, Latest>()
+	latest.set(guild, cache)
+	for (const id of cache.keys()) if (!threads.has(id)) cache.delete(id)
+	const unansweredList: ThreadChannel[] = []
+	const archives = [...threads.values()]
+	for (let offset = 0; offset < archives.length; offset += 6) {
+		await Promise.all(
+			archives.slice(offset, offset + 6).map(async thread => {
+				let entry = cache.get(thread.id)
+				if (
+					!entry ||
+					entry.id !== thread.lastMessageId ||
+					entry.expires <= Date.now()
+				) {
+					entry = {
+						id: thread.lastMessageId,
+						expires: Date.now() + 90000,
+						unanswered: needsAnswer(thread)
 					}
-			}
-
-			const hasAnyMention = hasUserMention || hasRoleMention || hasEveryone
-			const hasAdminRole =
-				author.permissions.has(PermissionFlagsBits.Administrator) ||
-				author.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))
-
-			if ((!lastMessage.author.bot && hasAnyMention) || !hasAdminRole) {
-				// условие при котором канал считается непрочитанным
-				unansweredList.push({
-					id: thread.id,
-					name: thread.name
-				})
-			}
-		} catch (caught) {
- const err = getError(caught);
-			console.error(`❌ Ошибка при обработке ветки ${thread.id}:`, err.message)
-		}
-	}
-
-	const container = new ContainerBuilder()
-
-	container.addTextDisplayComponents(
-		new TextDisplayBuilder().setContent(dashboard.text('unanswered.1'))
-	)
-
-	let stringList = ''
-	if (unansweredList.length === 0) {
-		stringList = dashboard.text('unanswered.empty')
-	} else {
-		unansweredList.sort((a, b) => {
-			const numA = Number(String(a.name).match(/(\d+)\s*$/)?.[1] ?? 0)
-			const numB = Number(String(b.name).match(/(\d+)\s*$/)?.[1] ?? 0)
-			return numA - numB
-		})
-		unansweredList.forEach(
-			(thread, index) => (stringList += `${index + 1}. <#${thread.id}>\n`)
+					cache.set(thread.id, entry)
+				}
+				try {
+					if (await entry.unanswered) unansweredList.push(thread)
+				} catch (error) {
+					if (cache.get(thread.id) === entry) cache.delete(thread.id)
+					console.error(
+						`❌ Ошибка при обработке ветки ${thread.id}:`,
+						getError(error).message
+					)
+				}
+			})
 		)
 	}
 
-	container
-		.addSeparatorComponents(new SeparatorBuilder())
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(stringList))
-	return dashboard.decorate('unanswered', container)
+	const build = (lines: string) =>
+		dashboard.decorate(
+			'unanswered',
+			new ContainerBuilder()
+				.addTextDisplayComponents(
+					new TextDisplayBuilder().setContent(dashboard.text('unanswered.1'))
+				)
+				.addSeparatorComponents(new SeparatorBuilder())
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(lines))
+		)
+	if (!unansweredList.length) return [build(dashboard.text('unanswered.empty'))]
+	unansweredList.sort(
+		(a, b) =>
+			Number(a.name.match(/(\d+)\s*$/)?.[1] ?? 0) -
+			Number(b.name.match(/(\d+)\s*$/)?.[1] ?? 0)
+	)
+
+	const pages: ContainerBuilder[] = []
+	const lines = unansweredList.map(
+		(thread, index) => `${index + 1}. <#${thread.id}>`
+	)
+	let cursor = 0
+	while (cursor < lines.length) {
+		let end = Math.min(lines.length, cursor + 150)
+		let page = build(lines.slice(cursor, end).join('\n'))
+		for (;;) {
+			try {
+				page.toJSON()
+				break
+			} catch (error) {
+				if (end <= cursor + 1) throw error
+				end = cursor + Math.floor((end - cursor) / 2)
+				page = build(lines.slice(cursor, end).join('\n'))
+			}
+		}
+		pages.push(page)
+		cursor = end
+	}
+	return pages
 }
 
-export { getUnansweredList }
+export { getUnansweredList, invalidateUnanswered }

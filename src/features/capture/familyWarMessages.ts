@@ -1,24 +1,32 @@
-import type { BindingMember, Decisions, Registration, War, WarPlayer, QueueRow } from './familyWarTypes'
-import { templateText, type TemplateText } from '../../dashboard/templateText'
-import type { Store } from '../../types'
-import { ContainerBuilder } from '../../services/markdownContainer'
 import {
-	MessageFlags,
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	TextDisplayBuilder,
+	MessageFlags,
 	SeparatorBuilder,
+	TextDisplayBuilder,
 	escapeMarkdown
 } from 'discord.js'
+import { templateText, type TemplateText } from '../../dashboard/templateText'
+import { ContainerBuilder } from '../../services/markdownContainer'
+import type { Store } from '../../types'
 import {
-	queueRows,
-	registrationClosed,
 	battleSummary,
-	bindingIndex
+	bindingIndex,
+	queueRows,
+	registrationClosed
 } from './familyWarData'
+import type {
+	BindingMember,
+	Decisions,
+	QueueRow,
+	Registration,
+	War,
+	WarPlayer
+} from './familyWarTypes'
 
-const text = (value: unknown) => escapeMarkdown(String(value ?? '')).replace(/@/g, '＠')
+const text = (value: unknown) =>
+	escapeMarkdown(String(value ?? '')).replace(/@/g, '＠')
 const timestamp = (time: number) => `<t:${Math.floor(time / 1000)}:F>`
 const suffix = (war: War) => `RU8_${war.apiId}`
 const textBlock = (value: string) => new TextDisplayBuilder().setContent(value)
@@ -54,14 +62,50 @@ function announcement(
 		.setCustomId(`capt_api_${suffix(war)}`)
 		.setDisabled(closed)
 		.setLabel(
-			templateText('announcement.button', { icon, target: war.attack ? 'АТАКУ' : 'ЗАЩИТУ' })
+			templateText('announcement.button', {
+				icon,
+				target: war.attack ? 'АТАКУ' : 'ЗАЩИТУ'
+			})
 		)
-	const container = new ContainerBuilder()
-		.setAccentColor(war.attack ? 0x57f287 : 0x5865f2)
+	const container = new ContainerBuilder().setAccentColor(
+		war.attack ? 0x57f287 : 0x5865f2
+	)
 	container
-		.addTextDisplayComponents(textBlock(render('announcement.document', { icon, title, enemy: code(war.enemy), time: code(startTime), zone: code(war.zone ?? 'Неопределён'), count: code(Array.isArray(enemies) ? enemies.length : 'Неопределено') })))
-		.addTextDisplayComponents(textBlock(templateText('announcement.game', { map: code(war.map), resultIcon: battle.result === 'Победа' ? '🏆' : battle.result === 'Поражение' ? '❌' : '❔', result: code(battle.result), status: code(war.status || 'не указан') + (war.neutral ? ' · Нейтральная территория' : ''), registration: registrationUrl ? '\n[Открыть регистрацию](' + registrationUrl + ')' : '' })))
-		.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(button))
+		.addTextDisplayComponents(
+			textBlock(
+				render('announcement.document', {
+					icon,
+					title,
+					enemy: code(war.enemy),
+					time: code(startTime),
+					zone: code(war.zone ?? 'Неопределён'),
+					count: code(Array.isArray(enemies) ? enemies.length : 'Неопределено')
+				})
+			)
+		)
+		.addTextDisplayComponents(
+			textBlock(
+				templateText('announcement.game', {
+					map: code(war.map),
+					resultIcon:
+						battle.result === 'Победа'
+							? '🏆'
+							: battle.result === 'Поражение'
+								? '❌'
+								: '❔',
+					result: code(battle.result),
+					status:
+						code(war.status || 'не указан') +
+						(war.neutral ? ' · Нейтральная территория' : ''),
+					registration: registrationUrl
+						? '\n[Открыть регистрацию](' + registrationUrl + ')'
+						: ''
+				})
+			)
+		)
+		.addActionRowComponents(
+			new ActionRowBuilder<ButtonBuilder>().addComponents(button)
+		)
 	if (war.status === 'finished') {
 		const bindings = bindingIndex(members, decisions)
 		const label = (player: WarPlayer | null, field: 'damage' | 'kills') => {
@@ -77,7 +121,10 @@ function announcement(
 			.addSeparatorComponents(new SeparatorBuilder())
 			.addTextDisplayComponents(
 				textBlock(
-					templateText('announcement.mvp', { damage: label(battle.damageMvp, 'damage'), kills: label(battle.killsMvp, 'kills') })
+					templateText('announcement.mvp', {
+						damage: label(battle.damageMvp, 'damage'),
+						kills: label(battle.killsMvp, 'kills')
+					})
 				)
 			)
 	}
@@ -113,7 +160,7 @@ function registrationMessage(
 					? `<@${row.userId}>`
 					: `${text(row.name)} | ${row.static}`
 				const marker = row.confirmed
-					? (row.userId && registration.joins?.[row.userId]) && !row.declined
+					? row.userId && registration.joins?.[row.userId] && !row.declined
 						? '✅'
 						: '🎮'
 					: '⏳'
@@ -131,23 +178,29 @@ function registrationMessage(
 		(war.rosterUpdatedAt
 			? `\nСостав получен: <t:${Math.floor(war.rosterUpdatedAt / 1000)}:R>`
 			: '')
-	const container = new ContainerBuilder()
-		.addTextDisplayComponents(textBlock(store.text('capture.document', {
-			target: `капт против ${text(war.enemy)}`,
-			time: timestamp(war.startAt),
-			map: text(war.map),
-			zone: text(war.zone),
-			status: text(war.status || 'не указан'),
-			registrationStatus: closed
-				? 'Регистрация закрыта. Обновление остановлено.'
-				: 'Время и состав обновляются автоматически.',
-			freshness,
-			mode: registration.sortMode === 'time' ? 'по времени записи' : 'по роли и времени записи',
-			confirmedCount: confirmed.length,
-			confirmedPlayers: list(confirmed),
-			waitingCount: waiting.length,
-			waitingPlayers: list(waiting)
-		})))
+	const container = new ContainerBuilder().addTextDisplayComponents(
+		textBlock(
+			store.text('capture.document', {
+				target: `капт против ${text(war.enemy)}`,
+				time: timestamp(war.startAt),
+				map: text(war.map),
+				zone: text(war.zone),
+				status: text(war.status || 'не указан'),
+				registrationStatus: closed
+					? 'Регистрация закрыта. Обновление остановлено.'
+					: 'Время и состав обновляются автоматически.',
+				freshness,
+				mode:
+					registration.sortMode === 'time'
+						? 'по времени записи'
+						: 'по роли и времени записи',
+				confirmedCount: confirmed.length,
+				confirmedPlayers: list(confirmed),
+				waitingCount: waiting.length,
+				waitingPlayers: list(waiting)
+			})
+		)
+	)
 	if (war.testSource)
 		container.addTextDisplayComponents(
 			textBlock(

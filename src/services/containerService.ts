@@ -1,29 +1,30 @@
 import type * as D from 'discord.js'
-import type * as T from '../types'
-import type * as E from 'express'
-import type * as Pg from 'pg'
-import { ContainerBuilder } from './markdownContainer'
 import {
-	TextDisplayBuilder,
-	SeparatorBuilder,
-	SeparatorSpacingSize,
-	SectionBuilder,
 	ButtonBuilder,
 	ButtonStyle,
 	MediaGalleryBuilder,
 	MediaGalleryItemBuilder,
-	MessageFlags
+	MessageFlags,
+	SectionBuilder,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder
 } from 'discord.js'
+import type * as T from '../types'
+import { ContainerBuilder } from './markdownContainer'
 
 /**
  * Собирает ContainerBuilder из данных, пришедших с веб-интерфейса (text/separator/image/section).
  * @param {{noColor?: boolean, accentColor?: string, items: Array}} data
  * @returns {{flags, components}}
  */
-function buildWebContainer(data: T.ContainerData): { flags: D.MessageFlags.IsComponentsV2; components: [ContainerBuilder]; allowedMentions?: D.MessageMentionOptions } {
+function buildWebContainer(data: T.ContainerData): {
+	flags: D.MessageFlags.IsComponentsV2
+	components: [ContainerBuilder]
+	allowedMentions?: D.MessageMentionOptions
+} {
 	const { items } = data
 	const container = new ContainerBuilder()
-
 
 	for (const item of items) {
 		if (item.type === 'text') {

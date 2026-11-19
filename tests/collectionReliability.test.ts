@@ -16,6 +16,10 @@ const database = {
 			claims.set(values[0], { expires: values[1].getTime() })
 			return { rows: [{ creation_key: values[0] }] }
 		}
+		if (sql.startsWith('WITH operation AS')) {
+			claims.get(values[0])!.message_url = values[2]
+			return { rows: [{ message_id: values[1] }] }
+		}
 		if (sql.startsWith('SELECT message_url')) return { rows: [claims.get(values[0])] }
 		if (sql.startsWith('UPDATE collection_creations')) {
 			claims.get(values[0])!.message_url = values[1]
@@ -23,6 +27,7 @@ const database = {
 			return { rows: [] }
 		}
 		if (sql.startsWith('SELECT * FROM active_captures')) return { rows: row ? [structuredClone(row)] : [] }
+		if (sql.startsWith('UPDATE active_captures SET message_refresh_pending')) return { rows: [] }
 		if (sql.startsWith('UPDATE active_captures')) {
 			if (sql.includes('SET approved_users')) {
 				Object.assign(row, { approved_users: JSON.parse(values[0]), approval_page: values[1], main_list: JSON.parse(values[2]),
@@ -304,18 +309,22 @@ test('collection creation saves before reminders, allows repeats and propagates 
 	reset()
 	let sends = 0
 	const channel = { id: 'channel', isSendable: () => true, async send() { sends++; return { id: 'message', url: 'https://discord.com/collection' } } }
-	const interaction = { guild: { id: 'guild', channels: { fetch: async () => channel } } } as unknown as ModalSubmitInteraction<'cached'>
+	const interaction = { id: 'initial', guild: { id: 'guild', channels: { fetch: async () => channel } } } as unknown as ModalSubmitInteraction<'cached'>
 	assert.equal(await captures.sendCollection(interaction, row.discord_timestamp, 'Цель', 20, true, 'channel'), 'https://discord.com/collection')
 	assert.equal(sends, 4)
+	assert.equal(await captures.sendCollection(interaction, row.discord_timestamp, 'Цель', 20, true, 'channel'), 'https://discord.com/collection')
+	assert.equal(sends, 4)
+	;(interaction as { id: string }).id = 'second'
 	assert.equal(await captures.sendCollection(interaction, row.discord_timestamp, ' цель ', 30, true, 'channel'), 'https://discord.com/collection')
 	assert.equal(sends, 8)
 	const query = database.query.bind(database)
 	t.mock.method(database, 'query', async (sql: string, values: any[] = []) => {
-		if (sql.startsWith('INSERT INTO active_captures')) throw new Error('database unavailable')
+		if (sql.startsWith('WITH operation AS')) throw new Error('database unavailable')
 		return query(sql, values)
 	})
+	;(interaction as { id: string }).id = 'third'
 	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, 'Другая цель', 20, true, 'channel'), /database unavailable/)
 	assert.equal(sends, 9) // The failed creation sends no reminders.
-	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, 'Другая цель', 20, true, 'channel'), /database unavailable/)
-	assert.equal(sends, 10)
+	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, 'Другая цель', 20, true, 'channel'), /ещё проверяется/)
+	assert.equal(sends, 9)
 })

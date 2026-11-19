@@ -1,35 +1,142 @@
-import { createApi, readAuthStatus } from './lib/api'
-import type { Api, Config, Resources, Session, Drafts, SettingsDraft, Notify, Run, Guild, HistoryEntry, Overview as OverviewData } from './types'
-import { errorMessage, errorStatus } from './types'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, ArrowUp, ArrowRight, ArrowUpRight, Clock, ListChecks, CalendarDays, Braces, BookOpen, Check, ChevronRight, Database, Files, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, Wifi, X } from 'lucide-react'
-import { ActionBar, BusyContext, Button, Empty, IconButton, Loading, Field, Panel, useModal } from './components/ui'
+import {
+	Activity,
+	ArrowRight,
+	ArrowUp,
+	ArrowUpRight,
+	BookOpen,
+	Braces,
+	CalendarDays,
+	Check,
+	ChevronRight,
+	Clock,
+	Database,
+	Files,
+	History,
+	LayoutDashboard,
+	ListChecks,
+	LogOut,
+	Menu,
+	RefreshCw,
+	Settings2,
+	ShieldCheck,
+	Wifi,
+	X
+} from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Appearance } from './components/Appearance'
 import { HistoryRows } from './components/History'
-import { Variables } from './pages/Variables'
-import { Templates } from './pages/Templates'
-import { Settings } from './pages/Settings'
+import { PageLayout } from './components/PageLayout'
+import {
+	ActionBar,
+	BusyContext,
+	Button,
+	Empty,
+	Field,
+	IconButton,
+	Loading,
+	Panel,
+	useModal
+} from './components/ui'
+import { showGuide } from './guides'
+import { createApi, readAuthStatus } from './lib/api'
+import { FormDraftContext, type FormDrafts } from './lib/drafts'
+import { dirtyGroup } from './lib/templates'
+import { CapturePresets } from './pages/CapturePresets'
 import { Majestic } from './pages/Majestic'
 import { RoleCurators } from './pages/RoleCurators'
-import { CapturePresets } from './pages/CapturePresets'
-import { dirtyGroup } from './lib/templates'
-import { showGuide } from './guides'
-import { Appearance } from './components/Appearance'
-import { PageLayout } from './components/PageLayout'
+import { Settings } from './pages/Settings'
+import { Templates } from './pages/Templates'
+import { Variables } from './pages/Variables'
+import type {
+	Api,
+	Config,
+	Drafts,
+	Guild,
+	HistoryEntry,
+	Notify,
+	Overview as OverviewData,
+	Resources,
+	Run,
+	Session,
+	SettingsDraft
+} from './types'
+import { errorMessage, errorStatus } from './types'
 
 const pages = {
-	overview: { title: 'Обзор', label: 'Обзор', description: 'Твой сервер. Всё под контролем.', icon: LayoutDashboard },
-	templates: { title: 'Шаблоны сообщений', label: 'Шаблоны', description: 'Редактируй содержимое. Структуру и кнопки сохранит бот.', icon: Files },
-	variables: { title: 'Переменные шаблонов', label: 'Переменные', description: 'Значения для быстрой замены в шаблонах.', icon: Braces },
-	settings: { title: 'Настройки', label: 'Настройки', description: 'Каналы, роли и параметры работы бота.', icon: Settings2 },
-	access: { title: 'Доступ к функциям', label: 'Доступ', description: 'Дополнительные роли для функций бота.', icon: ShieldCheck },
-	curators: { title: 'Кураторы ролей', label: 'Кураторы ролей', description: 'Назначай, кто и какими ролями может управлять.', icon: ListChecks },
-	captures: { title: 'Управление сборами', label: 'Сборы', description: 'Предустановки ручной регистрации на мероприятия.', icon: CalendarDays },
-	majestic: { title: 'Majestic — синхронизация', label: 'Majestic', description: 'Сверь состав семьи с Discord перед применением изменений.', icon: RefreshCw },
-	notFound: { title: '404 — страница не найдена', label: 'Страница не найдена', description: 'Проверь адрес или вернись на главную.', icon: Files },
-	history: { title: 'История изменений', label: 'История изменений', description: 'Действия за последние 7 суток. Время — московское.', icon: History }
+	overview: {
+		title: 'Обзор',
+		label: 'Обзор',
+		description: 'Твой сервер. Всё под контролем.',
+		icon: LayoutDashboard
+	},
+	templates: {
+		title: 'Шаблоны сообщений',
+		label: 'Шаблоны',
+		description: 'Редактируй содержимое. Структуру и кнопки сохранит бот.',
+		icon: Files
+	},
+	variables: {
+		title: 'Переменные шаблонов',
+		label: 'Переменные',
+		description: 'Значения для быстрой замены в шаблонах.',
+		icon: Braces
+	},
+	settings: {
+		title: 'Настройки',
+		label: 'Настройки',
+		description: 'Каналы, роли и параметры работы бота.',
+		icon: Settings2
+	},
+	access: {
+		title: 'Доступ к функциям',
+		label: 'Доступ',
+		description: 'Дополнительные роли для функций бота.',
+		icon: ShieldCheck
+	},
+	curators: {
+		title: 'Кураторы ролей',
+		label: 'Кураторы ролей',
+		description: 'Назначай, кто и какими ролями может управлять.',
+		icon: ListChecks
+	},
+	captures: {
+		title: 'Управление сборами',
+		label: 'Сборы',
+		description: 'Предустановки ручной регистрации на мероприятия.',
+		icon: CalendarDays
+	},
+	majestic: {
+		title: 'Majestic — синхронизация',
+		label: 'Majestic',
+		description: 'Сверь состав семьи с Discord перед применением изменений.',
+		icon: RefreshCw
+	},
+	notFound: {
+		title: '404 — страница не найдена',
+		label: 'Страница не найдена',
+		description: 'Проверь адрес или вернись на главную.',
+		icon: Files
+	},
+	history: {
+		title: 'История изменений',
+		label: 'История изменений',
+		description: 'Действия за последние 7 суток. Время — московское.',
+		icon: History
+	}
 }
 
-function currentPage() { const page = location.hash.slice(1).split('?')[0]; return !['/', '/dashboard/', '/dashboard/index.html'].includes(location.pathname) ? 'notFound' : !page ? 'overview' : Object.hasOwn(pages, page) ? page as keyof typeof pages : 'notFound' }
+function currentPage() {
+	const page = location.hash.slice(1).split('?')[0]
+	return !['/', '/dashboard/', '/dashboard/index.html'].includes(
+		location.pathname
+	)
+		? 'notFound'
+		: !page
+			? 'overview'
+			: Object.hasOwn(pages, page)
+				? (page as keyof typeof pages)
+				: 'notFound'
+}
 
 const navigation = [
 	['Обзор', ['overview']],
@@ -39,31 +146,262 @@ const navigation = [
 	['Система', ['settings', 'history']]
 ] satisfies [string, (keyof typeof pages)[]][]
 
-function Login({ loading, configured, status, retry }: { loading: boolean; configured: boolean; status: string; retry(): void }) {
-	return <PageLayout standalone><div className="login-decoration" aria-hidden="true" /><div className="login-card"><img src="/revento-logo.png" className="mb-8 size-16 rounded-2xl" alt="Логотип Revento" /><p className="eyebrow mb-4">REVENTO / панель управления</p><h1 className="text-4xl font-semibold leading-tight tracking-[-1.5px] sm:text-5xl">Всё под<br /><span className="text-brand">контролем.</span></h1><p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">Сообщения, компоненты и настройки твоего сервера в одном месте.</p>
-		{loading ? <Loading>Проверяем подключение…</Loading> : configured ? <a className="button button-primary mt-8 w-full" href="/auth/discord">Войти через Discord<ArrowUpRight aria-hidden="true" /></a> : <Button className="mt-8" icon={RefreshCw} onClick={retry}>Проверить подключение</Button>}
-		<p role="status" aria-live="polite" className="mt-4 text-xs leading-relaxed text-muted">{status || 'Доступ только администраторам сервера.'}</p><div className="mt-8 flex items-center gap-2 border-t border-line pt-5 text-[11px] text-muted"><ShieldCheck className="size-4 text-brand" />Авторизация через Discord · проверка прав на сервере</div></div></PageLayout>
+function Login({
+	loading,
+	configured,
+	status,
+	retry
+}: {
+	loading: boolean
+	configured: boolean
+	status: string
+	retry(): void
+}) {
+	return (
+		<PageLayout standalone>
+			<div
+				className='login-decoration'
+				aria-hidden='true'
+			/>
+			<div className='login-card'>
+				<img
+					src='/revento-logo.png'
+					className='mb-8 size-16 rounded-2xl'
+					alt='Логотип Revento'
+				/>
+				<p className='eyebrow mb-4'>REVENTO / панель управления</p>
+				<h1 className='text-4xl font-semibold leading-tight tracking-[-1.5px] sm:text-5xl'>
+					Всё под
+					<br />
+					<span className='text-brand'>контролем.</span>
+				</h1>
+				<p className='mt-5 max-w-sm text-sm leading-relaxed text-muted'>
+					Сообщения, компоненты и настройки твоего сервера в одном месте.
+				</p>
+				{loading ? (
+					<Loading>Проверяем подключение…</Loading>
+				) : configured ? (
+					<a
+						className='button button-primary mt-8 w-full'
+						href='/auth/discord'
+					>
+						Войти через Discord
+						<ArrowUpRight aria-hidden='true' />
+					</a>
+				) : (
+					<Button
+						className='mt-8'
+						icon={RefreshCw}
+						onClick={retry}
+					>
+						Проверить подключение
+					</Button>
+				)}
+				<p
+					role='status'
+					aria-live='polite'
+					className='mt-4 text-xs leading-relaxed text-muted'
+				>
+					{status || 'Доступ только администраторам сервера.'}
+				</p>
+				<div className='mt-8 flex items-center gap-2 border-t border-line pt-5 text-[11px] text-muted'>
+					<ShieldCheck className='size-4 text-brand' />
+					Авторизация через Discord · проверка прав на сервере
+				</div>
+			</div>
+		</PageLayout>
+	)
 }
 
-type DataPageProps = { active: boolean; api: Api; config: Config; guild: Guild; notify: Notify; refresh: number }
-function Overview({ active, api, config, guild, notify, refresh }: DataPageProps) {
+type DataPageProps = {
+	active: boolean
+	api: Api
+	config: Config
+	guild: Guild
+	notify: Notify
+	refresh: number
+}
+function Overview({
+	active,
+	api,
+	config,
+	guild,
+	notify,
+	refresh
+}: DataPageProps) {
 	const [data, setData] = useState<OverviewData | null>(null)
 	const [loading, setLoading] = useState(false)
 	useEffect(() => {
 		if (!active) return
 		let cancelled = false
 		setLoading(true)
-		api('overview').then(result => { if (!cancelled) setData(result) }).catch(error => { if (!cancelled) notify(errorMessage(error), true) }).finally(() => { if (!cancelled) setLoading(false) })
-		return () => { cancelled = true }
+		api('overview')
+			.then(result => {
+				if (!cancelled) setData(result)
+			})
+			.catch(error => {
+				if (!cancelled) notify(errorMessage(error), true)
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false)
+			})
+		return () => {
+			cancelled = true
+		}
 	}, [active, api, refresh, notify])
-	return <div className="page-stack"><div className="overview-hero"><div><p className="eyebrow mb-3">ТВОЙ СЕРВЕР. ТВОИ ПРАВИЛА.</p><h2 className="section-title">Центр управления</h2><p className="mt-3 max-w-lg text-sm leading-relaxed text-muted">Подготовь публикацию, обнови шаблоны и настрой бота — без редактирования кода.</p><a href="#templates" className="button button-primary mt-6">Открыть шаблоны<ArrowRight aria-hidden="true" /></a></div></div>
-		{loading && !data ? <Loading /> : data && <div className="metric-grid">{([[Wifi, 'Discord', data.ready ? 'Подключён' : 'Отключён'], [Activity, 'Задержка API', data.ping >= 0 ? data.ping + ' мс' : 'Измеряется'], [Database, 'База данных', data.database ? 'Доступна' : 'Недоступна'], [Clock, 'Время работы', Math.floor(data.uptime / 3600) + ' ч ' + Math.floor(data.uptime % 3600 / 60) + ' мин']] satisfies [typeof Wifi, string, string][]).map(([Icon, label, value]) => <div className="metric" data-tilt key={label}><div className="flex items-center justify-between gap-2 text-xs text-muted"><span>{label}</span><Icon className="size-4" aria-hidden="true" /></div><strong className="mt-3 block text-lg font-medium tracking-tight">{value}</strong></div>)}</div>}
-		<div className="grid gap-4 sm:grid-cols-2">{([['templates', 'Обновить шаблоны', 'Тексты и кнопки сообщений бота в одном редакторе.', Files], ['captures', 'Подготовить сбор', 'Команды и предустановки для событий семьи.', CalendarDays], ['curators', 'Назначить кураторов', 'Управление ролями и полномочиями участников.', ListChecks], ['majestic', 'Сверить состав', 'Синхронизация участников семьи с Discord.', RefreshCw]] satisfies [string, string, string, typeof Files][]).map(([key, title, description, Icon]) => <a key={key} href={'#' + key} className="quick-link" data-tilt><div className="mb-5 flex items-center justify-between"><Icon className="size-5 text-brand" aria-hidden="true" /><ArrowUpRight className="size-4 text-muted" aria-hidden="true" /></div><h2 className="section-title">{title}</h2><p className="mt-2 text-xs leading-relaxed text-muted">{description}</p></a>)}</div>
-		<Panel title="Последние изменения" action={<a href="#history" className="inline-flex items-center gap-1 text-xs text-muted hover:text-brand">Вся история<ArrowUpRight className="size-3.5" aria-hidden="true" /></a>}><HistoryRows entries={data?.history || []} config={config} guild={guild} compact /></Panel>
-	</div>
+	return (
+		<div className='page-stack'>
+			<div className='overview-hero'>
+				<div>
+					<p className='eyebrow mb-3'>ТВОЙ СЕРВЕР. ТВОИ ПРАВИЛА.</p>
+					<h2 className='section-title'>Центр управления</h2>
+					<p className='mt-3 max-w-lg text-sm leading-relaxed text-muted'>
+						Подготовь публикацию, обнови шаблоны и настрой бота — без
+						редактирования кода.
+					</p>
+					<a
+						href='#templates'
+						className='button button-primary mt-6'
+					>
+						Открыть шаблоны
+						<ArrowRight aria-hidden='true' />
+					</a>
+				</div>
+			</div>
+			{loading && !data ? (
+				<Loading />
+			) : (
+				data && (
+					<div className='metric-grid'>
+						{(
+							[
+								[Wifi, 'Discord', data.ready ? 'Подключён' : 'Отключён'],
+								[
+									Activity,
+									'Задержка API',
+									data.ping >= 0 ? data.ping + ' мс' : 'Измеряется'
+								],
+								[
+									Database,
+									'База данных',
+									data.database ? 'Доступна' : 'Недоступна'
+								],
+								[
+									Clock,
+									'Время работы',
+									Math.floor(data.uptime / 3600) +
+										' ч ' +
+										Math.floor((data.uptime % 3600) / 60) +
+										' мин'
+								]
+							] satisfies [typeof Wifi, string, string][]
+						).map(([Icon, label, value]) => (
+							<div
+								className='metric'
+								data-tilt
+								key={label}
+							>
+								<div className='flex items-center justify-between gap-2 text-xs text-muted'>
+									<span>{label}</span>
+									<Icon
+										className='size-4'
+										aria-hidden='true'
+									/>
+								</div>
+								<strong className='mt-3 block text-lg font-medium tracking-tight'>
+									{value}
+								</strong>
+							</div>
+						))}
+					</div>
+				)
+			)}
+			<div className='grid gap-4 sm:grid-cols-2'>
+				{(
+					[
+						[
+							'templates',
+							'Обновить шаблоны',
+							'Тексты и кнопки сообщений бота в одном редакторе.',
+							Files
+						],
+						[
+							'captures',
+							'Подготовить сбор',
+							'Команды и предустановки для событий семьи.',
+							CalendarDays
+						],
+						[
+							'curators',
+							'Назначить кураторов',
+							'Управление ролями и полномочиями участников.',
+							ListChecks
+						],
+						[
+							'majestic',
+							'Сверить состав',
+							'Синхронизация участников семьи с Discord.',
+							RefreshCw
+						]
+					] satisfies [string, string, string, typeof Files][]
+				).map(([key, title, description, Icon]) => (
+					<a
+						key={key}
+						href={'#' + key}
+						className='quick-link'
+						data-tilt
+					>
+						<div className='mb-5 flex items-center justify-between'>
+							<Icon
+								className='size-5 text-brand'
+								aria-hidden='true'
+							/>
+							<ArrowUpRight
+								className='size-4 text-muted'
+								aria-hidden='true'
+							/>
+						</div>
+						<h2 className='section-title'>{title}</h2>
+						<p className='mt-2 text-xs leading-relaxed text-muted'>
+							{description}
+						</p>
+					</a>
+				))}
+			</div>
+			<Panel
+				title='Последние изменения'
+				action={
+					<a
+						href='#history'
+						className='inline-flex items-center gap-1 text-xs text-muted hover:text-brand'
+					>
+						Вся история
+						<ArrowUpRight
+							className='size-3.5'
+							aria-hidden='true'
+						/>
+					</a>
+				}
+			>
+				<HistoryRows
+					entries={data?.history || []}
+					config={config}
+					guild={guild}
+					compact
+				/>
+			</Panel>
+		</div>
+	)
 }
 
-function HistoryPage({ active, api, config, guild, notify, refresh }: DataPageProps) {
+function HistoryPage({
+	active,
+	api,
+	config,
+	guild,
+	notify,
+	refresh
+}: DataPageProps) {
 	const [entries, setEntries] = useState<HistoryEntry[] | null>(null)
 	const [period, setPeriod] = useState('168')
 	const [from, setFrom] = useState('')
@@ -74,54 +412,199 @@ function HistoryPage({ active, api, config, guild, notify, refresh }: DataPagePr
 	const [hasMore, setHasMore] = useState(false)
 	const loadMoreRef = useRef<HTMLDivElement>(null)
 	const invalid = period === 'custom' && Boolean(from && to && from > to)
-	const [since, setSince] = useState(() => new Date(Date.now() - 168 * 3600000).toISOString())
+	const [since, setSince] = useState(() =>
+		new Date(Date.now() - 168 * 3600000).toISOString()
+	)
 	const query = new URLSearchParams()
 	if (period === 'custom') {
 		if (from) query.set('from', new Date(from + '+03:00').toISOString())
-		if (to) query.set('to', new Date(Date.parse(to + '+03:00') + 59999).toISOString())
+		if (to)
+			query.set('to', new Date(Date.parse(to + '+03:00') + 59999).toISOString())
 	} else query.set('from', since)
 	const range = query.toString()
-	const resetRange = () => { setBefore(null); setEntries(null) }
-	useEffect(() => { if (active) { setBefore(null); setEntries(null) } }, [active, refresh])
+	const resetRange = () => {
+		setBefore(null)
+		setEntries(null)
+	}
+	useEffect(() => {
+		if (active) {
+			setBefore(null)
+			setEntries(null)
+		}
+	}, [active, refresh])
 	useEffect(() => {
 		if (!active || invalid) return
 		let cancelled = false
 		setLoading(true)
-		api(`history?${range}${before ? `&before=${before}` : ''}`).then(data => {
-			if (cancelled) return
-			setEntries(previous => before ? [...(previous || []).filter(entry => !data.some(next => next.id === entry.id)), ...data] : data)
-			setHasMore(data.length === 50)
-		}).catch(error => { if (!cancelled) { setHasMore(false); notify(errorMessage(error), true) } }).finally(() => { if (!cancelled) setLoading(false) })
-		return () => { cancelled = true }
+		api(`history?${range}${before ? `&before=${before}` : ''}`)
+			.then(data => {
+				if (cancelled) return
+				setEntries(previous =>
+					before
+						? [
+								...(previous || []).filter(
+									entry => !data.some(next => next.id === entry.id)
+								),
+								...data
+							]
+						: data
+				)
+				setHasMore(data.length === 50)
+			})
+			.catch(error => {
+				if (!cancelled) {
+					setHasMore(false)
+					notify(errorMessage(error), true)
+				}
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false)
+			})
+		return () => {
+			cancelled = true
+		}
 	}, [active, api, notify, refresh, range, before, invalid, attempt])
 	useEffect(() => {
 		const sentinel = loadMoreRef.current
-		if (!active || loading || invalid || !hasMore || !entries?.length || !sentinel) return
-		const observer = new IntersectionObserver(([entry]) => {
-			if (!entry.isIntersecting) return
-			observer.disconnect()
-			setBefore(String(entries[entries.length - 1].id)); setAttempt(value => value + 1)
-		}, { rootMargin: '0px 0px 600px 0px' })
+		if (
+			!active ||
+			loading ||
+			invalid ||
+			!hasMore ||
+			!entries?.length ||
+			!sentinel
+		)
+			return
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				if (!entry.isIntersecting) return
+				observer.disconnect()
+				setBefore(String(entries[entries.length - 1].id))
+				setAttempt(value => value + 1)
+			},
+			{ rootMargin: '0px 0px 600px 0px' }
+		)
 		observer.observe(sentinel)
 		return () => observer.disconnect()
 	}, [active, loading, invalid, hasMore, entries])
 	const visible = invalid ? [] : entries || []
 	const [exporting, setExporting] = useState(false)
-	return <div className="page-stack"><div className="history-actions"><ActionBar><Field label="Показать за"><select value={period} onChange={event => { resetRange(); setPeriod(event.target.value); if (event.target.value !== 'custom') setSince(new Date(Date.now() - Number(event.target.value) * 3600000).toISOString()) }}><option value="1">Час</option><option value="24">Сутки</option><option value="168">Неделю</option><option value="custom">Выбрать диапазон</option></select></Field>{period === 'custom' && <><Field label="С (МСК)"><input type="datetime-local" value={from} onChange={event => { resetRange(); setFrom(event.target.value) }} /></Field><Field label="По (МСК)"><input type="datetime-local" value={to} onChange={event => { resetRange(); setTo(event.target.value) }} /></Field></>}<Button disabled={!entries || invalid || loading || exporting} onClick={async () => {
-		setExporting(true)
-		try {
-			const exported = [...visible]
-			let more = hasMore
-			while (more) {
-				const cursor = String(exported[exported.length - 1].id)
-				const batch = await api(`history?${range}&before=${cursor}`)
-				if (batch.some(entry => String(entry.id) === cursor)) throw new Error('Не удалось загрузить следующую страницу истории.')
-				exported.push(...batch); more = batch.length === 50
-			}
-			const url = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }))
-			const link = document.createElement('a'); link.href = url; link.download = 'revento-history.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-		} catch (error) { notify(errorMessage(error), true) } finally { setExporting(false) }
-	}}>Выгрузить JSON</Button>{invalid && <p role="alert" className="text-danger">Начало диапазона должно быть раньше конца.</p>}</ActionBar></div>{entries ? <Panel title={`Журнал действий · ${visible.length}`}><HistoryRows entries={visible} config={config} guild={guild} />{hasMore && !invalid && <div ref={loadMoreRef} className="history-more p-5 text-sm text-muted" role="status">{loading ? 'Загружаем…' : ''}</div>}</Panel> : <Loading />}</div>
+	return (
+		<div className='page-stack'>
+			<div className='history-actions'>
+				<ActionBar>
+					<Field label='Показать за'>
+						<select
+							value={period}
+							onChange={event => {
+								resetRange()
+								setPeriod(event.target.value)
+								if (event.target.value !== 'custom')
+									setSince(
+										new Date(
+											Date.now() - Number(event.target.value) * 3600000
+										).toISOString()
+									)
+							}}
+						>
+							<option value='1'>Час</option>
+							<option value='24'>Сутки</option>
+							<option value='168'>Неделю</option>
+							<option value='custom'>Выбрать диапазон</option>
+						</select>
+					</Field>
+					{period === 'custom' && (
+						<>
+							<Field label='С (МСК)'>
+								<input
+									type='datetime-local'
+									value={from}
+									onChange={event => {
+										resetRange()
+										setFrom(event.target.value)
+									}}
+								/>
+							</Field>
+							<Field label='По (МСК)'>
+								<input
+									type='datetime-local'
+									value={to}
+									onChange={event => {
+										resetRange()
+										setTo(event.target.value)
+									}}
+								/>
+							</Field>
+						</>
+					)}
+					<Button
+						disabled={!entries || invalid || loading || exporting}
+						onClick={async () => {
+							setExporting(true)
+							try {
+								const exported = [...visible]
+								let more = hasMore
+								while (more) {
+									const cursor = String(exported[exported.length - 1].id)
+									const batch = await api(`history?${range}&before=${cursor}`)
+									if (batch.some(entry => String(entry.id) === cursor))
+										throw new Error(
+											'Не удалось загрузить следующую страницу истории.'
+										)
+									exported.push(...batch)
+									more = batch.length === 50
+								}
+								const url = URL.createObjectURL(
+									new Blob([JSON.stringify(exported, null, 2)], {
+										type: 'application/json'
+									})
+								)
+								const link = document.createElement('a')
+								link.href = url
+								link.download = 'revento-history.json'
+								link.click()
+								setTimeout(() => URL.revokeObjectURL(url), 1000)
+							} catch (error) {
+								notify(errorMessage(error), true)
+							} finally {
+								setExporting(false)
+							}
+						}}
+					>
+						Выгрузить JSON
+					</Button>
+					{invalid && (
+						<p
+							role='alert'
+							className='text-danger'
+						>
+							Начало диапазона должно быть раньше конца.
+						</p>
+					)}
+				</ActionBar>
+			</div>
+			{entries ? (
+				<Panel title={`Журнал действий · ${visible.length}`}>
+					<HistoryRows
+						entries={visible}
+						config={config}
+						guild={guild}
+					/>
+					{hasMore && !invalid && (
+						<div
+							ref={loadMoreRef}
+							className='history-more p-5 text-sm text-muted'
+							role='status'
+						>
+							{loading ? 'Загружаем…' : ''}
+						</div>
+					)}
+				</Panel>
+			) : (
+				<Loading />
+			)}
+		</div>
+	)
 }
 
 export function App() {
@@ -131,7 +614,8 @@ export function App() {
 	const [scrolled, setScrolled] = useState(false)
 	const [headerVisible, setHeaderVisible] = useState(true)
 	useEffect(() => {
-		let previous = window.scrollY, upward = 0
+		let previous = window.scrollY,
+			upward = 0
 		const scroll = () => {
 			const current = window.scrollY
 			upward = current < previous ? upward + previous - current : 0
@@ -142,37 +626,77 @@ export function App() {
 		}
 		const keydown = (event: KeyboardEvent) => {
 			setAlt(event.altKey && !event.ctrlKey && !event.metaKey)
-			if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat || document.querySelector('dialog[open]')) return
-			const index = /^Digit[1-9]$/.test(event.code) ? Number(event.code.slice(-1)) - 1 : -1
+			if (
+				!event.altKey ||
+				event.ctrlKey ||
+				event.metaKey ||
+				event.shiftKey ||
+				event.repeat ||
+				document.querySelector('dialog[open]')
+			)
+				return
+			const index = /^Digit[1-9]$/.test(event.code)
+				? Number(event.code.slice(-1)) - 1
+				: -1
 			const target = navigation.flatMap(([, keys]) => keys)[index]
-			if (target) { event.preventDefault(); location.hash = target; setMenu(false) }
+			if (target) {
+				event.preventDefault()
+				location.hash = target
+				setMenu(false)
+			}
 		}
-		const release = (event: KeyboardEvent) => setAlt(event.altKey && !event.ctrlKey && !event.metaKey)
+		const release = (event: KeyboardEvent) =>
+			setAlt(event.altKey && !event.ctrlKey && !event.metaKey)
 		const blur = () => setAlt(false)
 		window.addEventListener('scroll', scroll, { passive: true })
-		window.addEventListener('keydown', keydown); window.addEventListener('keyup', release); window.addEventListener('blur', blur)
-		return () => { window.removeEventListener('scroll', scroll); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', release); window.removeEventListener('blur', blur) }
+		window.addEventListener('keydown', keydown)
+		window.addEventListener('keyup', release)
+		window.addEventListener('blur', blur)
+		return () => {
+			window.removeEventListener('scroll', scroll)
+			window.removeEventListener('keydown', keydown)
+			window.removeEventListener('keyup', release)
+			window.removeEventListener('blur', blur)
+		}
 	}, [])
 	const sidebar = useRef<HTMLElement>(null)
 	useEffect(() => {
 		if (!menu) return
 		const previous = document.activeElement
 		const media = matchMedia('(min-width: 1024px)')
-		const close = () => { if (media.matches) setMenu(false) }
-		const keydown = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') { event.preventDefault(); setMenu(false) }
-			if (event.key !== 'Tab') return
-			const targets = sidebar.current?.querySelectorAll<HTMLElement>('a, button:not(:disabled)')
-			if (!targets?.length) return
-			const first = targets[0], last = targets[targets.length - 1]
-			if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
-			else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+		const close = () => {
+			if (media.matches) setMenu(false)
 		}
-		sidebar.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus()
-		document.addEventListener('keydown', keydown); media.addEventListener('change', close)
+		const keydown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				event.preventDefault()
+				setMenu(false)
+			}
+			if (event.key !== 'Tab') return
+			const targets = sidebar.current?.querySelectorAll<HTMLElement>(
+				'a, button:not(:disabled)'
+			)
+			if (!targets?.length) return
+			const first = targets[0],
+				last = targets[targets.length - 1]
+			if (event.shiftKey && document.activeElement === first) {
+				event.preventDefault()
+				last.focus()
+			} else if (!event.shiftKey && document.activeElement === last) {
+				event.preventDefault()
+				first.focus()
+			}
+		}
+		sidebar.current
+			?.querySelector<HTMLElement>('[aria-current="page"]')
+			?.focus()
+		document.addEventListener('keydown', keydown)
+		media.addEventListener('change', close)
 		return () => {
-			document.removeEventListener('keydown', keydown); media.removeEventListener('change', close)
-			if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true })
+			document.removeEventListener('keydown', keydown)
+			media.removeEventListener('change', close)
+			if (previous instanceof HTMLElement && previous.isConnected)
+				previous.focus({ preventScroll: true })
 		}
 	}, [menu])
 	const [session, setSession] = useState<Session | null>(null)
@@ -182,6 +706,8 @@ export function App() {
 	const [config, setConfig] = useState<Config | null>(null)
 	const [resources, setResources] = useState<Resources | null>(null)
 	const [drafts, setDrafts] = useState<Drafts>({})
+	const [formDrafts, setFormDrafts] = useState<FormDrafts>({})
+	const [formRefresh, setFormRefresh] = useState(0)
 	const [settings, setSettings] = useState<SettingsDraft>({})
 	const [busy, setBusy] = useState(false)
 	const [toast, setToast] = useState('')
@@ -189,43 +715,108 @@ export function App() {
 	const lock = useRef(false)
 	const sessionRef = useRef(session)
 	const modal = useModal()
-	const notify = useCallback<Notify>((message, error = false) => {
-		if (error) { setToast(''); modal({ kind: 'error', title: 'Не удалось завершить действие', message }) }
-		else setToast(message)
-	}, [modal])
-	const api = useRef(createApi(() => sessionRef.current?.csrf || '', () => { sessionRef.current = null; setSession(null) })).current
-	const run = useCallback<Run>(async work => {
-		if (lock.current) return
-		lock.current = true; setBusy(true)
-		try { return await work() } catch (error) { notify(errorMessage(error), true) }
-		finally { lock.current = false; setBusy(false) }
-	}, [notify])
+	const notify = useCallback<Notify>(
+		(message, error = false) => {
+			if (error) {
+				setToast('')
+				modal({
+					kind: 'error',
+					title: 'Не удалось завершить действие',
+					message
+				})
+			} else setToast(message)
+		},
+		[modal]
+	)
+	const api = useRef(
+		createApi(
+			() => sessionRef.current?.csrf || '',
+			() => {
+				sessionRef.current = null
+				setSession(null)
+			}
+		)
+	).current
+	const run = useCallback<Run>(
+		async work => {
+			if (lock.current) return
+			lock.current = true
+			setBusy(true)
+			try {
+				return await work()
+			} catch (error) {
+				notify(errorMessage(error), true)
+			} finally {
+				lock.current = false
+				setBusy(false)
+			}
+		},
+		[notify]
+	)
 	async function loadConfig() {
-		const [next, nextResources] = await Promise.all([api('config'), api('resources')])
+		const [next, nextResources] = await Promise.all([
+			api('config'),
+			api('resources')
+		])
 		window.setDiscordMentionResources(nextResources)
-		setConfig(next); setResources(nextResources); setDrafts({}); setSettings(Object.fromEntries(next.settings.map(field => [field.key, structuredClone(field.value)])))
+		setConfig(next)
+		setResources(nextResources)
+		setDrafts({})
+		setSettings(
+			Object.fromEntries(
+				next.settings.map(field => [field.key, structuredClone(field.value)])
+			)
+		)
 	}
 	async function start() {
 		setBooting(true)
 		try {
-			const response = await fetch('/auth/status')
-			if (!response.ok) throw new Error('Не удалось проверить подключение Discord. Повтори попытку.')
+			const response = await fetch('/auth/status', {
+				signal: AbortSignal.timeout(15000)
+			})
+			if (!response.ok)
+				throw new Error(
+					'Не удалось проверить подключение Discord. Повтори попытку.'
+				)
 			const status = await readAuthStatus(response)
 			setConfigured(status.configured)
-			if (!status.configured) { setLoginStatus('Настрой CLIENT_ID, DISCORD_CLIENT_SECRET (или CLIENT_SECRET), GUILD_ID и DASHBOARD_URL в окружении сервера.'); return }
+			if (!status.configured) {
+				setLoginStatus(
+					'Настрой CLIENT_ID, DISCORD_CLIENT_SECRET (или CLIENT_SECRET), GUILD_ID и DASHBOARD_URL в окружении сервера.'
+				)
+				return
+			}
 			const current = await api('session')
-			sessionRef.current = current; setSession(current)
+			sessionRef.current = current
+			setSession(current)
 			await loadConfig()
 		} catch (error) {
-			setLoginStatus(errorStatus(error) === 401 ? 'Войди с аккаунтом администратора сервера.' : errorMessage(error))
+			setLoginStatus(
+				errorStatus(error) === 401
+					? 'Войди с аккаунтом администратора сервера.'
+					: errorMessage(error)
+			)
 			if (errorStatus(error) !== 401) notify(errorMessage(error), true)
-		} finally { setBooting(false) }
+		} finally {
+			setBooting(false)
+		}
 	}
 	useEffect(() => {
 		const error = new URLSearchParams(location.search).get('error')
-		if (error) { modal({ kind: 'error', title: 'Не удалось войти через Discord', message: error }); history.replaceState(null, '', location.pathname + location.hash) }
+		if (error) {
+			modal({
+				kind: 'error',
+				title: 'Не удалось войти через Discord',
+				message: error
+			})
+			history.replaceState(null, '', location.pathname + location.hash)
+		}
 		start()
-		const change = () => { setPage(currentPage()); setMenu(false); setToast('') }
+		const change = () => {
+			setPage(currentPage())
+			setMenu(false)
+			setToast('')
+		}
 		window.addEventListener('hashchange', change)
 		return () => window.removeEventListener('hashchange', change)
 	}, [])
@@ -234,44 +825,443 @@ export function App() {
 		const timer = setTimeout(() => setToast(''), 8000)
 		return () => clearTimeout(timer)
 	}, [toast])
-	const dirty = config && (Object.keys(drafts).some(group => dirtyGroup(config, drafts, group)) || config.settings.some(field => JSON.stringify(settings[field.key]) !== JSON.stringify(field.value)))
+	const dirty =
+		config &&
+		(Object.keys(formDrafts).length > 0 ||
+			Object.keys(drafts).some(group => dirtyGroup(config, drafts, group)) ||
+			config.settings.some(
+				field =>
+					JSON.stringify(settings[field.key]) !== JSON.stringify(field.value)
+			))
 	useEffect(() => {
-		const warn = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = '' } }
+		const warn = (event: BeforeUnloadEvent) => {
+			if (dirty) {
+				event.preventDefault()
+				event.returnValue = ''
+			}
+		}
 		window.addEventListener('beforeunload', warn)
 		return () => window.removeEventListener('beforeunload', warn)
 	}, [dirty])
 	async function reload() {
-		if (['overview', 'history'].includes(page)) { setRefresh(n => n + 1); return }
-		if (!await modal({ title: 'Обновить данные?', message: 'Несохранённые правки шаблонов и настроек будут сброшены.', confirm: 'Обновить' })) return
-		run(async () => { await loadConfig(); notify('Данные обновлены.') })
+		if (['overview', 'history'].includes(page)) {
+			setRefresh(n => n + 1)
+			return
+		}
+		if (
+			dirty &&
+			!(await modal({
+				title: 'Обновить данные?',
+				message: 'Несохранённые правки будут сброшены.',
+				confirm: 'Обновить'
+			}))
+		)
+			return
+		run(async () => {
+			await loadConfig()
+			setFormDrafts({})
+			setFormRefresh(value => value + 1)
+			notify('Данные обновлены.')
+		})
 	}
-	if (page === 'notFound') return <PageLayout standalone title="404 — страница не найдена"><Panel className="panel-body"><p className="my-5 text-muted">Такой страницы нет.</p><a className="button button-primary" href="/#overview">На главную</a></Panel></PageLayout>
-	if (!session) return <><div className="login-appearance"><Appearance /></div><Login loading={booting} configured={configured} status={loginStatus} retry={start} /></>
+	if (page === 'notFound')
+		return (
+			<PageLayout
+				standalone
+				title='404 — страница не найдена'
+			>
+				<Panel className='panel-body'>
+					<p className='my-5 text-muted'>Такой страницы нет.</p>
+					<a
+						className='button button-primary'
+						href='/#overview'
+					>
+						На главную
+					</a>
+				</Panel>
+			</PageLayout>
+		)
+	if (!session)
+		return (
+			<>
+				<div className='login-appearance'>
+					<Appearance />
+				</div>
+				<Login
+					loading={booting}
+					configured={configured}
+					status={loginStatus}
+					retry={start}
+				/>
+			</>
+		)
 	const current = pages[page]
-	return <div className={`app-shell ${alt ? 'show-shortcuts' : ''}`}>
-		{menu && <button className="sidebar-scrim" aria-label="Закрыть меню" onClick={() => setMenu(false)} />}
-		<aside ref={sidebar} id="dashboard-navigation" className={`sidebar ${menu ? 'sidebar-open' : ''}`} aria-label="Рабочее пространство"><IconButton className="sidebar-close lg:hidden" icon={X} label="Закрыть меню" onClick={() => setMenu(false)} /><a href="#overview" className="brand"><img src="/revento-logo.png" alt="" /><span>REVENTO<small>панель управления</small></span></a><nav aria-label="Разделы дашборда">{navigation.map(([title, keys]) => <div className="nav-group" key={title}><p className="nav-caption">{title}</p>{keys.map(key => { const { label, icon: Icon } = pages[key]; return <a href={'#' + key} key={key} aria-keyshortcuts={`Alt+${navigation.flatMap(([, items]) => items).indexOf(key) + 1}`} aria-current={page === key ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span><kbd className="nav-shortcut" aria-hidden="true">{navigation.flatMap(([, items]) => items).indexOf(key) + 1}</kbd></a> })}</div>)}</nav><div className="sidebar-bottom"><div className="user-avatar">{session.user.avatar ? <img src={session.user.avatar} alt="" className="size-full rounded-full object-cover" /> : session.user.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium" title={session.user.name}>{session.user.name}</p><p className="mt-1 text-[10px] text-muted">Аккаунт Discord</p></div><IconButton icon={LogOut} label="Выйти из аккаунта" disabled={busy} onClick={async () => {
-			if (!await modal({ title: 'Выйти из аккаунта?', message: dirty ? 'Несохранённые правки будут потеряны. Для входа потребуется авторизация через Discord.' : 'Для входа потребуется снова авторизоваться через Discord.', confirm: 'Выйти' })) return
-			run(async () => { await api('logout', {}); sessionRef.current = null; setSession(null); setConfig(null); setResources(null); setDrafts({}); setSettings({}); setLoginStatus('Ты вышел из аккаунта.'); setToast('') })
-		}} /></div></aside>
-		<PageLayout inert={menu} title={current.title} description={current.description} headerVisible={headerVisible || menu}
-			header={<><div className="flex min-w-0 items-center gap-3"><div className="lg:hidden"><IconButton aria-expanded={menu} aria-controls="dashboard-navigation" icon={menu ? X : Menu} label={menu ? 'Закрыть меню' : 'Открыть меню'} className="lg:hidden" onClick={() => setMenu(!menu)} /></div><p className="flex min-w-0 items-center gap-2 text-xs text-muted"><span className="hidden sm:inline">Рабочее пространство</span><ChevronRight className="hidden size-3 sm:block" aria-hidden="true" /><span className="truncate text-text">{current.label}</span></p></div><div className="flex items-center gap-3"><Appearance /></div></>}
-			actions={<>{page !== 'majestic' && <IconButton icon={RefreshCw} label="Обновить данные" disabled={busy || booting} onClick={reload} />}<IconButton icon={BookOpen} label="Руководство по разделу" onClick={() => showGuide(modal, page)} /></>}>
-				{!config || !resources ? booting || busy ? <Loading /> : <Empty title="Не удалось загрузить данные"><Button icon={RefreshCw} onClick={() => run(loadConfig)}>Повторить загрузку</Button></Empty>
-					: <BusyContext.Provider value={busy}><fieldset className="min-w-0" disabled={busy} aria-busy={busy}>
-						<div className="page-view" hidden={page !== 'overview'}><Overview active={page === 'overview'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
-						<div className="page-view" hidden={page !== 'templates'}><Templates config={config} setConfig={setConfig} resources={resources} drafts={drafts} setDrafts={setDrafts} api={api} run={run} notify={notify} /></div>
-						<div className="page-view" hidden={page !== 'variables'}><Variables config={config} setConfig={setConfig} api={api} run={run} notify={notify} /></div>
-						<div className="page-view" hidden={page !== 'settings'}><Settings config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
-						<div className="page-view" hidden={page !== 'access'}><Settings access config={config} setConfig={setConfig} resources={resources} draft={settings} setDraft={setSettings} api={api} run={run} notify={notify} /></div>
-						<div className="page-view" hidden={page !== 'curators'}><RoleCurators active={page === 'curators'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>
-						<div className="page-view" hidden={page !== 'captures'}><CapturePresets active={page === 'captures'} resources={resources} api={api} run={run} notify={notify} setConfig={setConfig} /></div>
-						<div className="page-view" hidden={page !== 'majestic'}><Majestic active={page === 'majestic'} resources={resources} api={api} run={run} notify={notify} /></div>
-						<div className="page-view" hidden={page !== 'history'}><HistoryPage active={page === 'history'} api={api} config={config} guild={session.guild} notify={notify} refresh={refresh} /></div>
-					</fieldset></BusyContext.Provider>}
-		</PageLayout>
-		{scrolled && <IconButton icon={ArrowUp} label="Наверх" className="scroll-top" onClick={() => window.scrollTo({ top: 0, behavior: document.documentElement.dataset.motion === 'on' ? 'smooth' : 'instant' })} />}
-		{busy && <div role="status" className="busy-indicator"><RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />Выполняется действие…</div>}
-		{toast && <div role="status" aria-live="polite" className="toast"><Check className="size-4 shrink-0 text-brand" aria-hidden="true" /><p>{toast}</p><IconButton icon={X} label="Закрыть уведомление" onClick={() => setToast('')} /></div>}
-	</div>
+	return (
+		<div className={`app-shell ${alt ? 'show-shortcuts' : ''}`}>
+			{menu && (
+				<button
+					className='sidebar-scrim'
+					aria-label='Закрыть меню'
+					onClick={() => setMenu(false)}
+				/>
+			)}
+			<aside
+				ref={sidebar}
+				id='dashboard-navigation'
+				className={`sidebar ${menu ? 'sidebar-open' : ''}`}
+				aria-label='Рабочее пространство'
+			>
+				<IconButton
+					className='sidebar-close lg:hidden'
+					icon={X}
+					label='Закрыть меню'
+					onClick={() => setMenu(false)}
+				/>
+				<a
+					href='#overview'
+					className='brand'
+				>
+					<img
+						src='/revento-logo.png'
+						alt=''
+					/>
+					<span>
+						REVENTO<small>панель управления</small>
+					</span>
+				</a>
+				<nav aria-label='Разделы дашборда'>
+					{navigation.map(([title, keys]) => (
+						<div
+							className='nav-group'
+							key={title}
+						>
+							<p className='nav-caption'>{title}</p>
+							{keys.map(key => {
+								const { label, icon: Icon } = pages[key]
+								return (
+									<a
+										href={'#' + key}
+										key={key}
+										aria-keyshortcuts={`Alt+${navigation.flatMap(([, items]) => items).indexOf(key) + 1}`}
+										aria-current={page === key ? 'page' : undefined}
+									>
+										<Icon aria-hidden='true' />
+										<span>{label}</span>
+										<kbd
+											className='nav-shortcut'
+											aria-hidden='true'
+										>
+											{navigation.flatMap(([, items]) => items).indexOf(key) +
+												1}
+										</kbd>
+									</a>
+								)
+							})}
+						</div>
+					))}
+				</nav>
+				<div className='sidebar-bottom'>
+					<div className='user-avatar'>
+						{session.user.avatar ? (
+							<img
+								src={session.user.avatar}
+								alt=''
+								className='size-full rounded-full object-cover'
+							/>
+						) : (
+							session.user.name.slice(0, 2).toUpperCase()
+						)}
+					</div>
+					<div className='min-w-0 flex-1'>
+						<p
+							className='truncate text-xs font-medium'
+							title={session.user.name}
+						>
+							{session.user.name}
+						</p>
+						<p className='mt-1 text-[10px] text-muted'>Аккаунт Discord</p>
+					</div>
+					<IconButton
+						icon={LogOut}
+						label='Выйти из аккаунта'
+						disabled={busy}
+						onClick={async () => {
+							if (
+								!(await modal({
+									title: 'Выйти из аккаунта?',
+									message: dirty
+										? 'Несохранённые правки будут потеряны. Для входа потребуется авторизация через Discord.'
+										: 'Для входа потребуется снова авторизоваться через Discord.',
+									confirm: 'Выйти'
+								}))
+							)
+								return
+							run(async () => {
+								await api('logout', {})
+								sessionRef.current = null
+								setSession(null)
+								setConfig(null)
+								setResources(null)
+								setDrafts({})
+								setFormDrafts({})
+								setSettings({})
+								setLoginStatus('Ты вышел из аккаунта.')
+								setToast('')
+							})
+						}}
+					/>
+				</div>
+			</aside>
+			<PageLayout
+				inert={menu}
+				title={current.title}
+				description={current.description}
+				headerVisible={headerVisible || menu}
+				header={
+					<>
+						<div className='flex min-w-0 items-center gap-3'>
+							<div className='lg:hidden'>
+								<IconButton
+									aria-expanded={menu}
+									aria-controls='dashboard-navigation'
+									icon={menu ? X : Menu}
+									label={menu ? 'Закрыть меню' : 'Открыть меню'}
+									className='lg:hidden'
+									onClick={() => setMenu(!menu)}
+								/>
+							</div>
+							<p className='flex min-w-0 items-center gap-2 text-xs text-muted'>
+								<span className='hidden sm:inline'>Рабочее пространство</span>
+								<ChevronRight
+									className='hidden size-3 sm:block'
+									aria-hidden='true'
+								/>
+								<span className='truncate text-text'>{current.label}</span>
+							</p>
+						</div>
+						<div className='flex items-center gap-3'>
+							<Appearance />
+						</div>
+					</>
+				}
+				actions={
+					<>
+						{page !== 'majestic' && (
+							<IconButton
+								icon={RefreshCw}
+								label='Обновить данные'
+								disabled={busy || booting}
+								onClick={reload}
+							/>
+						)}
+						<IconButton
+							icon={BookOpen}
+							label='Руководство по разделу'
+							onClick={() => showGuide(modal, page)}
+						/>
+					</>
+				}
+			>
+				{!config || !resources ? (
+					booting || busy ? (
+						<Loading />
+					) : (
+						<Empty title='Не удалось загрузить данные'>
+							<Button
+								icon={RefreshCw}
+								onClick={() => run(loadConfig)}
+							>
+								Повторить загрузку
+							</Button>
+						</Empty>
+					)
+				) : (
+					<FormDraftContext.Provider
+						value={{ drafts: formDrafts, setDrafts: setFormDrafts }}
+					>
+						<BusyContext.Provider value={busy}>
+							<fieldset
+								className='min-w-0'
+								disabled={busy}
+								aria-busy={busy}
+							>
+								<div
+									className='page-view'
+									hidden={page !== 'overview'}
+								>
+									<Overview
+										active={page === 'overview'}
+										api={api}
+										config={config}
+										guild={session.guild}
+										notify={notify}
+										refresh={refresh}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'templates'}
+								>
+									<Templates
+										config={config}
+										setConfig={setConfig}
+										resources={resources}
+										drafts={drafts}
+										setDrafts={setDrafts}
+										api={api}
+										run={run}
+										notify={notify}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'variables'}
+								>
+									<Variables
+										config={config}
+										setConfig={setConfig}
+										api={api}
+										run={run}
+										notify={notify}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'settings'}
+								>
+									<Settings
+										config={config}
+										setConfig={setConfig}
+										resources={resources}
+										draft={settings}
+										setDraft={setSettings}
+										api={api}
+										run={run}
+										notify={notify}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'access'}
+								>
+									<Settings
+										access
+										config={config}
+										setConfig={setConfig}
+										resources={resources}
+										draft={settings}
+										setDraft={setSettings}
+										api={api}
+										run={run}
+										notify={notify}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'curators'}
+								>
+									<RoleCurators
+										key={formRefresh}
+										configRevision={config.revision}
+										active={page === 'curators'}
+										resources={resources}
+										api={api}
+										run={run}
+										notify={notify}
+										setConfig={setConfig}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'captures'}
+								>
+									<CapturePresets
+										key={formRefresh}
+										configRevision={config.revision}
+										active={page === 'captures'}
+										resources={resources}
+										api={api}
+										run={run}
+										notify={notify}
+										setConfig={setConfig}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'majestic'}
+								>
+									<Majestic
+										active={page === 'majestic'}
+										resources={resources}
+										api={api}
+										run={run}
+										notify={notify}
+									/>
+								</div>
+								<div
+									className='page-view'
+									hidden={page !== 'history'}
+								>
+									<HistoryPage
+										active={page === 'history'}
+										api={api}
+										config={config}
+										guild={session.guild}
+										notify={notify}
+										refresh={refresh}
+									/>
+								</div>
+							</fieldset>
+						</BusyContext.Provider>
+					</FormDraftContext.Provider>
+				)}
+			</PageLayout>
+			{scrolled && (
+				<IconButton
+					icon={ArrowUp}
+					label='Наверх'
+					className='scroll-top'
+					onClick={() =>
+						window.scrollTo({
+							top: 0,
+							behavior:
+								document.documentElement.dataset.motion === 'on'
+									? 'smooth'
+									: 'instant'
+						})
+					}
+				/>
+			)}
+			{busy && (
+				<div
+					role='status'
+					className='busy-indicator'
+				>
+					<RefreshCw
+						className='size-3.5 animate-spin'
+						aria-hidden='true'
+					/>
+					Выполняется действие…
+				</div>
+			)}
+			{toast && (
+				<div
+					role='status'
+					aria-live='polite'
+					className='toast'
+				>
+					<Check
+						className='size-4 shrink-0 text-brand'
+						aria-hidden='true'
+					/>
+					<p>{toast}</p>
+					<IconButton
+						icon={X}
+						label='Закрыть уведомление'
+						onClick={() => setToast('')}
+					/>
+				</div>
+			)}
+		</div>
+	)
 }

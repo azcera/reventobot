@@ -1,25 +1,23 @@
-import { getError } from '../../utils/errors'
+import { MessageFlags, TextDisplayBuilder } from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
-import { ContainerBuilder } from '../../services/markdownContainer'
 import {
-	MessageFlags,
-	TextDisplayBuilder,
-	SeparatorBuilder
-} from 'discord.js'
-import db = require('../../services/database')
-import { editReplyWithAutoDelete } from '../../utils/autoDelete'
-import {
+	buildContainer,
 	isApplicationMod,
-	logAction,
-	buildContainer
+	logAction
 } from '../../features/invite/inviteUtils'
+import { ContainerBuilder } from '../../services/markdownContainer'
+import { editReplyWithAutoDelete } from '../../utils/autoDelete'
+import { getError } from '../../utils/errors'
+import db = require('../../services/database')
 
-async function handleVoiceSelect(interaction: import('discord.js').StringSelectMenuInteraction<'cached'>) {
+async function handleVoiceSelect(
+	interaction: import('discord.js').StringSelectMenuInteraction<'cached'>
+) {
 	// Ответом на выбор комнаты управляет только этот обработчик.
 	try {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral as const })
 	} catch (caught) {
- const error = getError(caught);
+		const error = getError(caught)
 		console.error('Ошибка подтверждения выбора комнаты:', error)
 		return
 	}
@@ -45,8 +43,8 @@ async function handleVoiceSelect(interaction: import('discord.js').StringSelectM
 	const appData = res.rows[0]
 
 	// Отправляем сообщение в канал заявки (НЕ эфемерное, чтобы все видели)
-	await interaction.channel!
-		.send({
+	await interaction
+		.channel!.send({
 			content: `> 📢 <@${targetUserId}>, вы были вызваны на обзвон.\n> Администратор: <@${interaction.user.id}>!\n> Голосовой канал: <#${voiceChannelId}>`
 		})
 		.catch(console.error)
@@ -57,7 +55,15 @@ async function handleVoiceSelect(interaction: import('discord.js').StringSelectM
 	if (targetUser) {
 		const container = new ContainerBuilder()
 			.setAccentColor(0xe67e22)
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('dm.document.interview', { server: interaction.guild.name, channel: voiceChannelId, time: Math.floor(Date.now() / 1000) })))
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(
+					dashboard.text('dm.document.interview', {
+						server: interaction.guild.name,
+						channel: voiceChannelId,
+						time: Math.floor(Date.now() / 1000)
+					})
+				)
+			)
 
 		await targetUser
 			.send({

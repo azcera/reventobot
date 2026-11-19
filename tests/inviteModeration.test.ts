@@ -6,16 +6,20 @@ import { store, settingDefinitions } from '../src/dashboard/store'
 const queries: { sql: string; values: unknown[] }[] = []
 let applicationRows: Record<string, unknown>[] = [{ channel_id: 'application-channel', full_name: 'Tony | 123', age: 20, about_and_expectations: 'Test', previous_experience: 'Test' }]
 let databaseError: Error | null = null
+let rejectRows: Record<string, unknown>[] = []
 const databasePath = require.resolve('../src/services/database')
 const previousDatabase = require.cache[databasePath]
 require.cache[databasePath] = { exports: {
 	async query(sql: string, values: unknown[]) {
 		queries.push({ sql, values })
 		if (databaseError) throw databaseError
+		if (sql.includes("status = 'rejected', guild_id")) return { rows: rejectRows }
+		if (sql.startsWith('INSERT') || sql.includes('RETURNING user_id') || sql.startsWith('SELECT user_id')) return { rows: [{ user_id: 'candidate' }] }
 		return { rows: applicationRows }
 	}
 } } as NodeModule
 const { handleModerationButton } = require('../src/features/invite/inviteModeration') as typeof import('../src/features/invite/inviteModeration')
+const submitRejectModal = require('../src/features/invite/inviteModalHandler') as typeof import('../src/features/invite/inviteModalHandler')
 if (previousDatabase) require.cache[databasePath] = previousDatabase
 else delete require.cache[databasePath]
 
@@ -40,7 +44,7 @@ test('accepted applications close five seconds after confirmation without additi
 			customId: 'invite_accept_candidate', user: { id: 'moderator' },
 			member: { roles: { cache: new Collection() }, permissions: { has: () => true } },
 			guild: {
-				name: 'Test', channels: { cache: new Collection([['archive', {
+				id: 'guild', name: 'Test', channels: { async fetch() { return { delete: async () => { deleted = true } } }, cache: new Collection([['archive', {
 					id: 'archive', name: 'archive tony 123', parentId: store.getSetting('PARENT_CHANNEL_ID'), isThread: () => true
 				}]]) },
 				members: { async fetch() { return memberPresent ? { displayName: 'Tony | 123', roles: { async add(id: string) { roles.push(id) } } } : null } }
@@ -63,9 +67,11 @@ test('accepted applications close five seconds after confirmation without additi
 		t.mock.timers.tick(4999)
 		assert.equal(deleted, false)
 		t.mock.timers.tick(1)
+		await new Promise(resolve => setImmediate(resolve))
 		assert.equal(deleted, true)
 		assert.deepEqual(roles, memberPresent ? ['main-role'] : [])
-		assert.deepEqual(queries.at(-1), { sql: 'DELETE FROM family_applications WHERE user_id = $1 AND channel_id = $2', values: ['candidate', 'application-channel'] })
+		assert.match(queries.at(-1)!.sql, /DELETE FROM family_applications WHERE guild_id/)
+		assert.deepEqual(queries.at(-1)!.values, ['guild', 'application-channel'])
 	}
 })
 
@@ -90,7 +96,7 @@ test('missing, stale, concurrent and failed applications are handled safely', as
 			components: [{ toJSON: () => source }],
 			async edit(payload: unknown) { edits.push(payload) }
 		},
-		guild: { name: 'Test', channels: { cache: new Collection() }, members: { async fetch() {
+		guild: { id: 'guild', name: 'Test', channels: { async fetch() { return { delete: async () => { deleted = true } } }, cache: new Collection() }, members: { async fetch() {
 			roleCalls++; return null
 		} } },
 		client: { user: { id: 'bot' }, users: { async fetch() { return null } } },
@@ -107,6 +113,7 @@ test('missing, stale, concurrent and failed applications are handled safely', as
 	assert.match(JSON.stringify(edits[0]), /Запись в БД отсутствовала/)
 	assert.doesNotMatch(JSON.stringify(edits[0]), /invite_accept_/)
 	t.mock.timers.tick(5000)
+	await new Promise(resolve => setImmediate(resolve))
 	assert.equal(deleted, true)
 
 	// A foreign message, an already processed message, or another application's channel cannot be accepted.
@@ -141,6 +148,7 @@ test('missing, stale, concurrent and failed applications are handled safely', as
 	await pending
 	fetchMock.mock.restore()
 	t.mock.timers.tick(5000)
+	await new Promise(resolve => setImmediate(resolve))
 
 	t.mock.method(console, 'error', () => {})
 	responses.length = 0
@@ -166,8 +174,50 @@ test('missing, stale, concurrent and failed applications are handled safely', as
 	}) as any)
 	await handleModerationButton(interaction as unknown as ButtonInteraction<'cached'>)
 	assert.match(responses[0].content, /Ошибка|ошибка/)
-	assert.equal(queries.length, 1)
+	assert.equal(queries.length, 3)
 	assert.equal(edits.length, editCount)
 	t.mock.timers.tick(5000)
 	assert.equal(deleted, false)
+})
+
+test('reject submit checks fresh rights, scopes the state transition and reports DB failure', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	t.mock.method(console, 'error', () => {})
+	const replies: string[] = []
+	let admin = false
+	const interaction = {
+		customId: 'invite_modal_reject_candidate_guild_application-channel',
+		user: { id: 'moderator' },
+		guildId: 'guild', channelId: 'application-channel',
+		guild: { name: 'Test', members: { async fetch(options: unknown) {
+			assert.deepEqual(options, { user: 'moderator', force: true, cache: false })
+			return { permissions: { has: () => admin }, roles: { cache: new Collection() } }
+		} } },
+		client: { users: { async fetch() { return null } } },
+		fields: { getTextInputValue: () => 'fixture' },
+		async deferReply() {},
+		async editReply(text: string) { replies.push(text) }
+	}
+	const submit = () => submitRejectModal(interaction as unknown as import('discord.js').ModalSubmitInteraction<'cached'>)
+	queries.length = 0
+	await submit()
+	assert.match(replies.pop()!, /нет прав/)
+	assert.equal(queries.length, 0)
+
+	admin = true
+	interaction.channelId = 'other-channel'
+	await submit()
+	assert.match(replies.pop()!, /устаревшей/)
+	assert.equal(queries.length, 0)
+	interaction.channelId = 'application-channel'
+	await submit()
+	assert.match(replies.pop()!, /обработана или недоступна/)
+	assert.match(queries.at(-1)!.sql, /AND COALESCE\(status, 'pending'\) = 'pending' RETURNING/)
+	assert.deepEqual(queries.at(-1)!.values, ['candidate', 'application-channel', 'guild'])
+
+	databaseError = new Error('database down')
+	try {
+		await submit()
+		assert.match(replies.pop()!, /Не удалось отклонить/)
+	} finally { databaseError = null }
 })

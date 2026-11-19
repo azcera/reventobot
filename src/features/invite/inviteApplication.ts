@@ -1,21 +1,20 @@
-import { getError } from '../../utils/errors'
+import {
+	ChannelType,
+	LabelBuilder,
+	MessageFlags,
+	ModalBuilder,
+	PermissionFlagsBits,
+	TextInputBuilder,
+	TextInputStyle
+} from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
 import {
-	ModalBuilder,
-	TextInputBuilder,
-	TextInputStyle,
-	ChannelType,
-	PermissionFlagsBits,
-	MessageFlags,
-	LabelBuilder
-} from 'discord.js'
-import db = require('../../services/database.js')
-import { buildContainer } from './inviteUtils'
-import {
-	sendEphemeralWithAutoDelete,
-	editReplyWithAutoDelete
+	editReplyWithAutoDelete,
+	sendEphemeralWithAutoDelete
 } from '../../utils/autoDelete'
-
+import { getError } from '../../utils/errors'
+import { applicationTopic, buildContainer } from './inviteUtils'
+import db = require('../../services/database.js')
 
 const MODAL_FIELDS = [
 	{
@@ -79,13 +78,15 @@ const MODAL_FIELDS = [
  * Содержит MODAL_FIELDS с валидаторами.
  */
 class InviteCandidate {
- MODAL_FIELDS = MODAL_FIELDS
+	MODAL_FIELDS = MODAL_FIELDS
 
 	/**
 	 * Проверяет, нет ли уже активной заявки, показывает модалку с 5 полями.
 	 * @param {ButtonInteraction} interaction
 	 */
-	async showModal(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+	async showModal(
+		interaction: import('discord.js').ButtonInteraction<'cached'>
+	) {
 		const modal = new ModalBuilder()
 			.setCustomId('invite_modal_submit')
 			.setTitle('Заявка в семью REVENTO')
@@ -115,7 +116,9 @@ class InviteCandidate {
 	 * и отправляет контейнер с кнопками модерации.
 	 * @param {ModalSubmitInteraction} interaction
 	 */
-	async submitModal(interaction: import('discord.js').ModalSubmitInteraction<'cached'>) {
+	async submitModal(
+		interaction: import('discord.js').ModalSubmitInteraction<'cached'>
+	) {
 		const values: Record<string, string> = {}
 		MODAL_FIELDS.forEach(field => {
 			values[field.customId] = interaction.fields
@@ -136,24 +139,37 @@ class InviteCandidate {
 		 * @type {string}
 		 */
 		const name = values.invite_name
-		const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
+		const capitalizedName =
+			name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
 
 		const fullName = `${capitalizedName} | ${values.invite_static}`
 		const age = parseInt(values.invite_age)
 
-		await interaction
-			.deferReply({ flags: MessageFlags.Ephemeral as const })
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral as const })
 
+		let claimed = false
 		try {
-			const checkActive = await db.query(
-				'SELECT * FROM family_applications WHERE user_id = \$1',
-				[interaction.user.id]
+			const claim = await db.query(
+				`INSERT INTO family_applications
+				(user_id, channel_id, guild_id, full_name, age, about_and_expectations, previous_experience, status, creation_id)
+				VALUES ($1, '', $2, $3, $4, $5, $6, 'creating', $7)
+				ON CONFLICT (user_id) DO NOTHING RETURNING user_id`,
+				[
+					interaction.user.id,
+					interaction.guild.id,
+					fullName,
+					age,
+					values.invite_info,
+					values.invite_history,
+					interaction.id
+				]
 			)
-			if (checkActive.rows.length > 0) {
-				return await editReplyWithAutoDelete(interaction, {
-					content: '❌ Вы уже подали заявку!'
+			if (!claim.rows.length)
+				return editReplyWithAutoDelete(interaction, {
+					content:
+						'❌ У вас уже есть заявка или она ещё создаётся. Если канал не появился, обратитесь к модератору.'
 				})
-			}
+			claimed = true
 
 			await interaction.member.setNickname(fullName).catch(() => {})
 
@@ -183,23 +199,16 @@ class InviteCandidate {
 			const cleanName = fullName.replace('| ', '').trim().toLowerCase()
 			const channel = await interaction.guild.channels.create({
 				name: `заявка-${cleanName}`,
+				topic: applicationTopic(interaction.id),
 				type: ChannelType.GuildText,
 				parent: dashboard.getSetting('INVITE_CATEGORY_ID'),
 				permissionOverwrites
 			})
 
 			await db.query(
-				`INSERT INTO family_applications 
-             (user_id, channel_id, full_name, age, about_and_expectations, previous_experience) 
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-				[
-					interaction.user.id,
-					channel.id,
-					fullName,
-					age,
-					values.invite_info,
-					values.invite_history
-				]
+				`UPDATE family_applications SET channel_id = $2
+				WHERE creation_id = $1 AND status = 'creating'`,
+				[interaction.id, channel.id]
 			)
 
 			const container = await buildContainer(
@@ -211,26 +220,43 @@ class InviteCandidate {
 				'отправления'
 			)
 
-			await channel.send({
+			const message = await channel.send({
 				components: [container.toJSON()],
-				flags: MessageFlags.IsComponentsV2 as const
+				flags: MessageFlags.IsComponentsV2 as const,
+				nonce: interaction.id,
+				enforceNonce: true
 			})
+			const result = await db.query(
+				`UPDATE family_applications SET message_id = $2, status = 'pending'
+				WHERE creation_id = $1 AND status = 'creating' RETURNING user_id`,
+				[interaction.id, message.id]
+			)
+			if (!result.rows.length)
+				throw new Error('Не удалось подтвердить создание заявки.')
 
 			return await editReplyWithAutoDelete(interaction, {
 				content: `✅ Ваша заявка зарегистрирована! <#${channel.id}>`
 			})
 		} catch (caught) {
- const error = getError(caught);
+			const error = getError(caught)
 			console.error('[InviteCandidate] Ошибка создания заявки:', error)
+			if (claimed)
+				await db
+					.query(
+						`UPDATE family_applications SET status = 'creation_failed'
+				WHERE creation_id = $1 AND status = 'creating'`,
+						[interaction.id]
+					)
+					.catch(console.error)
 			return await editReplyWithAutoDelete(interaction, {
-				content: '❌ Произошла ошибка при создании заявки.'
+				content: claimed
+					? 'Не удалось подтвердить создание заявки. Бот повторно проверит её состояние. Если канал не появился, обратитесь к модератору.'
+					: '❌ Произошла ошибка при создании заявки.'
 			})
 		}
 	}
 }
 
 const inviteCandidateInstance = new InviteCandidate()
-
-
 
 export = inviteCandidateInstance

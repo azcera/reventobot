@@ -1,9 +1,28 @@
-import type { FamilyCharacter, MemberDecision, PreviewRow, RolePrefix } from '../../types'
-export interface PlannedRow extends PreviewRow { currentRoleIds: string[]; addRoles: string[]; removeRoles: string[] }
-export interface PreviewMember { id: string; nickname: string | null; bot: boolean; roleIds: string[] }
-export interface PreviewOptions { decisions?: Record<string, MemberDecision>; adminRoleIds?: string[]; rolePrefixes?: RolePrefix[]; nicknamesOnly?: boolean }
-import { adminPrefix, stripRolePrefix } from '../../utils/adminPrefix'
 import { store } from '../../dashboard/store'
+import type {
+	FamilyCharacter,
+	MemberDecision,
+	PreviewRow,
+	RolePrefix
+} from '../../types'
+import { adminPrefix, stripRolePrefix } from '../../utils/adminPrefix'
+export interface PlannedRow extends PreviewRow {
+	currentRoleIds: string[]
+	addRoles: string[]
+	removeRoles: string[]
+}
+export interface PreviewMember {
+	id: string
+	nickname: string | null
+	bot: boolean
+	roleIds: string[]
+}
+export interface PreviewOptions {
+	decisions?: Record<string, MemberDecision>
+	adminRoleIds?: string[]
+	rolePrefixes?: RolePrefix[]
+	nicknamesOnly?: boolean
+}
 
 const rankRoles: Readonly<Record<string, string>> = Object.freeze({
 	Dep: '1445808131832676558',
@@ -17,55 +36,135 @@ const rankRoles: Readonly<Record<string, string>> = Object.freeze({
 	Test: '1499338616973955174'
 })
 const managedRoles = new Set(Object.values(rankRoles))
-const tierRoles = new Set(['Tier 1', 'Tier 2', 'Tier 3'].map(rank => rankRoles[rank]))
+const tierRoles = new Set(
+	['Tier 1', 'Tier 2', 'Tier 3'].map(rank => rankRoles[rank])
+)
 const adminRanks = new Set(['Dep', 'High', 'Recruit'])
 const ignoredRanks = new Set(['Leader', 'Own.dep'])
 
-function parseNickname(nickname: unknown, rolePrefixes = store.getSetting('ROLE_PREFIXES')) {
+function parseNickname(
+	nickname: unknown,
+	rolePrefixes = store.getSetting('ROLE_PREFIXES')
+) {
 	if (typeof nickname !== 'string') return null
 	const clean = stripRolePrefix(nickname, rolePrefixes)
 	const match = /^([^|\r\n]+?)\s*\|\s*([1-9]\d*)(\s*\/[^\r\n]*)?$/.exec(clean)
 	if (!match) return null
-	return { prefix: nickname.slice(0, nickname.indexOf(clean)), static: match[2], suffix: match[3] || '' }
+	return {
+		prefix: nickname.slice(0, nickname.indexOf(clean)),
+		static: match[2],
+		suffix: match[3] || ''
+	}
 }
 
-function buildPreview(characters: FamilyCharacter[], members: PreviewMember[], { decisions = {}, adminRoleIds = [], rolePrefixes, nicknamesOnly = false }: PreviewOptions = {}): PlannedRow[] {
-	const byStatic = new Map(characters.map(character => [String(character.id), character]))
-	const parsedMembers = members.filter(member => !member.bot).map(member => ({
-		...member, parsed: parseNickname(member.nickname, rolePrefixes), decision: decisions[member.id] || {}
-	}))
+function buildPreview(
+	characters: FamilyCharacter[],
+	members: PreviewMember[],
+	{
+		decisions = {},
+		adminRoleIds = [],
+		rolePrefixes,
+		nicknamesOnly = false
+	}: PreviewOptions = {}
+): PlannedRow[] {
+	const byStatic = new Map(
+		characters.map(character => [String(character.id), character])
+	)
+	const parsedMembers = members
+		.filter(member => !member.bot)
+		.map(member => ({
+			...member,
+			parsed: parseNickname(member.nickname, rolePrefixes),
+			decision: decisions[member.id] || {}
+		}))
 	for (const member of parsedMembers) {
-		if (member.decision.static) member.parsed = {
-			prefix: member.parsed?.prefix || /^(\[[^\]]+\]\s*)/.exec(member.nickname || '')?.[1] || '',
-			suffix: member.parsed?.suffix || '', static: member.decision.static
-		}
+		if (member.decision.static)
+			member.parsed = {
+				prefix:
+					member.parsed?.prefix ||
+					/^(\[[^\]]+\]\s*)/.exec(member.nickname || '')?.[1] ||
+					'',
+				suffix: member.parsed?.suffix || '',
+				static: member.decision.static
+			}
 	}
 	const counts = new Map<string, number>()
 	for (const member of parsedMembers) {
-		if (member.parsed && !member.decision.excluded) counts.set(member.parsed.static, (counts.get(member.parsed.static) || 0) + 1)
+		if (member.parsed && !member.decision.excluded)
+			counts.set(
+				member.parsed.static,
+				(counts.get(member.parsed.static) || 0) + 1
+			)
 	}
 	return parsedMembers.map(member => {
-		const row: PlannedRow = { discordId: member.id, currentNickname: member.nickname, status: 'unchanged', currentRoleIds: [], addRoles: [], removeRoles: [] }
+		const row: PlannedRow = {
+			discordId: member.id,
+			currentNickname: member.nickname,
+			status: 'unchanged',
+			currentRoleIds: [],
+			addRoles: [],
+			removeRoles: []
+		}
 		row.currentRoleIds = [...member.roleIds].sort()
-		if (member.decision.excluded) return { ...row, status: 'excluded', reason: 'Исключён администратором из синхронизации.' }
-		if (!member.parsed) return { ...row, status: 'skipped', reason: 'Ник не соответствует формату; привязка по static не определена.' }
+		if (member.decision.excluded)
+			return {
+				...row,
+				status: 'excluded',
+				reason: 'Исключён администратором из синхронизации.'
+			}
+		if (!member.parsed)
+			return {
+				...row,
+				status: 'skipped',
+				reason:
+					'Ник не соответствует формату; привязка по static не определена.'
+			}
 		const { prefix, static: staticId, suffix } = member.parsed
 		row.static = staticId
-		if ((counts.get(staticId) || 0) > 1) return { ...row, status: 'conflict', reason: 'Один static указан у нескольких участников Discord.' }
+		if ((counts.get(staticId) || 0) > 1)
+			return {
+				...row,
+				status: 'conflict',
+				reason: 'Один static указан у нескольких участников Discord.'
+			}
 		const character = byStatic.get(staticId)
-		if (!character) return { ...row, status: 'skipped', reason: 'Static отсутствует в составе; роли и ник не меняем.' }
+		if (!character)
+			return {
+				...row,
+				status: 'skipped',
+				reason: 'Static отсутствует в составе; роли и ник не меняем.'
+			}
 		const rank = character.rankName.trim()
 		row.gameRank = rank
 		const currentRoles = member.roleIds.filter(id => managedRoles.has(id))
 		let currentTiers = currentRoles.filter(id => tierRoles.has(id))
-		if (member.decision.tierRoleId && currentTiers.includes(member.decision.tierRoleId)) currentTiers = [member.decision.tierRoleId]
-		if (!nicknamesOnly && currentTiers.length > 1) return { ...row, status: 'conflict', reason: 'Несколько Tier-ролей: требуется ручной выбор.' }
-		if (!nicknamesOnly && !ignoredRanks.has(rank) && !Object.hasOwn(rankRoles, rank)) {
+		if (
+			member.decision.tierRoleId &&
+			currentTiers.includes(member.decision.tierRoleId)
+		)
+			currentTiers = [member.decision.tierRoleId]
+		if (!nicknamesOnly && currentTiers.length > 1)
+			return {
+				...row,
+				status: 'conflict',
+				reason: 'Несколько Tier-ролей: требуется ручной выбор.'
+			}
+		if (
+			!nicknamesOnly &&
+			!ignoredRanks.has(rank) &&
+			!Object.hasOwn(rankRoles, rank)
+		) {
 			return { ...row, status: 'conflict', reason: 'Неизвестный игровой ранг.' }
 		}
 		const name = character.login.trim().split(/\s+/)[0]
 		let nickname = `${rolePrefixes ? adminPrefix(member.roleIds, adminRoleIds, rolePrefixes) : prefix}${name} | ${staticId}${suffix}`
-		if (nickname.length > 32) return { ...row, status: 'conflict', reason: 'Новый ник длиннее 32 символов; префикс, static и текст не обрезаем.' }
+		if (nickname.length > 32)
+			return {
+				...row,
+				status: 'conflict',
+				reason:
+					'Новый ник длиннее 32 символов; префикс, static и текст не обрезаем.'
+			}
 		row.nickname = nickname === member.nickname ? null : nickname
 		row.addRoles = []
 		row.removeRoles = []
@@ -75,24 +174,47 @@ function buildPreview(characters: FamilyCharacter[], members: PreviewMember[], {
 		}
 		if (currentTiers.length || !ignoredRanks.has(rank)) {
 			const targetRoles = new Set([currentTiers[0] || rankRoles[rank]])
-			if (currentTiers.length && adminRanks.has(rank)) targetRoles.add(rankRoles[rank])
+			if (currentTiers.length && adminRanks.has(rank))
+				targetRoles.add(rankRoles[rank])
 			row.addRoles = [...targetRoles].filter(id => !currentRoles.includes(id))
 			row.removeRoles = currentRoles.filter(id => !targetRoles.has(id))
 			row.preservedTier = currentTiers.length === 1
 		} else {
 			row.roleNote = 'Leader/Own.dep: синхронизация игрового ранга отключена.'
-			if (currentRoles.length > 1) return { ...row, status: 'conflict', nickname: null, reason: 'Leader/Own.dep и несколько ранговых ролей: требуется ручной выбор.' }
+			if (currentRoles.length > 1)
+				return {
+					...row,
+					status: 'conflict',
+					nickname: null,
+					reason:
+						'Leader/Own.dep и несколько ранговых ролей: требуется ручной выбор.'
+				}
 		}
-		const prefixRoleIds = Array.isArray(rolePrefixes) ? rolePrefixes.map(entry => entry.roleId) : adminRoleIds
-		if ([...row.addRoles, ...row.removeRoles].some(id => prefixRoleIds.includes(id))) {
-			const finalRoles = member.roleIds.filter(id => !row.removeRoles!.includes(id)).concat(row.addRoles)
+		const prefixRoleIds = Array.isArray(rolePrefixes)
+			? rolePrefixes.map(entry => entry.roleId)
+			: adminRoleIds
+		if (
+			[...row.addRoles, ...row.removeRoles].some(id =>
+				prefixRoleIds.includes(id)
+			)
+		) {
+			const finalRoles = member.roleIds
+				.filter(id => !row.removeRoles!.includes(id))
+				.concat(row.addRoles)
 			nickname = `${adminPrefix(finalRoles, adminRoleIds, rolePrefixes)}${name} | ${staticId}${suffix}`
-			if (nickname.length > 32) return { ...row, status: 'conflict', nickname: null, reason: 'Новый ник с префиксом длиннее 32 символов.' }
+			if (nickname.length > 32)
+				return {
+					...row,
+					status: 'conflict',
+					nickname: null,
+					reason: 'Новый ник с префиксом длиннее 32 символов.'
+				}
 			row.nickname = nickname === member.nickname ? null : nickname
 		}
-		if (row.nickname || row.addRoles.length || row.removeRoles.length) row.status = 'change'
+		if (row.nickname || row.addRoles.length || row.removeRoles.length)
+			row.status = 'change'
 		return row
 	})
 }
 
-export { rankRoles, tierRoles, parseNickname, buildPreview }
+export { buildPreview, parseNickname, rankRoles, tierRoles }

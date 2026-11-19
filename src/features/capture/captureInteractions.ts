@@ -1,24 +1,28 @@
-import { getError } from '../../utils/errors'
-import { store as dashboard } from '../../dashboard/store'
 import {
-	ModalBuilder,
-	TextInputBuilder,
-	TextInputStyle,
+	LabelBuilder,
 	MessageFlags,
+	ModalBuilder,
 	PermissionFlagsBits,
-	LabelBuilder
+	TextInputBuilder,
+	TextInputStyle
 } from 'discord.js'
-import { parseDateTime, getDiscordTimestamp } from '../../utils/dateUtils'
+import { store as dashboard } from '../../dashboard/store'
 import { sendEphemeralWithAutoDelete } from '../../utils/autoDelete'
+import { getDiscordTimestamp, parseDateTime } from '../../utils/dateUtils'
+import { getError } from '../../utils/errors'
+import { collectionCreationError } from './collectionCreation'
 import captureManager = require('./captureManager')
 import db = require('../../services/database')
-import { collectionCreationError } from './collectionCreation'
 
 /**
  * Показывает модалку ручного создания реги (время, цель, maxMain).
  * @param {ButtonInteraction} interaction
  */
-async function showCaptModal(interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').ChatInputCommandInteraction<'cached'>) {
+async function showCaptModal(
+	interaction:
+		| import('discord.js').ButtonInteraction<'cached'>
+		| import('discord.js').ChatInputCommandInteraction<'cached'>
+) {
 	const modal = new ModalBuilder()
 		.setCustomId('modal_capt')
 		.setTitle('Создание реги')
@@ -59,7 +63,9 @@ async function showCaptModal(interaction: import('discord.js').ButtonInteraction
  * Валидирует время/цель/кол-во и вызывает captureManager.sendCollection.
  * @param {ModalSubmitInteraction} interaction
  */
-async function submitCaptModal(interaction: import('discord.js').ModalSubmitInteraction<'cached'>) {
+async function submitCaptModal(
+	interaction: import('discord.js').ModalSubmitInteraction<'cached'>
+) {
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 	const timeInput = interaction.fields.getTextInputValue('capt_time').trim()
 	const parsedDate = parseDateTime(timeInput)
@@ -72,15 +78,21 @@ async function submitCaptModal(interaction: import('discord.js').ModalSubmitInte
 	}
 
 	const discordTimestamp = getDiscordTimestamp(parsedDate)
-	let target =
-		interaction.fields.getTextInputValue('capt_target').trim()
-	if (!target) return await sendEphemeralWithAutoDelete(interaction, { content: '❌ Укажите цель регистрации.' })
+	let target = interaction.fields.getTextInputValue('capt_target').trim()
+	if (!target)
+		return await sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ Укажите цель регистрации.'
+		})
 	let maxMain = 20
 
 	const countInput = interaction.fields.getTextInputValue('capt_count').trim()
 	if (countInput) {
 		const parsedCount = Number(countInput)
-		if (/^\d+$/.test(countInput) && Number.isSafeInteger(parsedCount) && parsedCount > 0) {
+		if (
+			/^\d+$/.test(countInput) &&
+			Number.isSafeInteger(parsedCount) &&
+			parsedCount > 0
+		) {
 			maxMain = parsedCount
 		} else {
 			return await sendEphemeralWithAutoDelete(interaction, {
@@ -101,9 +113,11 @@ async function submitCaptModal(interaction: import('discord.js').ModalSubmitInte
 			content: `✅ Набор успешно создан и отправлен в канал! Время: ${discordTimestamp}\n${url}`
 		})
 	} catch (caught) {
- const error = getError(caught);
+		const error = getError(caught)
 		console.error('Ошибка при отправке набора:', error)
-		await sendEphemeralWithAutoDelete(interaction, { content: collectionCreationError(caught) })
+		await sendEphemeralWithAutoDelete(interaction, {
+			content: collectionCreationError(caught)
+		})
 	}
 }
 
@@ -112,12 +126,17 @@ async function submitCaptModal(interaction: import('discord.js').ModalSubmitInte
  * Парсит enemy + time из customId, проверяет админ-роль или право администратора.
  * @param {ButtonInteraction} interaction
  */
-async function handleAutoCaptButton(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+async function handleAutoCaptButton(
+	interaction: import('discord.js').ButtonInteraction<'cached'>
+) {
 	const hasAdminRole = interaction.member.roles.cache.some(role =>
 		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
 	)
 
-	if (!hasAdminRole && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+	if (
+		!hasAdminRole &&
+		!interaction.member.permissions.has(PermissionFlagsBits.Administrator)
+	) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: '❌ У вас нет необходимой роли для использования этой кнопки.'
 		})
@@ -136,28 +155,14 @@ async function handleAutoCaptButton(interaction: import('discord.js').ButtonInte
 	const enemyRaw = parts[fromTelegram ? 2 : 1]
 	const timeRaw = parts.slice(fromTelegram ? 3 : 2).join('_')
 
-	const target = fromTelegram ? Buffer.from(enemyRaw.replace(/\./g, '_'), 'base64url').toString('utf8') : enemyRaw.replace(/-/g, ' ')
+	const target = fromTelegram
+		? Buffer.from(enemyRaw.replace(/\./g, '_'), 'base64url').toString('utf8')
+		: enemyRaw.replace(/-/g, ' ')
 	const timeInput = timeRaw.replace(/-/g, ' ')
 	const cleanTimeInput = timeInput.substring(0, 16)
 
-	let parsedDate = null
-	if (typeof parseDateTime === 'function') {
-		parsedDate = parseDateTime(cleanTimeInput)
-	}
-
-	if (!parsedDate || isNaN(parsedDate.getTime())) {
-		const dateMatch = cleanTimeInput.match(
-			/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/
-		)
-		if (dateMatch) {
-			const [, day, month, year, hours, minutes] = dateMatch
-			parsedDate = new Date(
-				`${year}-${month}-${day}T${hours}:${minutes}:00+03:00`
-			)
-		}
-	}
-
-	if (!parsedDate || isNaN(parsedDate.getTime())) {
+	const parsedDate = parseDateTime(cleanTimeInput)
+	if (!parsedDate) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: `❌ Не удалось автоматически распознать формат времени: \`${timeInput}\`.`
 		})
@@ -186,12 +191,11 @@ async function handleAutoCaptButton(interaction: import('discord.js').ButtonInte
 			} catch (e) {}
 		}, 5000)
 	} catch (caught) {
- const error = getError(caught);
+		const error = getError(caught)
 		console.error('❌ Ошибка при отправке автоматического набора:', error)
 
 		await interaction.editReply({
-			content:
-				collectionCreationError(caught)
+			content: collectionCreationError(caught)
 		})
 	}
 }
@@ -200,7 +204,9 @@ async function handleAutoCaptButton(interaction: import('discord.js').ButtonInte
  * Показывает модалку изменения времени существующего набора.
  * @param {ButtonInteraction} interaction
  */
-async function handleInlineEditTimeButton(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+async function handleInlineEditTimeButton(
+	interaction: import('discord.js').ButtonInteraction<'cached'>
+) {
 	const hasAdminRole = interaction.member.roles.cache.some(role =>
 		dashboard.roleIds('ADMIN_ROLES').includes(role.id)
 	)
@@ -210,7 +216,8 @@ async function handleInlineEditTimeButton(interaction: import('discord.js').Butt
 		!interaction.member.permissions.has(PermissionFlagsBits.Administrator)
 	) {
 		return await sendEphemeralWithAutoDelete(interaction, {
-			content: '❌ У вас нет необходимой роли для изменения времени регистрации.'
+			content:
+				'❌ У вас нет необходимой роли для изменения времени регистрации.'
 		})
 	}
 
@@ -239,9 +246,18 @@ async function handleInlineEditTimeButton(interaction: import('discord.js').Butt
  * Сохраняет новое время в БД и вызывает updateCollectionTime.
  * @param {ModalSubmitInteraction} interaction
  */
-async function submitInlineEditTimeModal(interaction: import('discord.js').ModalSubmitInteraction<'cached'>) {
-	if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.roles.cache.some(role => dashboard.roleIds('ADMIN_ROLES').includes(role.id))) {
-		return sendEphemeralWithAutoDelete(interaction, { content: '❌ У вас нет прав для изменения времени регистрации.' })
+async function submitInlineEditTimeModal(
+	interaction: import('discord.js').ModalSubmitInteraction<'cached'>
+) {
+	if (
+		!interaction.member.permissions.has(PermissionFlagsBits.Administrator) &&
+		!interaction.member.roles.cache.some(role =>
+			dashboard.roleIds('ADMIN_ROLES').includes(role.id)
+		)
+	) {
+		return sendEphemeralWithAutoDelete(interaction, {
+			content: '❌ У вас нет прав для изменения времени регистрации.'
+		})
 	}
 	const newTimeInput = interaction.fields
 		.getTextInputValue('capt_new_time')
@@ -273,36 +289,37 @@ async function submitInlineEditTimeModal(interaction: import('discord.js').Modal
 	try {
 		// Обновляем время в базе данных
 		const updated = await db.query(
-			`UPDATE active_captures SET discord_timestamp = $1
+			`UPDATE active_captures SET discord_timestamp = $1, message_refresh_pending = TRUE,
+			 message_revision = message_revision + 1, channel_id = COALESCE(channel_id, $4)
 			 WHERE message_id = $2 AND controls_closed = FALSE
 			 AND substring(discord_timestamp from '<t:([0-9]+)')::bigint * 1000 + 3600000 > $3
 			 RETURNING message_id`,
-			[newDiscordTimestamp, messageId, Date.now()]
+			[newDiscordTimestamp, messageId, Date.now(), channelId]
 		)
-		if (!updated.rows.length) return interaction.editReply({ content: '❌ Сбор завершён или больше недоступен.' })
+		if (!updated.rows.length)
+			return interaction.editReply({
+				content: '❌ Сбор завершён или больше недоступен.'
+			})
 
-		// ✅ Передаем client более надежно
-		const client = interaction.client
-		if (!client) {
-			console.error('[EditTime] client не найден в interaction')
+		try {
+			await captureManager.updateCollectionTime(
+				messageId,
+				channelId,
+				interaction.client
+			)
+		} catch (error) {
+			console.error('[Capture time delivery]', error)
 			await interaction.editReply({
-				content: '❌ Внутренняя ошибка: клиент недоступен.'
+				content: `Время сохранено: ${newDiscordTimestamp}. Обновление сообщения ожидает повторной отправки.`
 			})
 			return
 		}
-
-		await captureManager.updateCollectionTime(
-			messageId,
-			channelId,
-			newDiscordTimestamp,
-			client
-		)
 
 		await interaction.editReply({
 			content: `✅ Время капта успешно изменено на: ${newDiscordTimestamp}`
 		})
 	} catch (caught) {
- const error = getError(caught);
+		const error = getError(caught)
 		console.error('[EditTime] Ошибка при обновлении времени капта:', error)
 		await interaction.editReply({
 			content: '❌ Произошла ошибка при обновлении времени.'
@@ -311,9 +328,9 @@ async function submitInlineEditTimeModal(interaction: import('discord.js').Modal
 }
 
 export {
-	showCaptModal,
-	submitCaptModal,
 	handleAutoCaptButton,
 	handleInlineEditTimeButton,
+	showCaptModal,
+	submitCaptModal,
 	submitInlineEditTimeModal
 }

@@ -1,29 +1,49 @@
-import { getError } from '../../utils/errors'
-import { Client, ButtonInteraction, MessageFlags } from 'discord.js'
-import { parseDisplayName } from '../../utils/parseDisplayName'
+import { ButtonInteraction, MessageFlags } from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
+import { getError } from '../../utils/errors'
+import { parseDisplayName } from '../../utils/parseDisplayName'
 
-async function findMemberArchive(guild: import('discord.js').Guild, parsed: NonNullable<ReturnType<typeof parseDisplayName>>, signal?: AbortSignal) {
+async function findMemberArchive(
+	guild: import('discord.js').Guild,
+	parsed: NonNullable<ReturnType<typeof parseDisplayName>>,
+	signal?: AbortSignal
+) {
 	const parentId = dashboard.getSetting('PARENT_CHANNEL_ID')
-	const name = ['archive', parsed.memberName.toLowerCase(), parsed.memberStatic].join(' ')
-	const matches = (channel: import('discord.js').GuildBasedChannel | null) => !!channel?.isThread() && channel.parentId === parentId && channel.name === name
+	const name = [
+		'archive',
+		parsed.memberName.toLowerCase(),
+		parsed.memberStatic
+	].join(' ')
+	const matches = (channel: import('discord.js').GuildBasedChannel | null) =>
+		!!channel?.isThread() &&
+		channel.parentId === parentId &&
+		channel.name === name
 	const cached = guild.channels.cache.find(matches)
 	if (cached) return cached
-	const parent = guild.channels.cache.get(parentId) || await guild.channels.fetch(parentId)
+	const parent =
+		guild.channels.cache.get(parentId) || (await guild.channels.fetch(parentId))
 	signal?.throwIfAborted()
-	if (!parent || !('threads' in parent)) throw new Error('Родительский канал архивов не настроен.')
+	if (!parent || !('threads' in parent))
+		throw new Error('Родительский канал архивов не настроен.')
 	const active = await parent.threads.fetchActive()
 	signal?.throwIfAborted()
 	const found = active.threads.find(matches)
 	if (found) return found
 	let before
 	do {
-		const page = await parent.threads.fetchArchived({ type: 'private', fetchAll: true, limit: 100, before })
+		const page = await parent.threads.fetchArchived({
+			type: 'private',
+			fetchAll: true,
+			limit: 100,
+			before
+		})
 		signal?.throwIfAborted()
 		const archived = page.threads.find(matches)
 		if (archived) return archived
 		if (!page.hasMore) return null
-		const next = Math.min(...page.threads.map(thread => thread.archiveTimestamp ?? Infinity))
+		const next = Math.min(
+			...page.threads.map(thread => thread.archiveTimestamp ?? Infinity)
+		)
 		if (!Number.isFinite(next) || (before !== undefined && next >= before)) {
 			throw new Error('Не удалось продолжить поиск архивов.')
 		}
@@ -35,7 +55,9 @@ async function findMemberArchive(guild: import('discord.js').Guild, parsed: NonN
  * Ищет канал-архив для пользователя, нажавшего кнопку archive_find
  * @param {ButtonInteraction} interaction
  */
-async function findArchive(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+async function findArchive(
+	interaction: import('discord.js').ButtonInteraction<'cached'>
+) {
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral as const })
 	let timeout: ReturnType<typeof setTimeout> | undefined
 	const controller = new AbortController()
@@ -72,16 +94,19 @@ async function findArchive(interaction: import('discord.js').ButtonInteraction<'
 			})
 		}
 	} catch (caught) {
- const err = getError(caught);
+		const err = getError(caught)
 		console.error('❌ Ошибка при поиске архива: ', err)
 		try {
 			await interaction.editReply({
-				content: err.message === 'ARCHIVE_SEARCH_TIMEOUT'
-					? '❌ Discord слишком долго отвечает на поиск архива. Повторите попытку.'
-					: '❌ Произошла внутренняя ошибка при поиске архива.'
+				content:
+					err.message === 'ARCHIVE_SEARCH_TIMEOUT'
+						? '❌ Discord слишком долго отвечает на поиск архива. Повторите попытку.'
+						: '❌ Произошла внутренняя ошибка при поиске архива.'
 			})
 		} catch (_) {}
-	} finally { clearTimeout(timeout) }
+	} finally {
+		clearTimeout(timeout)
+	}
 }
 
 export { findArchive, findMemberArchive }

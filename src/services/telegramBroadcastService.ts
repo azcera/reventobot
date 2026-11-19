@@ -1,21 +1,48 @@
-import { getError, type OperationError } from '../utils/errors'
-interface TelegramUpdate { update_id: number; message?: { chat: { id: number; type: string }; text?: string; date?: number } }
-interface TelegramResults { sendMessage: unknown; getUpdates: TelegramUpdate[]; getWebhookInfo: { url?: string } }
-interface BroadcastError extends OperationError { retryAfter?: number }
-function broadcastError(value: unknown): BroadcastError { const error: BroadcastError = getError(value); if (value && typeof value === 'object' && 'retryAfter' in value && typeof value.retryAfter === 'number') error.retryAfter = value.retryAfter; return error }
-interface BroadcastOptions { pool: Pg.Pool; token: string; request?: typeof fetch; isEnabled?: () => boolean }
 import type * as D from 'discord.js'
-import type * as T from '../types'
-import type * as E from 'express'
-import type * as Pg from 'pg'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
+import type * as Pg from 'pg'
+import type * as T from '../types'
 import { discordNotificationContent } from '../utils/discordNotificationContent'
+import { getError, type OperationError } from '../utils/errors'
 import { createTelegramMajesticSession } from './telegramMajesticSession'
+interface TelegramUpdate {
+	update_id: number
+	message?: { chat: { id: number; type: string }; text?: string; date?: number }
+}
+interface TelegramResults {
+	sendMessage: unknown
+	getUpdates: TelegramUpdate[]
+	getWebhookInfo: { url?: string }
+}
+interface BroadcastError extends OperationError {
+	retryAfter?: number
+}
+function broadcastError(value: unknown): BroadcastError {
+	const error: BroadcastError = getError(value)
+	if (
+		value &&
+		typeof value === 'object' &&
+		'retryAfter' in value &&
+		typeof value.retryAfter === 'number'
+	)
+		error.retryAfter = value.retryAfter
+	return error
+}
+interface BroadcastOptions {
+	pool: Pg.Pool
+	token: string
+	request?: typeof fetch
+	isEnabled?: () => boolean
+}
 
 function getChannels(env: T.Env) {
-	return new Set((env.DISCORD_NOTIFICATION_CHANNEL_IDS || '').split(',')
-		.map(id => id.trim()).filter(id => id && id !== env.DISCORD_NOTIFICATION_CHANNEL_ID?.trim()))
+	return new Set(
+		(env.DISCORD_NOTIFICATION_CHANNEL_IDS || '')
+			.split(',')
+			.map(id => id.trim())
+			.filter(id => id && id !== env.DISCORD_NOTIFICATION_CHANNEL_ID?.trim())
+	)
 }
 
 function prepareMessage(message: D.Message<true>) {
@@ -25,14 +52,34 @@ function prepareMessage(message: D.Message<true>) {
 	const identity = {
 		content,
 		attachments: [...message.attachments.values()].map(file => file.url),
-		embeds: (message.embeds || []).map(embed => [embed.image?.url, embed.video?.url, embed.url]),
-		components: message.components?.map(component => component.toJSON?.() || component),
-		poll: message.poll ? [message.poll.question?.text,
-			[...(message.poll.answers?.values() || [])].map(answer => [answer.text, answer.emoji?.id, answer.emoji?.name])] : null,
+		embeds: (message.embeds || []).map(embed => [
+			embed.image?.url,
+			embed.video?.url,
+			embed.url
+		]),
+		components: message.components?.map(
+			component => component.toJSON?.() || component
+		),
+		poll: message.poll
+			? [
+					message.poll.question?.text,
+					[...(message.poll.answers?.values() || [])].map(answer => [
+						answer.text,
+						answer.emoji?.id,
+						answer.emoji?.name
+					])
+				]
+			: null,
 		stickers: [...(message.stickers?.values() || [])].map(sticker => sticker.id)
 	}
-	const hash = createHash('sha256').update(JSON.stringify(identity)).digest('hex')
-	const author = message.member?.displayName || message.author.globalName || message.author.username || message.author.tag
+	const hash = createHash('sha256')
+		.update(JSON.stringify(identity))
+		.digest('hex')
+	const author =
+		message.member?.displayName ||
+		message.author.globalName ||
+		message.author.username ||
+		message.author.tag
 	const text = `📣 Канал: #${('name' in message.channel ? message.channel.name : null) || message.channelId}\n👤 Отправил: ${author}\n\n${content}`
 	// Count Unicode code points so a split never breaks a surrogate pair.
 	const characters = Array.from(text)
@@ -43,47 +90,82 @@ function prepareMessage(message: D.Message<true>) {
 	return { hash, parts }
 }
 
-function createBroadcastService({ pool, token, request = fetch, isEnabled = () => true }: BroadcastOptions) {
+function createBroadcastService({
+	pool,
+	token,
+	request = fetch,
+	isEnabled = () => true
+}: BroadcastOptions) {
 	const controller = new AbortController()
 	const { signal } = controller
 	let tasks: Promise<void>[] = []
 	const pause = (ms: number) => delay(ms, undefined, { signal })
 	function logFailure(context: string, caught: unknown) {
 		const error = broadcastError(caught)
-		const safe = (value: unknown) => /^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
-		const cause = error.cause && typeof error.cause === 'object' ? error.cause : undefined
+		const safe = (value: unknown) =>
+			/^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
+		const cause =
+			error.cause && typeof error.cause === 'object' ? error.cause : undefined
 		console.error(context, {
-			name: safe(error.name), code: safe(error.code),
+			name: safe(error.name),
+			code: safe(error.code),
 			causeCode: safe(cause && 'code' in cause ? cause.code : undefined),
 			connectionTimeout: /connection timeout/i.test(error.message),
 			connectionTerminated: /connection terminated/i.test(error.message),
-			pool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }
+			pool: {
+				total: pool.totalCount,
+				idle: pool.idleCount,
+				waiting: pool.waitingCount
+			}
 		})
 	}
 
 	async function supervise(name: string, run: () => Promise<void>) {
 		while (!signal.aborted) {
-			try { await run() }
-			catch (error) {
+			try {
+				await run()
+			} catch (error) {
 				if (signal.aborted) return
-				logFailure(`[Telegram broadcast] ${name}: перезапуск через 5 секунд`, error)
+				logFailure(
+					`[Telegram broadcast] ${name}: перезапуск через 5 секунд`,
+					error
+				)
 			}
 			if (signal.aborted) return
-			try { await pause(5000) } catch { return }
+			try {
+				await pause(5000)
+			} catch {
+				return
+			}
 		}
 	}
 
-	async function api<K extends keyof TelegramResults>(method: K, body: object): Promise<TelegramResults[K]> {
-		const response = await request(`https://api.telegram.org/bot${token}/${method}`, {
-			method: 'POST', headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body),
-			signal: AbortSignal.any([signal, AbortSignal.timeout(40000)])
-		})
+	async function api<K extends keyof TelegramResults>(
+		method: K,
+		body: object
+	): Promise<TelegramResults[K]> {
+		const response = await request(
+			`https://api.telegram.org/bot${token}/${method}`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body),
+				signal: AbortSignal.any([signal, AbortSignal.timeout(40000)])
+			}
+		)
 		const raw: unknown = await response.json()
-		if (!raw || typeof raw !== 'object' || !('ok' in raw)) throw new Error('Некорректный ответ Telegram API')
-		const data = raw as { ok: boolean; error_code?: number; parameters?: { retry_after?: number }; result: TelegramResults[K] }
+		if (!raw || typeof raw !== 'object' || !('ok' in raw))
+			throw new Error('Некорректный ответ Telegram API')
+		const data = raw as {
+			ok: boolean
+			error_code?: number
+			parameters?: { retry_after?: number }
+			result: TelegramResults[K]
+		}
 		if (!response.ok || !data.ok) {
-			const error: BroadcastError = new Error(`Telegram API: ${data.error_code || response.status}`)
+			const error: BroadcastError = new Error(
+				`Telegram API: ${data.error_code || response.status}`
+			)
 			error.code = data.error_code || response.status
 			error.retryAfter = data.parameters?.retry_after
 			throw error
@@ -108,6 +190,9 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 				next_part INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
 				retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 			);
+			ALTER TABLE telegram_broadcast_queue ADD COLUMN IF NOT EXISTS lease_token UUID,
+				ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+			CREATE INDEX IF NOT EXISTS telegram_broadcast_queue_chat_id_id_idx ON telegram_broadcast_queue (chat_id, id);
 		`)
 	}
 
@@ -117,13 +202,20 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 		const db = await pool.connect()
 		try {
 			await db.query('BEGIN')
-			await db.query('DELETE FROM telegram_broadcast_dedup WHERE expires_at <= NOW()')
-			const claim = await db.query(`INSERT INTO telegram_broadcast_dedup (hash, expires_at)
-				VALUES ($1, NOW() + INTERVAL '5 minutes') ON CONFLICT DO NOTHING RETURNING hash`, [prepared.hash])
+			await db.query(
+				'DELETE FROM telegram_broadcast_dedup WHERE expires_at <= NOW()'
+			)
+			const claim = await db.query(
+				`INSERT INTO telegram_broadcast_dedup (hash, expires_at)
+				VALUES ($1, NOW() + INTERVAL '5 minutes') ON CONFLICT DO NOTHING RETURNING hash`,
+				[prepared.hash]
+			)
 			if (claim.rows.length) {
-				await db.query(`INSERT INTO telegram_broadcast_queue (chat_id, parts)
+				await db.query(
+					`INSERT INTO telegram_broadcast_queue (chat_id, parts)
 					SELECT chat_id, $1::jsonb FROM telegram_broadcast_subscribers WHERE active`,
-					[JSON.stringify(prepared.parts)])
+					[JSON.stringify(prepared.parts)]
+				)
 			}
 			await db.query('COMMIT')
 		} catch (caught) {
@@ -139,40 +231,75 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 		const message = update.message
 		if (message?.chat.type !== 'private') return
 		const command = message.text?.trim().split(/\s/)[0].split('@')[0]
-		if (await majesticSession.handleMessage(String(message.chat.id), message.text, message.date)) return
+		if (
+			await majesticSession.handleMessage(
+				String(message.chat.id),
+				message.text,
+				message.date
+			)
+		)
+			return
 		if (command !== '/start' && command !== '/stop') return
 		const chatId = String(message.chat.id)
-		await pool.query(`INSERT INTO telegram_broadcast_subscribers (chat_id, active) VALUES ($1, $2)
-			ON CONFLICT (chat_id) DO UPDATE SET active = EXCLUDED.active`, [chatId, command === '/start'])
+		await pool.query(
+			`INSERT INTO telegram_broadcast_subscribers (chat_id, active) VALUES ($1, $2)
+			ON CONFLICT (chat_id) DO UPDATE SET active = EXCLUDED.active`,
+			[chatId, command === '/start']
+		)
 		if (command === '/stop') {
-			await pool.query('DELETE FROM telegram_broadcast_queue WHERE chat_id = $1', [chatId])
+			await pool.query(
+				'DELETE FROM telegram_broadcast_queue WHERE chat_id = $1',
+				[chatId]
+			)
 		}
 		try {
-			await api('sendMessage', { chat_id: chatId, text: command === '/start'
-				? 'Вы подписаны на новые сообщения из Discord. Отключить: /stop'
-				: 'Рассылка отключена. Подписаться снова: /start' })
+			await api('sendMessage', {
+				chat_id: chatId,
+				text:
+					command === '/start'
+						? 'Вы подписаны на новые сообщения из Discord. Отключить: /stop'
+						: 'Рассылка отключена. Подписаться снова: /start'
+			})
 		} catch (caught) {
 			const error = broadcastError(caught)
 			if (signal.aborted) throw error
-			console.error('[Telegram broadcast] Ответ на команду:', error.code || 'network error')
+			console.error(
+				'[Telegram broadcast] Ответ на команду:',
+				error.code || 'network error'
+			)
 		}
 	}
 
-	const majesticSession = createTelegramMajesticSession({ pool, send: (chatId, text) => api('sendMessage', { chat_id: chatId, text }).then(() => {}) })
+	const majesticSession = createTelegramMajesticSession({
+		pool,
+		send: (chatId, text) =>
+			api('sendMessage', { chat_id: chatId, text }).then(() => {})
+	})
 
 	async function poll() {
-		let { rows: [state] } = await pool.query('SELECT update_offset FROM telegram_broadcast_state WHERE id = 1')
+		let {
+			rows: [state]
+		} = await pool.query(
+			'SELECT update_offset FROM telegram_broadcast_state WHERE id = 1'
+		)
 		let offset = Number(state.update_offset)
 		while (!signal.aborted) {
 			try {
-				const updates = await api('getUpdates', { offset, timeout: 25, allowed_updates: ['message'] })
+				const updates = await api('getUpdates', {
+					offset,
+					timeout: 25,
+					allowed_updates: ['message']
+				})
 				for (const update of updates) {
 					await handleUpdate(update)
-					await pool.query('UPDATE telegram_broadcast_state SET update_offset = $1 WHERE id = 1', [update.update_id + 1])
+					await pool.query(
+						'UPDATE telegram_broadcast_state SET update_offset = $1 WHERE id = 1',
+						[update.update_id + 1]
+					)
 					offset = update.update_id + 1
 				}
 			} catch (caught) {
-			const error = broadcastError(caught)
+				const error = broadcastError(caught)
 				if (signal.aborted) break
 				logFailure('[Telegram broadcast] Получение команд:', error)
 				await pause(Math.max(5, error.retryAfter || 0) * 1000)
@@ -182,48 +309,93 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 
 	async function deliverOne() {
 		if (!isEnabled()) return false
-		const { rows: [job] } = await pool.query(`SELECT q.* FROM telegram_broadcast_queue q
+		const lease = randomUUID()
+		const {
+			rows: [job]
+		} = await pool.query(
+			`WITH eligible AS (
+			SELECT q.id FROM telegram_broadcast_queue q
 			JOIN telegram_broadcast_subscribers s ON s.chat_id = q.chat_id AND s.active
-			WHERE q.retry_at <= NOW() AND NOT EXISTS (
+			WHERE q.retry_at <= NOW() AND (q.lease_until IS NULL OR q.lease_until <= NOW()) AND NOT EXISTS (
 				SELECT 1 FROM telegram_broadcast_queue earlier WHERE earlier.chat_id = q.chat_id AND earlier.id < q.id
-			) ORDER BY q.id LIMIT 1`)
+			) ORDER BY q.id LIMIT 1 FOR UPDATE OF q SKIP LOCKED
+		)
+		UPDATE telegram_broadcast_queue q SET lease_token = $1, lease_until = NOW() + INTERVAL '1 minute'
+		FROM eligible WHERE q.id = eligible.id RETURNING q.*`,
+			[lease]
+		)
 		if (!job) return false
 		try {
-			await api('sendMessage', { chat_id: job.chat_id, text: job.parts[job.next_part] })
+			await api('sendMessage', {
+				chat_id: job.chat_id,
+				text: job.parts[job.next_part]
+			})
 		} catch (caught) {
 			const error = broadcastError(caught)
 			if (signal.aborted) throw error
 			if (error.code === 403) {
-				await pool.query('UPDATE telegram_broadcast_subscribers SET active = FALSE WHERE chat_id = $1', [job.chat_id])
-				await pool.query('DELETE FROM telegram_broadcast_queue WHERE chat_id = $1', [job.chat_id])
+				await pool.query(
+					`WITH active_lease AS (
+					SELECT chat_id FROM telegram_broadcast_queue WHERE id = $1 AND lease_token = $2 FOR UPDATE
+				), deactivated AS (
+					UPDATE telegram_broadcast_subscribers s SET active = FALSE FROM active_lease l
+					WHERE s.chat_id = l.chat_id RETURNING s.chat_id
+				)
+				DELETE FROM telegram_broadcast_queue q USING deactivated d WHERE q.chat_id = d.chat_id`,
+					[job.id, lease]
+				)
 			} else if (error.code === 400 || job.attempts >= 9) {
-				console.error('[Telegram broadcast] Задание не доставлено:', job.id, error.code || 'network error')
-				await pool.query('DELETE FROM telegram_broadcast_queue WHERE id = $1', [job.id])
+				console.error(
+					'[Telegram broadcast] Задание не доставлено:',
+					job.id,
+					error.code || 'network error'
+				)
+				await pool.query(
+					'DELETE FROM telegram_broadcast_queue WHERE id = $1 AND lease_token = $2',
+					[job.id, lease]
+				)
 			} else {
-				const seconds = Math.max(error.retryAfter || 0, Math.min(300, 2 ** (job.attempts + 1)))
-				await pool.query(`UPDATE telegram_broadcast_queue SET attempts = attempts + 1,
-					retry_at = NOW() + $2 * INTERVAL '1 second' WHERE id = $1`, [job.id, seconds])
+				const seconds = Math.max(
+					error.retryAfter || 0,
+					Math.min(300, 2 ** (job.attempts + 1))
+				)
+				await pool.query(
+					`UPDATE telegram_broadcast_queue SET attempts = attempts + 1,
+					retry_at = NOW() + $2 * INTERVAL '1 second', lease_token = NULL, lease_until = NULL
+					WHERE id = $1 AND lease_token = $3`,
+					[job.id, seconds, lease]
+				)
 				if (error.code === 429) await pause(seconds * 1000)
 			}
 			return true
 		}
 		if (job.next_part + 1 === job.parts.length) {
-			await pool.query('DELETE FROM telegram_broadcast_queue WHERE id = $1', [job.id])
+			await pool.query(
+				'DELETE FROM telegram_broadcast_queue WHERE id = $1 AND lease_token = $2',
+				[job.id, lease]
+			)
 		} else {
-			await pool.query(`UPDATE telegram_broadcast_queue SET next_part = next_part + 1,
-				attempts = 0, retry_at = NOW() + INTERVAL '1 second' WHERE id = $1`, [job.id])
+			await pool.query(
+				`UPDATE telegram_broadcast_queue SET next_part = next_part + 1,
+				attempts = 0, retry_at = NOW() + INTERVAL '1 second', lease_token = NULL, lease_until = NULL
+				WHERE id = $1 AND lease_token = $2`,
+				[job.id, lease]
+			)
 		}
-		await pool.query(`UPDATE telegram_broadcast_queue SET retry_at = GREATEST(retry_at, NOW() + INTERVAL '1 second')
-			WHERE chat_id = $1`, [job.chat_id])
+		await pool.query(
+			`UPDATE telegram_broadcast_queue SET retry_at = GREATEST(retry_at, NOW() + INTERVAL '1 second')
+			WHERE chat_id = $1`,
+			[job.chat_id]
+		)
 		return true
 	}
 
 	async function worker() {
 		while (!signal.aborted) {
 			try {
-				await pause(await deliverOne() ? 100 : 1000)
+				await pause((await deliverOne()) ? 100 : 1000)
 			} catch (caught) {
-			const error = broadcastError(caught)
+				const error = broadcastError(caught)
 				if (signal.aborted) break
 				logFailure('[Telegram broadcast] Очередь:', error)
 				await pause(5000)
@@ -232,13 +404,20 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 	}
 
 	return {
-		init, enqueue, handleUpdate, deliverOne,
+		init,
+		enqueue,
+		handleUpdate,
+		deliverOne,
 		async start() {
 			await init()
 			const webhook = await api('getWebhookInfo', {})
-			if (webhook.url) throw new Error('У Telegram-бота активен webhook; polling не запущен')
+			if (webhook.url)
+				throw new Error('У Telegram-бота активен webhook; polling не запущен')
 			majesticSession.start()
-			tasks = [supervise('Получение команд', poll), supervise('Очередь', worker)]
+			tasks = [
+				supervise('Получение команд', poll),
+				supervise('Очередь', worker)
+			]
 		},
 		async stop() {
 			majesticSession.stop()
@@ -248,4 +427,4 @@ function createBroadcastService({ pool, token, request = fetch, isEnabled = () =
 	}
 }
 
-export { getChannels, prepareMessage, createBroadcastService }
+export { createBroadcastService, getChannels, prepareMessage }

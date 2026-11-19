@@ -1,5 +1,5 @@
+import { Client, Events } from 'discord.js'
 import { store as dashboard } from '../dashboard/store'
-import { Events, Client } from 'discord.js'
 import { updateLists } from '../features/archive/updateLists'
 
 require('dotenv').config()

@@ -6,7 +6,10 @@
 import { store } from '../dashboard/store'
 import { stripRolePrefix } from './adminPrefix'
 
-function parseDisplayName(memberNickname: string, rolePrefixes = store.getSetting('ROLE_PREFIXES')) {
+function parseDisplayName(
+	memberNickname: string,
+	rolePrefixes = store.getSetting('ROLE_PREFIXES')
+) {
 	if (!memberNickname || !memberNickname.includes('|')) {
 		return null
 	}

@@ -1,10 +1,6 @@
-import { getError } from '../utils/errors'
-import type * as D from 'discord.js'
-import type * as T from '../types'
-import type * as E from 'express'
-import type * as Pg from 'pg'
 import { TelegramClient } from 'teleproto'
 import { StringSession } from 'teleproto/sessions'
+import { getError } from '../utils/errors'
 import qrcode = require('qrcode-terminal') // Рисует QR в консоли
 import readline = require('readline')
 
@@ -55,7 +51,8 @@ async function initTelegramClient() {
 	}
 
 	const tgClient = new TelegramClient(stringSession, apiId, apiHash, {
-		connectionRetries: 5,	})
+		connectionRetries: 5
+	})
 
 	// Подключаемся к серверам Telegram напрямую
 	await tgClient.connect()
@@ -101,7 +98,7 @@ async function initTelegramClient() {
 				}
 			)
 		} catch (caughtError) {
- const error = getError(caughtError)
+			const error = getError(caughtError)
 
 			console.error('❌ Критическая ошибка при QR авторизации:', error)
 			process.exit(1)

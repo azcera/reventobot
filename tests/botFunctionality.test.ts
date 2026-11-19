@@ -16,7 +16,7 @@ const previousDatabase = require.cache[databasePath]
 const queries: string[] = []
 let databaseRow: Record<string, unknown> | undefined
 require.cache[databasePath] = { exports: {
-	async query(sql: string) { queries.push(sql); return { rows: sql.startsWith('INSERT INTO collection_creations') ? [{ creation_key: 'key' }] : databaseRow ? [databaseRow] : [] } },
+	async query(sql: string) { queries.push(sql); return { rows: sql.startsWith('INSERT INTO collection_creations') || sql.includes('RETURNING user_id') ? [{ creation_key: 'key' }] : databaseRow ? [databaseRow] : [] } },
 	async connect() { return { async query(sql: string) { queries.push(sql); return { rows: databaseRow ? [databaseRow] : [] } }, release() {} } }
 } } as NodeModule
 const captures = require('../src/features/capture/captureManager') as typeof import('../src/features/capture/captureManager')
@@ -88,17 +88,19 @@ test('group and capture submissions await acknowledgement before reading fields 
 	}
 })
 
-test('closure worker recovers stored collections after restart and rechecks moved times under a lock', async () => {
+test('closure worker recovers stored collections after restart and rechecks moved times and edits Discord outside a transaction', async () => {
 	const row = { message_id: 'message', channel_id: 'channel', discord_timestamp: timestamp(Date.now() - 3600001), controls_closed: false }
 	let edits = 0, updates = 0
-	const connection = { async query(sql: string) {
-		if (sql.startsWith('UPDATE')) updates++
-		return { rows: sql.startsWith('SELECT') ? [row] : [] }
-	}, release() {} }
+
 	const client = { channels: { fetch: async () => ({ messages: { fetch: async () => ({ components: [{ type: 1, components: [{ type: 2, custom_id: 'capt_join' }] }],
 		edit: async (payload: any) => { assert.equal(payload.components[0].components[0].disabled, true); edits++ }
 	}) } }) } } as unknown as Client
-	const pool = { query: async () => ({ rows: [{ ...row, discord_timestamp: timestamp(Date.now() - 3600001) }] }), connect: async () => connection } as unknown as Pool
+	const pool = { query: async (sql: string) => {
+		if (sql.startsWith('SELECT')) return { rows: [{ ...row, discord_timestamp: timestamp(Date.now() - 3600001) }] }
+		if (sql.includes('RETURNING')) return { rows: captureExpired(row.discord_timestamp) ? [row] : [] }
+		updates++
+		return { rows: [] }
+	}, connect: async () => { assert.fail('Discord edit must not hold a database client') } } as unknown as Pool
 	const service = createCaptureExpiry({ client, pool, store })
 	await service.tick()
 	assert.equal(edits, 1); assert.equal(updates, 1)
@@ -173,11 +175,21 @@ test('application nickname is capitalized with the remaining letters in lowercas
 	databaseRow = undefined
 	let nickname = ''
 	const fields: Record<string, string> = { invite_name: 'tONy', invite_static: '123', invite_age: '20', invite_info: 'test', invite_history: 'test' }
-	const channel = { id: 'application', send: async () => {} }
+	const channel = { id: 'application', send: async () => ({ id: 'application-message' }) }
 	await invite.submitModal({ fields: { getTextInputValue: (key: string) => fields[key] }, user: { id: 'user' },
 		member: { setNickname: async (name: string) => { nickname = name } },
 		guild: { id: 'guild', channels: { create: async () => channel } },
 		deferReply: async () => {}, editReply: async () => {}, deleteReply: async () => {}
 	} as unknown as ModalSubmitInteraction<'cached'>)
 	assert.equal(nickname, 'Tony | 123')
+})
+
+test('Moscow date parser rejects rollover and uses the injected clock at midnight', async () => {
+	const { parseDateTime } = await import('../src/utils/dateUtils')
+	for (const input of ['31.04.2027 12:00', '29.02.2027 12:00', '01.01.2027 24:00', '12:60']) {
+		assert.equal(parseDateTime(input), null, input)
+	}
+	assert.equal(parseDateTime('29.02.2028 12:00')?.toISOString(), '2028-02-29T09:00:00.000Z')
+	assert.equal(parseDateTime('00:00', Date.parse('2027-01-01T20:59:59Z'))?.toISOString(), '2026-12-31T21:00:00.000Z')
+	assert.equal(parseDateTime('00:00', Date.parse('2027-01-01T21:00:00Z'))?.toISOString(), '2027-01-01T21:00:00.000Z')
 })

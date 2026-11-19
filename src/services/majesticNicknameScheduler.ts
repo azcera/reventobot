@@ -1,13 +1,22 @@
-import { getError } from '../utils/errors'
 import type * as D from 'discord.js'
 import type * as T from '../types'
-import type * as E from 'express'
-import type * as Pg from 'pg'
+import { getError } from '../utils/errors'
 const INTERVAL_MS = 10 * 60 * 1000
 const actor = { id: 'majestic-auto', name: 'Автосинхронизация Majestic' }
 
-function createMajesticNicknameScheduler({ client, sync, store, env = process.env,
-	logger = console, setTimer = setTimeout, clearTimer = clearTimeout }: Omit<T.ServiceOptions, 'pool'> & { sync: NonNullable<D.Client['majesticSync']>; setTimer?: typeof setTimeout; clearTimer?: typeof clearTimeout }) {
+function createMajesticNicknameScheduler({
+	client,
+	sync,
+	store,
+	env = process.env,
+	logger = console,
+	setTimer = setTimeout,
+	clearTimer = clearTimeout
+}: Omit<T.ServiceOptions, 'pool'> & {
+	sync: NonNullable<D.Client['majesticSync']>
+	setTimer?: typeof setTimeout
+	clearTimer?: typeof clearTimeout
+}) {
 	let stopped = true
 	let timer: ReturnType<typeof setTimeout> | undefined
 	let active: Promise<void> | null = null
@@ -34,17 +43,31 @@ function createMajesticNicknameScheduler({ client, sync, store, env = process.en
 			stage = 'sync.wait'
 			await sync.wait(guild)
 		})()
-		try { await active }
-		catch (caughtError) {
- const error = getError(caughtError)
+		try {
+			await active
+		} catch (caughtError) {
+			const error = getError(caughtError)
 
-			const safe = (value: unknown) => /^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
-			logger.error('[Majestic] Не удалось запустить автосинхронизацию.', { stage, name: safe(error?.name), code: safe(error?.code) })
+			const safe = (value: unknown) =>
+				/^[A-Za-z0-9_.-]{1,80}$/.test(String(value ?? '')) ? String(value) : ''
+			logger.error('[Majestic] Не удалось запустить автосинхронизацию.', {
+				stage,
+				name: safe(error?.name),
+				code: safe(error?.code)
+			})
+		} finally {
+			active = null
+			runningGuild = null
+			schedule(INTERVAL_MS)
 		}
-		finally { active = null; runningGuild = null; schedule(INTERVAL_MS) }
 	}
 	return {
-		start() { if (stopped) { stopped = false; schedule(0) } },
+		start() {
+			if (stopped) {
+				stopped = false
+				schedule(0)
+			}
+		},
 		async stop() {
 			stopped = true
 			clearTimer(timer)

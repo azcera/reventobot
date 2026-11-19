@@ -1,9 +1,7 @@
+import { ChannelType, MessageFlags } from 'discord.js'
+import { getNavigationContainer } from '../commands/admin/navigationBuilder'
 import * as navigation from '../dashboard/navigationMessages'
 import { store as dashboard } from '../dashboard/store'
-import { MessageFlags, ChannelType } from 'discord.js'
-import {
-	getNavigationContainer
-} from '../commands/admin/navigationBuilder'
 import { editReplyWithAutoDelete, replyWithAutoDelete } from './autoDelete'
 require('dotenv').config()
 
@@ -15,22 +13,33 @@ require('dotenv').config()
  * @returns {Promise<ThreadChannel>}
  */
 async function createArchiveChannel(
-	interactionOrGuild: import('discord.js').Guild | import('discord.js').RepliableInteraction<'cached'>,
-	{ channelName, member }: { channelName: string; member: import('discord.js').GuildMember }
+	interactionOrGuild:
+		| import('discord.js').Guild
+		| import('discord.js').RepliableInteraction<'cached'>,
+	{
+		channelName,
+		member
+	}: { channelName: string; member: import('discord.js').GuildMember }
 ) {
-	const guild = 'guild' in interactionOrGuild ? interactionOrGuild.guild : interactionOrGuild
+	const guild =
+		'guild' in interactionOrGuild
+			? interactionOrGuild.guild
+			: interactionOrGuild
 	const isInteraction = 'reply' in interactionOrGuild
 
 	const parentChannel =
 		guild.channels.cache.get(dashboard.getSetting('PARENT_CHANNEL_ID')) ||
-		(await guild.channels.fetch(dashboard.getSetting('PARENT_CHANNEL_ID')).catch(() => null))
+		(await guild.channels
+			.fetch(dashboard.getSetting('PARENT_CHANNEL_ID'))
+			.catch(() => null))
 
 	if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
 		if (isInteraction) {
 			const alreadyDeferred =
 				interactionOrGuild.deferred || interactionOrGuild.replied
 			const send = alreadyDeferred
-				? (opts: { content: string }) => editReplyWithAutoDelete(interactionOrGuild, opts)
+				? (opts: { content: string }) =>
+						editReplyWithAutoDelete(interactionOrGuild, opts)
 				: (opts: { content: string }) =>
 						replyWithAutoDelete(interactionOrGuild, {
 							...opts,
@@ -75,7 +84,9 @@ async function createArchiveChannel(
 				)
 			]
 		})
-		.then(async sent => { await navigation.rememberSent(sent) })
+		.then(async sent => {
+			await navigation.rememberSent(sent)
+		})
 		.catch(error => console.error('[Archive navigation]', error.message))
 
 	// 5. Отвечаем на саму кнопку (если вызов был через взаимодействие)
@@ -83,7 +94,8 @@ async function createArchiveChannel(
 		const alreadyDeferred =
 			interactionOrGuild.deferred || interactionOrGuild.replied
 		const send = alreadyDeferred
-			? (opts: { content: string }) => editReplyWithAutoDelete(interactionOrGuild, opts)
+			? (opts: { content: string }) =>
+					editReplyWithAutoDelete(interactionOrGuild, opts)
 			: (opts: { content: string }) =>
 					replyWithAutoDelete(interactionOrGuild, {
 						...opts,

@@ -1,10 +1,10 @@
+import {
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder
+} from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
 import { ContainerBuilder } from '../../services/markdownContainer'
-import {
-	TextDisplayBuilder,
-	SeparatorBuilder,
-	SeparatorSpacingSize
-} from 'discord.js'
 
 /**
  * Собирает ContainerBuilder с категориями и Link-кнопками навигации.
@@ -12,7 +12,10 @@ import {
  * @param {boolean} isMentionHere - добавлять ли ||@here||
  * @returns {ContainerBuilder}
  */
-function getNavigationContainer(text: string|null = null, isMentionHere: boolean = true) {
+function getNavigationContainer(
+	text: string | null = null,
+	isMentionHere: boolean = true
+) {
 	const container = new ContainerBuilder()
 
 	if (text != null) {
@@ -22,7 +25,9 @@ function getNavigationContainer(text: string|null = null, isMentionHere: boolean
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
 			)
 	}
-	container.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('navigation.document')))
+	container.addTextDisplayComponents(
+		new TextDisplayBuilder().setContent(dashboard.text('navigation.document'))
+	)
 
 	if (isMentionHere) {
 		container.addTextDisplayComponents(

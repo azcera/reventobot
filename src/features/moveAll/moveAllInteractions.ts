@@ -1,17 +1,18 @@
-import { getError } from '../../utils/errors'
 import {
-	StringSelectMenuBuilder,
-	StringSelectMenuOptionBuilder,
 	ActionRowBuilder,
+	ChannelType,
 	MessageFlags,
-	ChannelType
+	StringSelectMenuBuilder,
+	StringSelectMenuOptionBuilder
 } from 'discord.js'
-import {
-	sendEphemeralWithAutoDelete,
-	editReplyWithAutoDelete
-} from '../../utils/autoDelete'
+import { editReplyWithAutoDelete } from '../../utils/autoDelete'
+import { getError } from '../../utils/errors'
 
-async function showMoveAllSelect(interaction: import('discord.js').ButtonInteraction<'cached'> | import('discord.js').ChatInputCommandInteraction<'cached'>) {
+async function showMoveAllSelect(
+	interaction:
+		| import('discord.js').ButtonInteraction<'cached'>
+		| import('discord.js').ChatInputCommandInteraction<'cached'>
+) {
 	// Отвечаем сразу, чтобы избежать таймаута
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral as const })
 
@@ -46,7 +47,9 @@ async function showMoveAllSelect(interaction: import('discord.js').ButtonInterac
 			)
 		)
 
-	const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)
+	const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+		selectMenu
+	)
 
 	await editReplyWithAutoDelete(interaction, {
 		content: 'Пожалуйста, выберите канал для перемещения из списка ниже:',
@@ -54,7 +57,9 @@ async function showMoveAllSelect(interaction: import('discord.js').ButtonInterac
 	})
 }
 
-async function handleMoveAllSelect(interaction: import('discord.js').StringSelectMenuInteraction<'cached'>) {
+async function handleMoveAllSelect(
+	interaction: import('discord.js').StringSelectMenuInteraction<'cached'>
+) {
 	if (interaction.customId !== 'move_all_channel') return
 
 	// ✅ ИСПРАВЛЕНО: Отвечаем сразу, чтобы избежать таймаута
@@ -87,7 +92,7 @@ async function handleMoveAllSelect(interaction: import('discord.js').StringSelec
 	try {
 		const movePromises = []
 		for (const channel of otherVoiceChannels.values()) {
- if (!channel.isVoiceBased()) continue
+			if (!channel.isVoiceBased()) continue
 			for (const member of channel.members.values()) {
 				movePromises.push(
 					member.voice
@@ -121,7 +126,7 @@ async function handleMoveAllSelect(interaction: import('discord.js').StringSelec
 			content: resultMessage
 		})
 	} catch (caught) {
- const error = getError(caught);
+		const error = getError(caught)
 		console.error('[MoveAll] Критическая ошибка при перемещении:', error)
 		await editReplyWithAutoDelete(interaction, {
 			content: '❌ Произошла ошибка при перемещении участников.'
@@ -129,4 +134,4 @@ async function handleMoveAllSelect(interaction: import('discord.js').StringSelec
 	}
 }
 
-export { showMoveAllSelect, handleMoveAllSelect }
+export { handleMoveAllSelect, showMoveAllSelect }

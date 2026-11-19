@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Collection, type Guild, type GuildMember, type Role, type ThreadChannel } from 'discord.js'
+import { ChannelType, Collection, type Guild, type GuildMember, type Role, type ThreadChannel } from 'discord.js'
 import { store } from '../src/dashboard/store'
 import { getArchivesLists } from '../src/features/archive/archivesList'
 import { parseDisplayName } from '../src/utils/parseDisplayName'
@@ -20,7 +20,7 @@ function fixture(count: number, roleCount = 1) {
 		if (i % 3 === 0) threads.set(id, { id, name: `archive siriel ${i + 1}` } as ThreadChannel)
 	}
 	const guild = { members: { cache: members, fetch: async () => members }, roles: { cache: roles },
-		channels: { fetch: async () => ({ threads: { fetchActive: async () => ({ threads }),
+		channels: { fetch: async () => ({ type: ChannelType.GuildText, threads: { fetchActive: async () => ({ threads }),
 			fetchArchived: async () => ({ threads: new Collection() }) } }) } } as unknown as Guild
 	return { guild, members, roles }
 }

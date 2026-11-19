@@ -1,37 +1,39 @@
-import { getError } from '../../utils/errors'
-import { store as dashboard } from '../../dashboard/store'
-import { createArchiveChannel } from '../../utils/channelUtils'
-import { parseDisplayName } from '../../utils/parseDisplayName'
-import { findMemberArchive } from '../archive/archiveSearch'
-import { ContainerBuilder } from '../../services/markdownContainer'
 import {
-	ModalBuilder,
-	TextInputBuilder,
-	TextInputStyle,
 	ActionRowBuilder,
 	ChannelType,
+	LabelBuilder,
+	MessageFlags,
+	ModalBuilder,
 	StringSelectMenuBuilder,
 	StringSelectMenuOptionBuilder,
-	MessageFlags,
 	TextDisplayBuilder,
-	LabelBuilder,
-	SeparatorBuilder
+	TextInputBuilder,
+	TextInputStyle
 } from 'discord.js'
+import { store as dashboard } from '../../dashboard/store'
 import {
-	sendEphemeralWithAutoDelete,
-	followUpEphemeralWithAutoDelete,
-	editReplyWithAutoDelete
-} from '../../utils/autoDelete.js'
-import db = require('../../services/database.js')
-import {
+	buildContainer,
 	isApplicationMod,
-	logAction,
-	buildContainer
+	logAction
 } from '../../features/invite/inviteUtils.js'
+import { ContainerBuilder } from '../../services/markdownContainer'
+import {
+	editReplyWithAutoDelete,
+	followUpEphemeralWithAutoDelete,
+	sendEphemeralWithAutoDelete
+} from '../../utils/autoDelete.js'
+import { createArchiveChannel } from '../../utils/channelUtils'
+import { getError } from '../../utils/errors'
+import { parseDisplayName } from '../../utils/parseDisplayName'
+import { findMemberArchive } from '../archive/archiveSearch'
+import { finishApplicationChannel } from './inviteUtils'
+import db = require('../../services/database.js')
 
 const acceptingApplications = new Set<string>()
 
-async function handleModerationButton(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+async function handleModerationButton(
+	interaction: import('discord.js').ButtonInteraction<'cached'>
+) {
 	const key = `${interaction.guildId}:${interaction.customId.split('_')[2]}`
 	if (acceptingApplications.has(key)) {
 		return sendEphemeralWithAutoDelete(interaction, {
@@ -51,7 +53,9 @@ async function handleModerationButton(interaction: import('discord.js').ButtonIn
 	}
 }
 
-async function processModerationButton(interaction: import('discord.js').ButtonInteraction<'cached'>) {
+async function processModerationButton(
+	interaction: import('discord.js').ButtonInteraction<'cached'>
+) {
 	if (!isApplicationMod(interaction.member)) {
 		return await sendEphemeralWithAutoDelete(interaction, {
 			content: '❌ У вас нет прав для управления заявками!'
@@ -62,7 +66,9 @@ async function processModerationButton(interaction: import('discord.js').ButtonI
 
 	if (actionType === 'reject') {
 		const modal = new ModalBuilder()
-			.setCustomId(`invite_modal_reject_${targetUserId}`)
+			.setCustomId(
+				`invite_modal_reject_${targetUserId}_${interaction.guildId}_${interaction.channelId}`
+			)
 			.setTitle('Причина отклонения')
 		const inputLabel = new LabelBuilder()
 			.setLabel('Укажите причину отказа кандидату')
@@ -85,54 +91,97 @@ async function processModerationButton(interaction: import('discord.js').ButtonI
 	)
 
 	const appData = res.rows[0]
-	if (appData && appData.channel_id !== interaction.channelId) {
+	if (
+		appData &&
+		(appData.channel_id !== interaction.channelId ||
+			(appData.guild_id && appData.guild_id !== interaction.guildId) ||
+			((appData.status ?? 'pending') !== 'pending' &&
+				!(actionType === 'accept' && appData.status === 'accept_failed')))
+	) {
 		return editReplyWithAutoDelete(interaction, {
-			content: '❌ Эта кнопка относится к устаревшей заявке. Откройте текущий канал заявки.'
+			content:
+				'❌ Эта кнопка относится к устаревшей заявке. Откройте текущий канал заявки.'
 		})
 	}
 	if (!appData && actionType !== 'accept') {
-		return await sendEphemeralWithAutoDelete(interaction, {
+		return await editReplyWithAutoDelete(interaction, {
 			content: `❌ Данные о заявке пользователя <@${targetUserId}> не найдены в базе данных.`
 		})
 	}
 
-
 	if (actionType === 'accept') {
-		// 1. СРАЗУ отвечаем на взаимодействие, чтобы Discord не считал его "зависшим" (Unknown interaction)
-		// The action was acknowledged before database access.
-
+		let claimed = false
 		try {
-			// При утрате записи сохраняем исходную анкету из доверенного сообщения бота.
 			let logContainer: ContainerBuilder
-			if (appData) {
+			if (appData?.full_name) {
 				logContainer = await buildContainer(
-					targetUserId, appData.full_name, appData.age,
-					appData.about_and_expectations, appData.previous_experience,
-					'принятия', interaction.user.id
+					targetUserId,
+					appData.full_name,
+					appData.age,
+					appData.about_and_expectations,
+					appData.previous_experience,
+					'принятия',
+					interaction.user.id
 				)
 			} else {
 				const source = interaction.message
 				const container = source.components[0]?.toJSON()
-				if (source.author.id !== interaction.client.user.id || source.webhookId ||
-					source.channelId !== interaction.channelId || source.components.length !== 1 ||
-					container?.type !== 17 || !container.components.some(component =>
-						component.type === 1 && component.components.some(button =>
-							button.type === 2 && 'custom_id' in button &&
-							button.custom_id === interaction.customId && !button.disabled))) {
+				if (
+					source.author.id !== interaction.client.user.id ||
+					source.webhookId ||
+					source.channelId !== interaction.channelId ||
+					source.components.length !== 1 ||
+					container?.type !== 17 ||
+					!container.components.some(
+						component =>
+							component.type === 1 &&
+							component.components.some(
+								button =>
+									button.type === 2 &&
+									'custom_id' in button &&
+									button.custom_id === interaction.customId &&
+									!button.disabled
+							)
+					)
+				) {
 					return editReplyWithAutoDelete(interaction, {
-						content: '❌ Запись заявки отсутствует, а исходную анкету подтвердить не удалось. Автоматическое принятие остановлено.'
+						content:
+							'❌ Запись заявки отсутствует, а исходную анкету подтвердить не удалось. Автоматическое принятие остановлено.'
 					})
 				}
 				logContainer = new ContainerBuilder({
 					...container,
-					components: container.components.filter(component => component.type !== 1)
-				}).setAccentColor(0x2ecc71).addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(`✅ Заявка <@${targetUserId}> принята модератором <@${interaction.user.id}>. Запись в БД отсутствовала; сохранена исходная анкета.`)
-				)
-				console.warn('[Invite] Принятие заявки без записи в БД:', { userId: targetUserId, channelId: interaction.channelId })
+					components: container.components.filter(
+						component => component.type !== 1
+					)
+				})
+					.setAccentColor(0x2ecc71)
+					.addTextDisplayComponents(
+						new TextDisplayBuilder().setContent(
+							`✅ Заявка <@${targetUserId}> принята модератором <@${interaction.user.id}>. Запись в БД отсутствовала; сохранена исходная анкета.`
+						)
+					)
 			}
-			// Проверяем ограничения Discord до выдачи роли и отправки уведомлений.
 			logContainer.toJSON()
+			const values = [targetUserId, interaction.channelId, interaction.guildId]
+			const claim = appData
+				? await db.query(
+						`UPDATE family_applications SET status = 'accepting', guild_id = $3, modified_at = NOW()
+				WHERE user_id = $1 AND channel_id = $2 AND (guild_id IS NULL OR guild_id = $3)
+				AND COALESCE(status, 'pending') IN ('pending', 'accept_failed') RETURNING user_id`,
+						values
+					)
+				: await db.query(
+						`INSERT INTO family_applications
+					(user_id, channel_id, guild_id, full_name, age, about_and_expectations, previous_experience, status)
+					VALUES ($1, $2, $3, '', 0, '', '', 'accepting') ON CONFLICT (user_id) DO NOTHING RETURNING user_id`,
+						values
+					)
+			if (!claim.rows.length)
+				return editReplyWithAutoDelete(interaction, {
+					content: '❌ Заявка уже обработана или недоступна.'
+				})
+			claimed = true
 
 			const targetMember = await interaction.guild.members
 				.fetch(targetUserId)
@@ -140,14 +189,24 @@ async function processModerationButton(interaction: import('discord.js').ButtonI
 			if (targetMember) {
 				// Используем MAIN_ROLE_ID, если он есть, иначе fallback на AUTO_ROLE
 				const roleId = String(
-					dashboard.getSetting('MAIN_ROLE_ID') || dashboard.getSetting('AUTO_ROLE')
+					dashboard.getSetting('MAIN_ROLE_ID') ||
+						dashboard.getSetting('AUTO_ROLE')
 				).trim()
 				await targetMember.roles.add(roleId)
-				const parsed = parseDisplayName(targetMember.displayName) || parseDisplayName(appData?.full_name)
-				if (!parsed) throw new Error('Не удалось определить имя и статик для создания архива.')
-				if (!await findMemberArchive(interaction.guild, parsed)) {
+				const parsed =
+					parseDisplayName(targetMember.displayName) ||
+					parseDisplayName(appData?.full_name)
+				if (!parsed)
+					throw new Error(
+						'Не удалось определить имя и статик для создания архива.'
+					)
+				if (!(await findMemberArchive(interaction.guild, parsed))) {
 					await createArchiveChannel(interaction.guild, {
-						channelName: ['archive', parsed.memberName.toLowerCase(), parsed.memberStatic].join(' '),
+						channelName: [
+							'archive',
+							parsed.memberName.toLowerCase(),
+							parsed.memberStatic
+						].join(' '),
 						member: targetMember
 					})
 				}
@@ -159,7 +218,14 @@ async function processModerationButton(interaction: import('discord.js').ButtonI
 			if (targetUser) {
 				const container = new ContainerBuilder()
 					.setAccentColor(0x2ecc71)
-					.addTextDisplayComponents(new TextDisplayBuilder().setContent(dashboard.text('dm.document.accepted', { server: interaction.guild.name, time: Math.floor(Date.now() / 1000) })))
+					.addTextDisplayComponents(
+						new TextDisplayBuilder().setContent(
+							dashboard.text('dm.document.accepted', {
+								server: interaction.guild.name,
+								time: Math.floor(Date.now() / 1000)
+							})
+						)
+					)
 
 				await targetUser
 					.send({
@@ -170,27 +236,43 @@ async function processModerationButton(interaction: import('discord.js').ButtonI
 			}
 			await logAction(interaction.guild, logContainer)
 
+			const completed = await db.query(
+				`UPDATE family_applications SET status = 'accepted', modified_at = NOW()
+				WHERE user_id = $1 AND channel_id = $2 AND status = 'accepting' RETURNING user_id`,
+				[targetUserId, interaction.channelId]
+			)
+			if (!completed.rows.length)
+				throw new Error('Не удалось подтвердить принятие заявки.')
 			// Если удаление канала не удастся, повторно принять заявку уже нельзя.
-			await interaction.message.edit({
-				components: [logContainer.toJSON()],
-				flags: MessageFlags.IsComponentsV2 as const
-			})
-
-			// Удаляем из БД
-			await db.query('DELETE FROM family_applications WHERE user_id = $1 AND channel_id = $2', [
-				targetUserId, interaction.channelId
-			])
+			await interaction.message
+				.edit({
+					components: [logContainer.toJSON()],
+					flags: MessageFlags.IsComponentsV2 as const
+				})
+				.catch(console.error)
 
 			await followUpEphemeralWithAutoDelete(interaction, {
-				content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удален через 5 секунд.`
+				content: `✅ Заявка <@${targetUserId}> одобрена! Канал будет удалён через 5 секунд.`
 			})
 			setTimeout(
-				() => interaction.channel?.delete().catch(console.error),
+				() =>
+					finishApplicationChannel(
+						interaction.guild,
+						interaction.channelId
+					).catch(console.error),
 				5000
-			)
+			).unref()
 		} catch (caught) {
- const error = getError(caught);
+			const error = getError(caught)
 			console.error('Ошибка при принятии заявки:', error)
+			if (claimed)
+				await db
+					.query(
+						`UPDATE family_applications SET status = 'accept_failed', modified_at = NOW()
+				WHERE user_id = $1 AND channel_id = $2 AND status = 'accepting'`,
+						[targetUserId, interaction.channelId]
+					)
+					.catch(console.error)
 			await followUpEphemeralWithAutoDelete(interaction, {
 				content: '❌ Произошла ошибка при обработке заявки.'
 			})
@@ -245,7 +327,11 @@ async function processModerationButton(interaction: import('discord.js').ButtonI
 
 		await editReplyWithAutoDelete(interaction, {
 			content: 'Выберите комнату для кандидата (меню активно 1 минуту):',
-			components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)]
+			components: [
+				new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+					selectMenu
+				)
+			]
 		})
 
 		// 3. Собираем выбор администратора

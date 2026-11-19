@@ -3,7 +3,7 @@
  * @param {string} inputString
  * @returns {Date|null}
  */
-function parseDateTime(inputString: string) {
+function parseDateTime(inputString: string, now = Date.now()) {
 	const dateTimeRegex = /^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})$/
 	const timeOnlyRegex = /^(\d{2}):(\d{2})$/
 
@@ -19,7 +19,7 @@ function parseDateTime(inputString: string) {
 	} else if (timeOnlyRegex.test(inputString)) {
 		const [, hh, min] = inputString.match(timeOnlyRegex)!
 
-		const mskDateStr = new Date().toLocaleDateString('ru-RU', {
+		const mskDateStr = new Date(now).toLocaleDateString('ru-RU', {
 			timeZone: 'Europe/Moscow'
 		})
 		const [dd, mm, yyyy] = mskDateStr.split('.')
@@ -33,15 +33,21 @@ function parseDateTime(inputString: string) {
 		return null
 	}
 
-	const utcTimestamp = Date.UTC(year, month, day, hours, minutes, 0)
-
-	const targetDate = new Date(utcTimestamp - 3 * 60 * 60 * 1000)
-
-	if (isNaN(targetDate.getTime())) {
+	if (
+		year < 1 ||
+		month < 0 ||
+		month > 11 ||
+		day < 1 ||
+		day > 31 ||
+		hours > 23 ||
+		minutes > 59
+	)
 		return null
-	}
-
-	return targetDate
+	const local = new Date(0)
+	local.setUTCFullYear(year, month, day)
+	local.setUTCHours(hours, minutes)
+	if (local.getUTCMonth() !== month || local.getUTCDate() !== day) return null
+	return new Date(local.getTime() - 3 * 60 * 60 * 1000)
 }
 
 /**
@@ -73,4 +79,4 @@ function getDiscordTimestamp(parsedDate: Date) {
 	return `<t:${finalTimestampSeconds}:t>`
 }
 
-export { parseDateTime, getMskTimeString, getDiscordTimestamp }
+export { getDiscordTimestamp, getMskTimeString, parseDateTime }

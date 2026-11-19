@@ -1,12 +1,8 @@
-import { getError } from '../utils/errors'
+import { Events, GuildMember } from 'discord.js'
 import { store as dashboard } from '../dashboard/store'
-import {
-	GuildMember,
-	Events
-} from 'discord.js'
-import { parseDisplayName } from '../utils/parseDisplayName'
 import { adminPrefix, stripRolePrefix } from '../utils/adminPrefix'
-
+import { getError } from '../utils/errors'
+import { parseDisplayName } from '../utils/parseDisplayName'
 
 /**
  * Действия при добавлению участнику админ ролей
@@ -14,7 +10,12 @@ import { adminPrefix, stripRolePrefix } from '../utils/adminPrefix'
  * @param {GuildMember} oldMember
  * @param {GuildMember} newMember
  */
-let handleMakeAdmin = async (oldMember: import('discord.js').GuildMember | import('discord.js').PartialGuildMember, newMember: import('discord.js').GuildMember) => {
+let handleMakeAdmin = async (
+	oldMember:
+		| import('discord.js').GuildMember
+		| import('discord.js').PartialGuildMember,
+	newMember: import('discord.js').GuildMember
+) => {
 	const rolePrefixes = dashboard.getSetting('ROLE_PREFIXES')
 	const prefixRoleIds = rolePrefixes.map(entry => entry.roleId)
 	const oldHasAdmin = oldMember.roles.cache.filter(role =>
@@ -30,7 +31,11 @@ let handleMakeAdmin = async (oldMember: import('discord.js').GuildMember | impor
 
 	const cleanName = stripRolePrefix(newMember.displayName, rolePrefixes)
 
-	const newPrefix = adminPrefix([...newMember.roles.cache.keys()], dashboard.roleIds('ADMIN_ROLES'), rolePrefixes)
+	const newPrefix = adminPrefix(
+		[...newMember.roles.cache.keys()],
+		dashboard.roleIds('ADMIN_ROLES'),
+		rolePrefixes
+	)
 	const finalNickname = `${newPrefix}${cleanName}`.slice(0, 32)
 
 	if (newMember.displayName !== finalNickname && newMember.manageable) {
@@ -44,7 +49,12 @@ let handleMakeAdmin = async (oldMember: import('discord.js').GuildMember | impor
  * @param {GuildMember} oldMember
  * @param {GuildMember} newMember
  */
-let handleNameEdit = async (oldMember: import('discord.js').GuildMember | import('discord.js').PartialGuildMember, newMember: import('discord.js').GuildMember) => {
+let handleNameEdit = async (
+	oldMember:
+		| import('discord.js').GuildMember
+		| import('discord.js').PartialGuildMember,
+	newMember: import('discord.js').GuildMember
+) => {
 	if (oldMember.displayName === newMember.displayName) return
 
 	const parsedNew = parseDisplayName(newMember.displayName)
@@ -97,7 +107,7 @@ let handleNameEdit = async (oldMember: import('discord.js').GuildMember | import
 			`✅ Ветка переименована: "${existingThread.name}" → "${newThreadName}"`
 		)
 	} catch (caught) {
- const err = getError(caught);
+		const err = getError(caught)
 		console.error('❌ Ошибка при переименовании ветки:', err.message)
 	}
 }
@@ -113,13 +123,18 @@ export = (client: import('discord.js').Client) => {
 		 * @param {GuildMember} oldMember
 		 *
 		 */
-		async (oldMember: import('discord.js').GuildMember | import('discord.js').PartialGuildMember, newMember: import('discord.js').GuildMember) => {
+		async (
+			oldMember:
+				| import('discord.js').GuildMember
+				| import('discord.js').PartialGuildMember,
+			newMember: import('discord.js').GuildMember
+		) => {
 			try {
- if (oldMember.partial) return
- await handleMakeAdmin(oldMember, newMember)
+				if (oldMember.partial) return
+				await handleMakeAdmin(oldMember, newMember)
 				await handleNameEdit(oldMember, newMember)
 			} catch (caught) {
- const error = getError(caught);
+				const error = getError(caught)
 				console.error('❌ Ошибка выполнения: ', error)
 			}
 		}

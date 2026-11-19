@@ -1,28 +1,35 @@
-import { getError } from '../utils/errors'
 import type * as D from 'discord.js'
-import type * as T from '../types'
-import type * as E from 'express'
-import type * as Pg from 'pg'
 import {
-	SectionBuilder,
-	TextDisplayBuilder,
 	ButtonBuilder,
 	ButtonStyle,
 	MessageFlags,
 	PermissionFlagsBits,
+	SectionBuilder,
 	SeparatorBuilder,
 	SeparatorSpacingSize,
+	TextDisplayBuilder,
 	escapeMarkdown
 } from 'discord.js'
-import { ContainerBuilder } from './markdownContainer'
 import { templateText } from '../dashboard/templateText'
+import type * as T from '../types'
+import { getError } from '../utils/errors'
+import { ContainerBuilder } from './markdownContainer'
 import events = require('../config/eventSchedule')
 
 const UPDATE_INTERVAL = 15 * 60000
 const DAY = 86400000
 const MSK = 3 * 3600000
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
-interface ScheduleEvent { id: string; label: string; time: string; days: string[]; is247?: boolean; window?: boolean; note?: string; groupKind?: 'supply' | 'attendance' }
+interface ScheduleEvent {
+	id: string
+	label: string
+	time: string
+	days: string[]
+	is247?: boolean
+	window?: boolean
+	note?: string
+	groupKind?: 'supply' | 'attendance'
+}
 type UpcomingEvent = ScheduleEvent & { timestamp: number }
 const EVENT_EMOJI: Record<string, string> = {
 	Дроп: '📍',
@@ -51,8 +58,10 @@ function canCreateGroup(member: D.GuildMember, store: T.Store) {
 	return (
 		!!member &&
 		(member.permissions.has(PermissionFlagsBits.Administrator) ||
-			member.roles.cache.some(role =>
-				store.roleIds('ADMIN_ROLES').includes(role.id) || store.roleIds('ACCESS_GROUP_ROLES').includes(role.id)
+			member.roles.cache.some(
+				role =>
+					store.roleIds('ADMIN_ROLES').includes(role.id) ||
+					store.roleIds('ACCESS_GROUP_ROLES').includes(role.id)
 			))
 	)
 }
@@ -90,15 +99,35 @@ function selectionId(event: UpcomingEvent) {
 function attackEventAt(now = Date.now()) {
 	const moscow = new Date(now + MSK)
 	const minutes = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
-	if (!(minutes >= 16 * 60 && minutes < 19 * 60 || minutes >= 20 * 60 && minutes < 23 * 60)) return null
-	return (events as ScheduleEvent[]).find(event => ['island', 'fz'].includes(event.id) && event.days.includes(WEEKDAYS[moscow.getUTCDay()])) || null
+	if (
+		!(
+			(minutes >= 16 * 60 && minutes < 19 * 60) ||
+			(minutes >= 20 * 60 && minutes < 23 * 60)
+		)
+	)
+		return null
+	return (
+		(events as ScheduleEvent[]).find(
+			event =>
+				['island', 'fz'].includes(event.id) &&
+				event.days.includes(WEEKDAYS[moscow.getUTCDay()])
+		) || null
+	)
 }
 
 function specialGroupEvents(now = Date.now()): UpcomingEvent[] {
 	const supply = events.find(event => event.id === 'supply')!
-	const attack = (events as ScheduleEvent[]).find(event => ['island', 'fz'].includes(event.id) && event.days.includes(WEEKDAYS[new Date(now + MSK).getUTCDay()]))
-	return [{ ...supply, timestamp: now, groupKind: 'supply' },
-		...(attack ? [{ ...attack, timestamp: now, groupKind: 'attendance' as const }] : [])]
+	const attack = (events as ScheduleEvent[]).find(
+		event =>
+			['island', 'fz'].includes(event.id) &&
+			event.days.includes(WEEKDAYS[new Date(now + MSK).getUTCDay()])
+	)
+	return [
+		{ ...supply, timestamp: now, groupKind: 'supply' },
+		...(attack
+			? [{ ...attack, timestamp: now, groupKind: 'attendance' as const }]
+			: [])
+	]
 }
 
 function getSchedule(now = Date.now()) {
@@ -111,7 +140,14 @@ function getSchedule(now = Date.now()) {
 	}
 }
 
-function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolean, now = Date.now(), emojis?: D.Collection<string, D.GuildEmoji>, banner = ''): D.MessageCreateOptions & D.MessageEditOptions {
+function buildSchedule(
+	events: ScheduleEvent[],
+	updatedAt: number,
+	stale: boolean,
+	now = Date.now(),
+	emojis?: D.Collection<string, D.GuildEmoji>,
+	banner = ''
+): D.MessageCreateOptions & D.MessageEditOptions {
 	const render = templateText
 	const eventEmoji = (label: string) =>
 		emojis
@@ -124,17 +160,24 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 	const upcoming = upcomingEvents(events, now)
 	const nearest = upcoming[0]
 	const container = new ContainerBuilder({ accent_color: null })
-	if (banner) container.addTextDisplayComponents(new TextDisplayBuilder().setContent('<img src="' + banner + '" />'))
-	container
-		.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent(render('schedule.title'))
+	if (banner)
+		container.addTextDisplayComponents(
+			new TextDisplayBuilder().setContent('<img src="' + banner + '" />')
 		)
+	container.addTextDisplayComponents(
+		new TextDisplayBuilder().setContent(render('schedule.title'))
+	)
 	if (nearest) {
 		container.addSectionComponents(
 			new SectionBuilder()
 				.addTextDisplayComponents(
 					new TextDisplayBuilder().setContent(
-						render('schedule.nearest', { emoji: eventEmoji(nearest.label), event: escapeMarkdown(nearest.label), time: nearest.time, relative: `<t:${Math.floor(nearest.timestamp / 1000)}:R>` })
+						render('schedule.nearest', {
+							emoji: eventEmoji(nearest.label),
+							event: escapeMarkdown(nearest.label),
+							time: nearest.time,
+							relative: `<t:${Math.floor(nearest.timestamp / 1000)}:R>`
+						})
 					)
 				)
 				.setButtonAccessory(
@@ -147,12 +190,17 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 				)
 		)
 	}
-	const rows = upcoming
-		.slice(1, 4)
-		.map(
-			event =>
-				render('schedule.next', { emoji: eventEmoji(event.label), time: event.time, event: escapeMarkdown(event.label), tomorrow: event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY ? ' (завтра)' : '' })
-		)
+	const rows = upcoming.slice(1, 4).map(event =>
+		render('schedule.next', {
+			emoji: eventEmoji(event.label),
+			time: event.time,
+			event: escapeMarkdown(event.label),
+			tomorrow:
+				event.timestamp >= Math.floor((now + MSK) / DAY) * DAY - MSK + DAY
+					? ' (завтра)'
+					: ''
+		})
+	)
 	const special = events
 		.filter(
 			event =>
@@ -162,7 +210,8 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 		)
 		.map(event => {
 			let status = ''
-			if (['island', 'fz'].includes(event.id)) status = `\nНападение ${attackEventAt(now)?.id === event.id ? 'разрешено' : 'запрещено'}`
+			if (['island', 'fz'].includes(event.id))
+				status = `\nНападение ${attackEventAt(now)?.id === event.id ? 'разрешено' : 'запрещено'}`
 			if (event.id === 'captures') {
 				const moscow = new Date(now + MSK)
 				const minutes = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
@@ -176,7 +225,17 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 					minutes < end
 				status = `\nКапты ${active ? 'активны' : 'не активны'}`
 			}
-			return { event, text: render('schedule.special', { emoji: eventEmoji(event.label), event: escapeMarkdown(event.label), time: escapeMarkdown(event.time), days: event.days?.length ? ` · ${event.days.join(', ')}` : '', note: event.note ? `\n${escapeMarkdown(event.note)}` : '', status }) }
+			return {
+				event,
+				text: render('schedule.special', {
+					emoji: eventEmoji(event.label),
+					event: escapeMarkdown(event.label),
+					time: escapeMarkdown(event.time),
+					days: event.days?.length ? ` · ${event.days.join(', ')}` : '',
+					note: event.note ? `\n${escapeMarkdown(event.note)}` : '',
+					status
+				})
+			}
 		})
 	if (rows.length)
 		container
@@ -187,22 +246,37 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 				new TextDisplayBuilder().setContent(rows.join('\n'))
 			)
 	for (const { event, text } of special) {
-		container
-			.addSeparatorComponents(
-				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
-			)
+		container.addSeparatorComponents(
+			new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
+		)
 		const content = new TextDisplayBuilder().setContent(text.slice(0, 3000))
-		if (event.id === 'supply' || ['island', 'fz'].includes(event.id) && event.days.includes(WEEKDAYS[new Date(now + MSK).getUTCDay()])) {
-			container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(content).setButtonAccessory(
-				new ButtonBuilder().setCustomId(`schedule_group_${event.id}`).setLabel(render('schedule.button'))
-					.setEmoji(eventEmoji(event.label)).setStyle(ButtonStyle.Primary)
-					.setDisabled(stale)
-			))
+		if (
+			event.id === 'supply' ||
+			(['island', 'fz'].includes(event.id) &&
+				event.days.includes(WEEKDAYS[new Date(now + MSK).getUTCDay()]))
+		) {
+			container.addSectionComponents(
+				new SectionBuilder()
+					.addTextDisplayComponents(content)
+					.setButtonAccessory(
+						new ButtonBuilder()
+							.setCustomId(`schedule_group_${event.id}`)
+							.setLabel(render('schedule.button'))
+							.setEmoji(eventEmoji(event.label))
+							.setStyle(ButtonStyle.Primary)
+							.setDisabled(stale)
+					)
+			)
 		} else container.addTextDisplayComponents(content)
 	}
 	container.addTextDisplayComponents(
 		new TextDisplayBuilder().setContent(
-			render('schedule.footer', { relative: `<t:${Math.floor(updatedAt / 1000)}:R>`, warning: stale ? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.' : '' })
+			render('schedule.footer', {
+				relative: `<t:${Math.floor(updatedAt / 1000)}:R>`,
+				warning: stale
+					? '\n⚠️ Источник недоступен. Показано последнее полученное расписание; создание группа временно отключено.'
+					: ''
+			})
 		)
 	)
 	return {
@@ -212,7 +286,12 @@ function buildSchedule(events: ScheduleEvent[], updatedAt: number, stale: boolea
 	}
 }
 
-function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceOptions & { now?: () => number }) {
+function createEventSchedule({
+	client,
+	pool,
+	store,
+	now = Date.now
+}: T.ServiceOptions & { now?: () => number }) {
 	let timer: ReturnType<typeof setInterval> | undefined
 	let queue: Promise<unknown> = Promise.resolve()
 	function serialized<R>(task: () => Promise<R>) {
@@ -220,8 +299,12 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 		queue = result.catch(() => {})
 		return result
 	}
-	async function updateChannel(channel: D.GuildTextBasedChannel | null, messageId?: string) {
-		if (!channel || !channel.isTextBased()) throw new Error('Канал расписания недоступен')
+	async function updateChannel(
+		channel: D.GuildTextBasedChannel | null,
+		messageId?: string
+	) {
+		if (!channel || !channel.isTextBased())
+			throw new Error('Канал расписания недоступен')
 		const snapshot = getSchedule(now())
 		const payload = buildSchedule(
 			snapshot.events,
@@ -237,7 +320,7 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 				await message.edit(payload)
 				return
 			} catch (caughtError) {
- const error = getError(caughtError)
+				const error = getError(caughtError)
 
 				if (error.code !== 10008) throw error
 			}
@@ -249,7 +332,7 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 				[channel.id, message.id]
 			)
 		} catch (caughtError) {
- const error = getError(caughtError)
+			const error = getError(caughtError)
 
 			await message.delete().catch(() => {})
 			throw error
@@ -262,9 +345,12 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 		for (const row of rows) {
 			try {
 				const channel = await client.channels.fetch(row.channel_id)
-				await updateChannel(channel?.isTextBased() && 'guild' in channel ? channel : null, row.message_id)
+				await updateChannel(
+					channel?.isTextBased() && 'guild' in channel ? channel : null,
+					row.message_id
+				)
 			} catch (caughtError) {
- const error = getError(caughtError)
+				const error = getError(caughtError)
 
 				console.error('[Schedule] Ошибка обновления сообщения:', error.message)
 			}
@@ -297,7 +383,8 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 				specialGroupEvents(now()).find(event => event.id === id) ||
 				upcomingEvents(events, now()).find(
 					event => selectionId(event) === id
-				) || null
+				) ||
+				null
 			)
 		},
 		publish(channel: D.GuildTextBasedChannel) {
@@ -313,11 +400,11 @@ function createEventSchedule({ client, pool, store, now = Date.now }: T.ServiceO
 }
 
 export {
-	createEventSchedule,
-	upcomingEvents,
+	attackEventAt,
 	buildSchedule,
 	canCreateGroup,
-	selectionId,
+	createEventSchedule,
 	getSchedule,
-	attackEventAt
+	selectionId,
+	upcomingEvents
 }
