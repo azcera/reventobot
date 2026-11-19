@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "N286xbViTNBGzNDq7CXQn"
+uri = "file://generated-artifacts/deployment-logs-2026-11-15-0000-1200-msk.txt"
+type = "text"
+title = "Full deployment logs — 15 Nov 2026, 00:00–12:00 MSK"
+description = "Paginated production log export covering the requested interval. Credential-like values redacted where detected."
+logical_id = "87aac678-5a75-4458-ae2d-07c7398dba16"
+content_hash = "sha256:16ca06bf1200879954e31fb53a7d78e877f20f077c2583d59dade1c2c0ed93cd"
+size = 414889
+mtime_ms = 1794735049694
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:e637dcc3-2aec-4b08-a969-36aeb777e1aa/87aac678-5a75-4458-ae2d-07c7398dba16/fa6306d0-8f08-41cf-b00d-6b574ca9c5c4"
+storage_version_token = "1794735054391428"
+content_type = "text/plain"

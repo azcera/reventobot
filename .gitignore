@@ -16,3 +16,4 @@ output/dashboard-unit-tests.log
 .majestic-session.tmp
 .majestic-preview.json
 output
+/generated-artifacts/
