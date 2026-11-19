@@ -1,4 +1,12 @@
-import { ChannelType, Guild, MessageFlags } from 'discord.js'
+import {
+	ChannelType,
+	ComponentType,
+	Guild,
+	MessageFlags,
+	type APIMessageComponent,
+	type Message,
+	type TextChannel
+} from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
 import { isMembershipMessage } from '../../services/familyMembership'
 import { getError } from '../../utils/errors'
@@ -16,6 +24,31 @@ require('dotenv').config()
  * @param {Guild} guild
  */
 const updates = new WeakMap<Guild, { pending: Promise<void>; rerun: boolean }>()
+const reconciledChannels = new WeakSet<TextChannel>()
+
+function listSignature(components: APIMessageComponent[]) {
+	// Discord adds component IDs and default fields to messages fetched from history.
+	return JSON.stringify(components, (key, value) => {
+		if (
+			key === 'id' ||
+			((key === 'accent_color' || key === 'emoji') && value === null) ||
+			(key === 'spoiler' && value === false) ||
+			(key === 'divider' && value === true) ||
+			(key === 'spacing' && value === 1)
+		)
+			return undefined
+		if (value?.type && !Array.isArray(value)) {
+			return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
+		}
+		return value
+	})
+}
+
+function messageSignature(message: Message) {
+	if (message.components.length !== 1 || message.components[0].type !== ComponentType.Container)
+		return undefined
+	return listSignature(message.components.map(component => component.toJSON()))
+}
 
 async function updateLists(guild: Guild) {
 	const previous = updates.get(guild)
@@ -95,6 +128,33 @@ async function refreshLists(guild: Guild) {
 	const pending = new Map(
 		containers.map(page => [`${page.type}:${page.part}`, page])
 	)
+	const reconcile = !reconciledChannels.has(adminChannel)
+	const signatures = new Map<string, string[]>()
+	const remember = (signature: string, key: string) => {
+		const keys = signatures.get(signature) ?? []
+		if (!keys.includes(key)) keys.push(key)
+		signatures.set(signature, keys)
+	}
+	if (reconcile) {
+		for (const [key, page] of pending) remember(listSignature([page.container.toJSON()]), key)
+	}
+	const retained = new Set<string>()
+	const ownsMessage = (message: Message) =>
+		message.author.id === guild.client.user.id &&
+		!message.webhookId &&
+		!isMembershipMessage(message)
+	const register = async (
+		message: Message,
+		{ type, part }: Pick<(typeof containers)[number], 'type' | 'part'>
+	) => {
+		await pool.query(
+			`INSERT INTO settings_archive_messages (message_id, discord_timestamp, type, part, guild_id, channel_id)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (message_id) DO UPDATE SET type = EXCLUDED.type, part = EXCLUDED.part,
+				guild_id = EXCLUDED.guild_id, channel_id = EXCLUDED.channel_id`,
+			[message.id, message.createdTimestamp, type, part, guild.id, adminChannel.id]
+		)
+	}
 	for (const row of rows) {
 		const message = await adminChannel.messages
 			.fetch({ message: row.message_id, force: true, cache: false })
@@ -105,23 +165,24 @@ async function refreshLists(guild: Guild) {
 		if (!message && !row.channel_id) continue
 		const key = `${row.type}:${row.part}`
 		const page = pending.get(key)
-		const owned =
-			message &&
-			message.author.id === guild.client.user.id &&
-			!message.webhookId &&
-			!isMembershipMessage(message)
+		const owned = message && ownsMessage(message)
 		// Legacy IDs only identify their original page. Leave ambiguous duplicates in place.
 		if (owned && !row.channel_id && !page) continue
 		if (owned && page) {
+			if (reconcile && row.channel_id) {
+				const signature = messageSignature(message)
+				if (signature) remember(signature, key)
+			}
 			await message.edit({
 				components: [page.container],
-				flags: MessageFlags.IsComponentsV2
+				allowedMentions: { parse: [] }
 			})
 			await pool.query(
 				'UPDATE settings_archive_messages SET guild_id = $2, channel_id = $3 WHERE message_id = $1',
 				[message.id, guild.id, adminChannel.id]
 			)
 			pending.delete(key)
+			retained.add(message.id)
 			continue
 		}
 		if (owned) await message.delete()
@@ -131,24 +192,43 @@ async function refreshLists(guild: Guild) {
 		)
 	}
 
+	if (reconcile) {
+		// The previous publisher could leave pages in Discord without registry rows.
+		const legacyIds = new Set(rows.filter(row => !row.channel_id).map(row => row.message_id))
+		let before: string | undefined
+		for (;;) {
+			const messages = await adminChannel.messages.fetch({ limit: 100, before, cache: false })
+			for (const message of messages.values()) {
+				if (retained.has(message.id) || !ownsMessage(message)) continue
+				const signature = messageSignature(message)
+				const keys = signature && signatures.get(signature)
+				if (!keys) continue
+				const key = keys.find(key => pending.has(key))
+				const page = key && pending.get(key)
+				if (key && page) {
+					await register(message, page)
+					pending.delete(key)
+				} else {
+					await message.delete()
+					if (legacyIds.has(message.id)) await pool.query(
+						'DELETE FROM settings_archive_messages WHERE message_id = $1', [message.id]
+					)
+				}
+			}
+			if (messages.size < 100) break
+			before = messages.last()!.id
+		}
+		reconciledChannels.add(adminChannel)
+	}
+
 	for (const { type, part, container } of pending.values()) {
 		const message = await adminChannel.send({
 			components: [container],
-			flags: MessageFlags.IsComponentsV2
+			flags: MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications,
+			allowedMentions: { parse: [] }
 		})
 		try {
-			await pool.query(
-				`INSERT INTO settings_archive_messages (message_id, discord_timestamp, type, part, guild_id, channel_id)
-				VALUES ($1, $2, $3, $4, $5, $6)`,
-				[
-					message.id,
-					message.createdTimestamp,
-					type,
-					part,
-					guild.id,
-					adminChannel.id
-				]
-			)
+			await register(message, { type, part })
 		} catch (error) {
 			await message.delete().catch(console.error)
 			throw error
