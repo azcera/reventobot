@@ -1,8 +1,13 @@
 import { test, expect, type Page } from '@playwright/test'
+import type { SettingField } from '../../frontend/src/types'
 
 async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец', templateVariables: Record<string, Record<string, string>> = {}) {
-	const config = { revision: 3, bindings: {}, templateVariables, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] }
+	const config = { revision: 3, bindings: {}, templateVariables, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] as SettingField[] }
 	config.settings.push({ key: 'ARCHIVE_AUTO_DELETE_EMPTY', label: 'Автоматически удалять пустые архивы при выходе участника с сервера', type: 'boolean', value: false })
+	config.settings.push(
+		{ key: 'CAPTURE_RANK_CHANNEL_ID', label: 'Канал рейтинга каптов', type: 'channel', channelTypes: [0], value: 'parent' },
+		{ key: 'CAPTURE_RANK_KILL_WEIGHT', label: 'Вес киллов и урона', type: 'percentage', value: '70' }
+	)
 	const preset = { id: '12345678-1234-1234-1234-123456789012', command: 'test', target: 'Сбор', channelId: 'parent', accessRoleId: 'one', maxMain: 10 }
 	let curators = [{ roleId: 'one', managedRoleIds: ['one'] }]
 	const requests: { path: string; body: any }[] = []
@@ -20,7 +25,7 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 			Object.assign(config, { templateVariables: { [body.group]: body.values }, templateVariableLabels: { [body.group]: body.labels } })
 			config.revision++
 		}
-		const data: Record<string, unknown> = { overview: { ready: true, ping: 42, database: true, uptime: 3600, history: [] }, history: [], session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'role-curators': { revision: 3, curators }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
+		const data: Record<string, unknown> = { overview: { ready: true, ping: 42, database: true, uptime: 3600, history: [] }, history: [], 'capture-ranking': { ready: true, players: [{ position: 1, name: 'Viper', staticId: '123', captures: 4, damage: 643.7, kills: 4.2, mvp: 6 }] }, session: { csrf: 'test', guild: { id: 'g', name: 'Guild' }, user: { id: 'u', name: 'User' } }, config, resources: { roles: [{ id: 'one', name: 'Первая' }, { id: 'two', name: 'Вторая' }], channels: [{ id: 'parent', name: 'общий', type: 0, canSend: true }] }, 'capture-presets': { revision: 3, presets: body?.presets || [preset] }, 'role-curators': { revision: 3, curators }, 'channel-threads/parent': [{ id: 'thread', name: 'Ветка', type: 11 }], 'permanent-message/publish': config, templates: config, 'template-variables': { ...config, revision: 4, templateVariables: { 'Система повышения': body?.values } } }
 		await route.fulfill({ json: ['settings', 'template-variables'].includes(path) ? config : data[path] ?? {} })
 	})
 	await page.goto('/#' + hash)
@@ -67,6 +72,20 @@ test('missing DB settings can be opened, saved and remain configured after reloa
 	await expect(page.getByText('Не заполнено в БД:', { exact: false })).toHaveCount(0)
 	await page.reload()
 	await expect(page.getByText('Не заполнено в БД:', { exact: false })).toHaveCount(0)
+})
+
+test('capture ranking shows the current standings and saves complementary weights', async ({ page }) => {
+	const requests = await setup(page, 'settings')
+	await page.getByRole('heading', { name: 'Рейтинг каптов', exact: true }).click()
+	await expect(page.getByRole('row', { name: /1 Viper 123 4/ })).toBeVisible()
+	await expect(page.getByLabel('Вес киллов (%)')).toHaveValue('70')
+	await page.getByLabel('Вес урона (%)').fill('45')
+	await expect(page.getByLabel('Вес киллов (%)')).toHaveValue('55')
+	await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
+	await expect.poll(() => requests.find(r => r.path === 'settings')?.body).toEqual({
+		revision: 3, values: { CAPTURE_RANK_KILL_WEIGHT: '55' }
+	})
+	await expect(page.getByLabel('Вес урона (%)')).toHaveValue('45')
 })
 
 test('thread picker loads lazily and publishes selected thread', async ({ page }) => {

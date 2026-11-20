@@ -191,6 +191,18 @@ export interface ApiRoutes {
 	history: HistoryEntry[]
 	'role-curators': { curators: RoleCurator[]; revision: number }
 	majestic: MajesticState
+	'capture-ranking': {
+		ready: boolean
+		players: {
+			staticId: string
+			name: string
+			position: number
+			captures: number
+			kills: number
+			damage: number
+			mvp: number
+		}[]
+	}
 	'capture-presets': { presets: CapturePreset[]; revision: number }
 	'template-variables': Config
 	templates: Config

@@ -14,14 +14,10 @@ import {
 	battleSummary,
 	bindingIndex,
 	FAMILY_ID,
-	normalizeWar,
-	rulesFromEnv,
-	SERVER
 } from '../features/capture/familyWarData'
 import type {
 	BindingMember,
 	Decisions,
-	RawWar,
 	War,
 	WarPlayer
 } from '../features/capture/familyWarTypes'
@@ -38,6 +34,8 @@ interface NoticeRow {
 	api_id: string | null
 	version: string | null
 }
+import { fetchFinishedCaptures } from './finishedCaptures'
+
 const RESULT_ID = 1698001
 const CATCH_UP_INTERVAL = 15 * 60000
 
@@ -223,32 +221,7 @@ export function createCaptureResults({
 			group.every(row => row.api_id === null)
 		)
 		if (!pending.length) return
-		const response = await fetchImpl(
-			`https://api.majestic-files.net/v1/ext/family-wars/${SERVER}`,
-			{
-				headers: { Accept: 'application/json', 'x-api-key': key },
-				signal: AbortSignal.timeout(20000),
-				redirect: 'error'
-			}
-		)
-		if (!response.ok) throw new Error(`Family Wars HTTP ${response.status}`)
-		const data = (await response.json()) as {
-			code: number
-			status: boolean
-			result?: { serverId: string; captures: RawWar[] }
-		}
-		if (
-			data.code !== 200 ||
-			data.status !== true ||
-			data.result?.serverId !== SERVER ||
-			!Array.isArray(data.result.captures)
-		)
-			throw new Error('Неожиданный формат Family Wars API.')
-		const wars = data.result.captures
-			.map(raw => normalizeWar(raw, rulesFromEnv(env)))
-			.filter(
-				(war): war is War => !!war && war.status === 'finished' && !war.neutral
-			)
+		const wars = await fetchFinishedCaptures(key, env, fetchImpl)
 		const claimed = new Set(
 			(
 				await pool.query<{ api_id: string }>(

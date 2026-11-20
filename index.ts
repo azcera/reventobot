@@ -253,6 +253,7 @@ async function shutdown(exitCode = 0) {
 		() => client.familyWars?.stop(),
 		() => client.captureExpiry?.stop(),
 		() => client.captureResults?.stop(),
+		() => client.captureRankings?.stop(),
 		() => client.majesticNicknames?.stop(),
 		() => client.familyMembership?.stop(),
 		() => client.eventSchedule?.stop()

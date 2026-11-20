@@ -117,6 +117,16 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 		type: 'channel',
 		channelTypes: [0, 5]
 	},
+	CAPTURE_RANK_CHANNEL_ID: {
+		label: 'Канал рейтинга каптов',
+		type: 'channel',
+		channelTypes: [0]
+	},
+	CAPTURE_RANK_KILL_WEIGHT: {
+		label: 'Вес киллов и урона',
+		type: 'percentage',
+		default: '70'
+	},
 	CAPT_INFO_CHANNEL_ID: {
 		label: 'Канал объявлений каптов из Telegram',
 		type: 'channel',

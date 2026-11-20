@@ -25,10 +25,11 @@ function isArchiveUsed(name: string, members: Iterable<GuildMember>) {
 	)
 }
 
-async function fetchArchiveThreads(guild: Guild) {
-	const parent = await guild.channels.fetch(
-		store.getSetting('PARENT_CHANNEL_ID')
-	)
+async function fetchArchiveThreads(
+	guild: Guild,
+	parentId = store.getSetting('PARENT_CHANNEL_ID')
+) {
+	const parent = await guild.channels.fetch(parentId)
 	if (parent?.type !== ChannelType.GuildText)
 		throw new Error('Канал архивов недоступен.')
 	const threads = new Collection<string, ThreadChannel>()

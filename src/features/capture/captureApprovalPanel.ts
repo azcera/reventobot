@@ -62,7 +62,12 @@ function snapshot(row: CaptureRow, interaction: Interaction) {
 	)
 	return row.sort_mode === 'time'
 		? players.map(player => player.userId)
-		: sortByRolePriority(players, interaction.guild)
+		: sortByRolePriority(
+			players, interaction.guild,
+			row.sort_mode === 'rating'
+				? interaction.client.captureRankings?.byDiscord(interaction.guild)
+				: undefined
+		)
 }
 
 function pagePlayers(panel: Panel) {

@@ -1,3 +1,4 @@
+import { captureSortLabel } from './captureSort'
 import {
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -143,13 +144,15 @@ function registrationMessage(
 	store: Store,
 	now = Date.now()
 ) {
+	const ranks = guild.client?.captureRankings?.byStatic()
 	const rows = queueRows(
 		war,
 		registration,
 		guild.members.cache,
 		decisions,
 		store.roleIds('PRIORITY_ROLES'),
-		now
+		now,
+		ranks
 	)
 	const confirmed = rows.filter(row => row.confirmed)
 	const waiting = rows.filter(row => !row.confirmed)
@@ -164,7 +167,8 @@ function registrationMessage(
 						? '✅'
 						: '🎮'
 					: '⏳'
-				return `${index + 1}. ${marker} ${label}${row.declined ? ' — отказ в Discord' : ''}${row.conflict ? ' — ⚠️ проверьте привязку static' : ''}`
+				const rank = row.static && ranks?.get(row.static)
+				return `${index + 1}. ${marker} ${label}${rank ? ` · #${rank}` : ''}${row.declined ? ' — отказ в Discord' : ''}${row.conflict ? ' — ⚠️ проверьте привязку static' : ''}`
 			})
 			.join('\n') || 'Пока пусто'
 	const closed = registrationClosed(war, now) || Boolean(registration.closedAt)
@@ -190,10 +194,7 @@ function registrationMessage(
 					? 'Регистрация закрыта. Обновление остановлено.'
 					: 'Время и состав обновляются автоматически.',
 				freshness,
-				mode:
-					registration.sortMode === 'time'
-						? 'по времени записи'
-						: 'по роли и времени записи',
+				mode: captureSortLabel(registration.sortMode).toLowerCase(),
 				confirmedCount: confirmed.length,
 				confirmedPlayers: list(confirmed),
 				waitingCount: waiting.length,
@@ -221,11 +222,8 @@ function registrationMessage(
 		new ButtonBuilder()
 			.setCustomId(`war_sort_${suffix(war)}`)
 			.setLabel(
-				store.text(
-					registration.sortMode === 'time'
-						? 'capture.sortPriority'
-						: 'capture.sortTime'
-				)
+				registration.sortMode === 'rating' ? captureSortLabel('rating') :
+					store.text(registration.sortMode === 'time' ? 'capture.sortTime' : 'capture.sortPriority')
 			)
 			.setStyle(ButtonStyle.Secondary)
 			.setDisabled(closed)

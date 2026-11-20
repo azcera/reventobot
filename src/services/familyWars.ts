@@ -1,3 +1,4 @@
+import { captureSortPreference, nextCaptureSort, saveCaptureSort } from '../features/capture/captureSort'
 import type * as D from 'discord.js'
 import {
 	MessageFlags,
@@ -571,7 +572,7 @@ function createFamilyWars({
 						joins: {},
 						declined: {},
 						seen: {},
-						sortMode: 'priority',
+						sortMode: await captureSortPreference(pool, message.guild!.id),
 						page: 0
 					},
 					registration_channel_id: String(store.getSetting('PLUS_CHANNEL_ID'))
@@ -647,7 +648,11 @@ function createFamilyWars({
 						)
 					const guild = interaction.guild
 					// Joining/leaving/sorting uses the cache maintained by GuildMembers events.
-					if (create) await loadMembers(guild)
+					if (create) {
+						await loadMembers(guild)
+						if (!row.registration_state)
+							row.registration.sortMode = await captureSortPreference(pool, guild.id)
+					}
 					const bindings = await decisions(guild.id)
 					const reg = row.registration
 					reg.joins ||= {}
@@ -667,12 +672,15 @@ function createFamilyWars({
 							)
 						)
 							reg.declined[userId] = now()
-					} else if (match[1] === 'war_sort')
-						reg.sortMode = reg.sortMode === 'time' ? 'priority' : 'time'
-					else if (match[1] === 'war_page')
+					} else if (match[1] === 'war_sort') {
+						reg.sortMode = nextCaptureSort(reg.sortMode)
+						reg.page = 0
+					} else if (match[1] === 'war_page')
 						reg.page = Math.max(0, Number(match[3]) || 0)
 					noteRoster(row)
 					await save(row)
+					if (match[1] === 'war_sort')
+						await saveCaptureSort(pool, guild.id, reg.sortMode!)
 					if (create) {
 						row.registration_channel_id ||= String(
 							store.getSetting('PLUS_CHANNEL_ID')

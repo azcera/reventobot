@@ -81,6 +81,9 @@ export = (client: import('discord.js').Client) => {
 				return
 			}
 
+			if (interaction.isButton() && interaction.customId.startsWith('capstats:'))
+				return await client.captureRankings?.handle(interaction)
+
 			if (
 				interaction.isButton() &&
 				(interaction.customId.startsWith('capt_api_') ||

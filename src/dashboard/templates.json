@@ -798,7 +798,7 @@
 		"type": "button",
 		"variables": [],
 		"maxLength": 80,
-		"default": "Сортировать по времени"
+		"default": "По времени"
 	},
 	"capture.sortPriority": {
 		"group": "Регистрация на капт",
@@ -806,7 +806,25 @@
 		"type": "button",
 		"variables": [],
 		"maxLength": 80,
-		"default": "Сортировать по приоритету"
+		"default": "По приоритету"
+	},
+	"captureRanking.document": {
+		"group": "Рейтинг каптов",
+		"label": "Сообщение рейтинга целиком",
+		"type": "text",
+		"components": true,
+		"maxLength": 4000,
+		"variables": ["ranking", "players", "page", "pages"],
+		"default": "## Рейтинг каптов\nИгроков: {players} · Страница {page}/{pages}\n\nМесто · Игрок · STATIC · Капты · Ср. урон · Ср. киллы · MVP\n{ranking}"
+	},
+	"captureHistory.document": {
+		"group": "История каптов",
+		"label": "Архивное сообщение целиком",
+		"type": "text",
+		"components": true,
+		"maxLength": 4000,
+		"variables": ["player", "static", "captures", "mvp", "position", "history", "page", "pages"],
+		"default": "## История каптов · {player} | {static}\nМесто в рейтинге: {position} · Капты: {captures} · MVP: {mvp}\nСтраница {page}/{pages}\n\n{history}"
 	},
 	"registration.document": {
 		"group": "Обычная регистрация",
@@ -873,7 +891,7 @@
 	"registration.sortTime": {
 		"group": "Обычная регистрация",
 		"label": "Сортировка по времени",
-		"default": "Сортировать по времени",
+		"default": "По времени",
 		"type": "button",
 		"variables": [],
 		"maxLength": 80
@@ -881,7 +899,7 @@
 	"registration.sortPriority": {
 		"group": "Обычная регистрация",
 		"label": "Сортировка по приоритету",
-		"default": "Сортировать по приоритету",
+		"default": "По приоритету",
 		"type": "button",
 		"variables": [],
 		"maxLength": 80

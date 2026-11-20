@@ -215,6 +215,9 @@ async function validateSettings(
 					)
 				seen.add(entry.roleId)
 			}
+		} else if (field.type === 'percentage') {
+			if (typeof value !== 'string' || !/^(?:100|[0-9]{1,2})$/.test(value))
+				throw problem(400, 'Укажите целый процент от 0 до 100.')
 		} else if (field.type === 'color') {
 			if (typeof value !== 'string' || !/^#[a-f0-9]{6}$/i.test(value))
 				throw problem(400, 'Некорректный цвет.')
@@ -311,6 +314,11 @@ function registerDashboard(
 			csrf: req.csrf,
 			guild: { id: req.guild.id, name: req.guild.name }
 		})
+	)
+	app.get('/api/capture-ranking', (req: E.Request, res: E.Response) =>
+		res.set('Cache-Control', 'no-store').json(
+			client.captureRankings?.view() ?? { ready: false, players: [] }
+		)
 	)
 	app.get('/api/schedule', (req: E.Request, res: E.Response) =>
 		res.set('Cache-Control', 'no-store').json(getSchedule())

@@ -25,6 +25,7 @@ interface MembershipOptions {
 			options?: { includeDismissals?: boolean }
 		): Promise<T.MembershipSnapshot>
 	}
+	onSnapshot?: (snapshot: T.MembershipSnapshot) => void
 	env?: T.Env
 	logger?: Pick<Console, 'info' | 'error'>
 	setTimer?: typeof setTimeout
@@ -184,6 +185,7 @@ function createFamilyMembership({
 	pool,
 	store,
 	sync,
+	onSnapshot,
 	env = process.env,
 	logger = console,
 	setTimer = setTimeout,
@@ -206,6 +208,7 @@ function createFamilyMembership({
 		const snapshot = await sync.membershipSnapshot(guild, {
 			includeDismissals: automatic
 		})
+		onSnapshot?.(snapshot)
 		return {
 			...classify(
 				snapshot,

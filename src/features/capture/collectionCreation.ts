@@ -11,6 +11,7 @@ ALTER TABLE collection_creations ADD COLUMN IF NOT EXISTS channel_id TEXT,
 	ADD COLUMN IF NOT EXISTS discord_timestamp TEXT,
 	ADD COLUMN IF NOT EXISTS target TEXT,
 	ADD COLUMN IF NOT EXISTS max_main INTEGER,
+	ADD COLUMN IF NOT EXISTS sort_mode TEXT NOT NULL DEFAULT 'priority',
 	ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMPTZ
 `
 
@@ -30,12 +31,12 @@ export async function completeCollectionCreation(
 	const { rows } = await pool.query(
 		`WITH operation AS (
 		UPDATE collection_creations SET message_url = $3 WHERE creation_key = $1 AND message_url IS NULL
-		RETURNING channel_id, discord_timestamp, target, max_main
+		RETURNING channel_id, discord_timestamp, target, max_main, sort_mode
 	)
 	INSERT INTO active_captures (message_id, discord_timestamp, main_list, reserve_list, left_list,
-		main_list_meta, reserve_list_meta, target, max_main, channel_id)
+		main_list_meta, reserve_list_meta, target, max_main, channel_id, sort_mode)
 	SELECT $2, discord_timestamp, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
-		target, max_main, channel_id FROM operation RETURNING message_id`,
+		target, max_main, channel_id, sort_mode FROM operation RETURNING message_id`,
 		[key, message.id, message.url]
 	)
 	return rows.length > 0

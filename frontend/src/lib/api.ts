@@ -171,6 +171,11 @@ function validResponse(path: string, value: unknown): boolean {
 		return majestic(value)
 	if (path.startsWith('container-message?'))
 		return record(value) && array(value.items, item) && source(value.source)
+	if (path === 'capture-ranking')
+		return record(value) && boolean(value.ready) && array(value.players, player =>
+			record(player) && text(player.staticId) && text(player.name) &&
+			['position', 'captures', 'kills', 'damage', 'mvp'].every(key => number(player[key]))
+		)
 	if (path === 'role-prefixes/sync')
 		return (
 			record(value) &&

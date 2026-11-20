@@ -18,6 +18,7 @@ import type {
 	SettingsDraft
 } from '../types'
 import { errorMessage } from '../types'
+import { CaptureRanking } from './CaptureRanking'
 
 function MoveActions({
 	index,
@@ -350,8 +351,9 @@ export function Settings({
 			</div>
 		</div>
 	)
-	const category = (key: string) =>
-		key.startsWith('MAJESTIC_')
+	const category = (key: string) => {
+		if (key.startsWith('CAPTURE_RANK_')) return 'Рейтинг каптов'
+		return key.startsWith('MAJESTIC_')
 			? 'Majestic'
 			: /TELEGRAM|DISCORD_NOTIFICATION/.test(key)
 				? 'Telegram и рассылки'
@@ -364,6 +366,7 @@ export function Settings({
 							: /PREFIX/.test(key)
 								? 'Префиксы участников'
 								: 'Общие настройки'
+	}
 	const categories = Object.entries(
 		fieldsForPage.reduce<Record<string, SettingField[]>>((groups, field) => {
 			const title = access ? 'Дополнительные роли доступа' : category(field.key)
@@ -467,6 +470,13 @@ export function Settings({
 											aria-hidden='true'
 										/>
 									</label>
+								) : field.type === 'percentage' ? (
+									expanded[title] || search.trim() ? (
+										<CaptureRanking key={field.key} api={api}
+											weight={String(draft[field.key] ?? field.value)}
+											revision={config.revision}
+											onChange={value => set(field.key, value)} />
+									) : null
 								) : field.type === 'color' ? (
 									<Field
 										key={field.key}

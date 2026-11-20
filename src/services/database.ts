@@ -71,6 +71,9 @@ async function initDb() {
 		).COLLECTION_CREATION_SCHEMA
 	)
 	await pool.query(
+		(require('../features/capture/captureRanking') as typeof import('../features/capture/captureRanking')).CAPTURE_RANKING_SCHEMA
+	)
+	await pool.query(
 		(require('./familyWars') as typeof import('./familyWars')).FAMILY_WAR_SCHEMA
 	)
 	await pool.query(`

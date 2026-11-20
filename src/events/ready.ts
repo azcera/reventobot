@@ -8,6 +8,7 @@ import {
 } from '../features/invite/inviteUtils'
 import { registerAdminApplicationCommands } from '../services/adminApplicationCommands'
 import { createCaptureExpiry } from '../services/captureExpiry'
+import { createCaptureRankings } from '../services/captureRankings'
 import { createCaptureResults } from '../services/captureResults'
 import { createEventSchedule } from '../services/eventSchedule'
 import { createFamilyMembership } from '../services/familyMembership'
@@ -35,15 +36,18 @@ export = (client: import('discord.js').Client) => {
 			store
 		})
 		client.majesticNicknames.start()
+		client.captureRankings = createCaptureRankings({ pool, store })
 		client.familyMembership = createFamilyMembership({
 			client,
 			pool,
 			store,
-			sync: client.majesticSync
+			sync: client.majesticSync,
+			onSnapshot: client.captureRankings.updateRoster
 		})
 		client.familyMembership.start()
 		const guild = client.guilds.cache.get(process.env.GUILD_ID || '')
 		if (guild) {
+			client.captureRankings.start(guild)
 			let active: Promise<void> | undefined
 			const reconcile = async () => {
 				await Promise.allSettled([

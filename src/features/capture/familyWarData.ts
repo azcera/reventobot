@@ -1,3 +1,4 @@
+import { compareCaptureRanks } from './captureSort'
 import type { GuildMember } from 'discord.js'
 import type {
 	BindingMember,
@@ -202,7 +203,8 @@ function queueRows(
 	members: ReadonlyMap<string, GuildMember>,
 	decisions: Decisions,
 	priorityRoles: string[],
-	now: number
+	now: number,
+	ranks?: ReadonlyMap<string, number>
 ): QueueRow[] {
 	const bindings = bindingIndex(members.values(), decisions)
 	const byUser = new Map<string, string>()
@@ -246,6 +248,9 @@ function queueRows(
 	}
 	return rows.sort(
 		(a, b) =>
+			(registration.sortMode === 'rating'
+				? compareCaptureRanks(ranks?.get(a.static ?? ''), ranks?.get(b.static ?? ''))
+				: 0) ||
 			(registration.sortMode === 'time'
 				? 0
 				: priority(a.userId) - priority(b.userId)) ||

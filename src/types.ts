@@ -230,6 +230,7 @@ declare module 'discord.js' {
 		captureExpiry?: ReturnType<
 			typeof import('./services/captureExpiry').createCaptureExpiry
 		>
+		captureRankings?: ReturnType<typeof import('./services/captureRankings').createCaptureRankings>
 		captureResults?: ReturnType<
 			typeof import('./services/captureResults').createCaptureResults
 		>

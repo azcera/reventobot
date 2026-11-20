@@ -6,10 +6,17 @@ import { store } from '../src/dashboard/store'
 let row: any
 let connections = 0
 const queries: string[] = []
+const sortPreferences = new Map<string, string>()
 const claims = new Map<string, { message_url?: string; expires: number }>()
 const database = {
 	async query(sql: string, values: any[] = []): Promise<{ rows: any[] }> {
 		queries.push(sql)
+		if (sql.startsWith('SELECT mode FROM capture_sort_preferences')) {
+			const mode = sortPreferences.get(values[0])
+			return { rows: mode ? [{ mode }] : [] }
+		}
+		if (sql.startsWith('INSERT INTO capture_sort_preferences'))
+			sortPreferences.set(values[0], values[1])
 		if (sql.startsWith('INSERT INTO collection_creations')) {
 			const existing = claims.get(values[0])
 			if (existing && existing.expires > Date.now()) return { rows: [] }
@@ -56,6 +63,7 @@ function reset(main: string[] = [], reserve: string[] = []) {
 	queries.length = 0
 	connections = 0
 	claims.clear()
+	sortPreferences.clear()
 	row = { discord_timestamp: `<t:${Math.floor(Date.now() / 1000) + 1800}:F>`, target: 'Тест', max_main: 1,
 		main_list: main, reserve_list: reserve, left_list: [], approved_users: [], main_list_meta: main.map((userId, i) => ({ userId, joinedAt: i })),
 		reserve_list_meta: reserve.map((userId, i) => ({ userId, joinedAt: i + main.length })), sort_mode: 'time' }
@@ -327,4 +335,29 @@ test('collection creation saves before reminders, allows repeats and propagates 
 	assert.equal(sends, 9) // The failed creation sends no reminders.
 	await assert.rejects(captures.sendCollection(interaction, row.discord_timestamp, 'Другая цель', 20, true, 'channel'), /ещё проверяется/)
 	assert.equal(sends, 9)
+})
+
+test('one sort button cycles, persists its mode, and a new MCL collection inherits it', async () => {
+	reset(['first'])
+	row.sort_mode = 'rating'
+	const f = fixture('admin', 'capt_sort_toggle')
+	for (const mode of ['priority', 'time', 'rating', 'priority']) {
+		await captures.handleApproval(f.interaction)
+		assert.equal(row.sort_mode, mode)
+		assert.equal(sortPreferences.get('guild'), mode)
+	}
+	let payload: unknown
+	const channel = {
+		id: 'channel', isSendable: () => true,
+		async send(content: unknown) {
+			payload = content
+			return { id: 'message', url: 'https://discord.com/collection' }
+		}
+	}
+	const interaction = {
+		id: 'mcl', guild: { id: 'guild', channels: { fetch: async () => channel } }
+	} as unknown as ModalSubmitInteraction<'cached'>
+	await captures.sendCollection(interaction, row.discord_timestamp, 'MCL', 20, false, 'channel')
+	assert.match(JSON.stringify(payload), /По приоритету/)
+	assert.match(JSON.stringify(payload), /MCL/)
 })

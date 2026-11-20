@@ -1,3 +1,7 @@
+import {
+	captureSortLabel, captureSortPreference, compareCaptureRanks,
+	nextCaptureSort, saveCaptureSort
+} from './captureSort'
 import { enqueueCaptureEdit } from './captureMessageQueue'
 import {
 	collectionSortId,
@@ -118,10 +122,13 @@ function getRolePriority(member: import('discord.js').GuildMember) {
  */
 function sortByRolePriority(
 	list: Array<{ userId: string; joinedAt: number }>,
-	guild: import('discord.js').Guild
+	guild: import('discord.js').Guild,
+	ranks?: ReadonlyMap<string, number>
 ) {
 	return [...list]
 		.sort((a, b) => {
+			const difference = compareCaptureRanks(ranks?.get(a.userId), ranks?.get(b.userId))
+			if (difference) return difference
 			const memberA = guild.members.cache.get(a.userId)
 			const memberB = guild.members.cache.get(b.userId)
 
@@ -169,9 +176,14 @@ function buildCaptureMessage(
 		reserveListMeta
 	)
 	const timeMode = sortMode === 'time'
+	const ranks = guild?.client?.captureRankings?.byDiscord(guild)
+	const playerLabel = (id: string) => {
+		const rank = ranks?.get(id)
+		return rank ? `<@${id}> · #${rank}` : `<@${id}>`
+	}
 	const currentOrder =
 		!timeMode && guild
-			? sortByRolePriority(players, guild)
+			? sortByRolePriority(players, guild, sortMode === 'rating' ? ranks : undefined)
 			: players.map(player => player.userId)
 	const visible = new Set(
 		currentOrder.slice(
@@ -185,7 +197,7 @@ function buildCaptureMessage(
 		ids
 			.map((id, index) => ({ id, index }))
 			.filter(({ id }) => visible.has(id))
-			.map(({ id, index }) => `${index + 1}. <@${id}>`)
+			.map(({ id, index }) => `${index + 1}. ${playerLabel(id)}`)
 			.join('\n') || 'Пусто'
 	const containerComponent = new ContainerBuilder()
 		.addTextDisplayComponents(
@@ -194,7 +206,7 @@ function buildCaptureMessage(
 					target: target ?? 'мероприятие',
 					time: discordTimestamp,
 					limit: maxMain,
-					mode: timeMode ? 'по времени записи' : 'по роли и времени записи',
+					mode: captureSortLabel(sortMode).toLowerCase(),
 					page: approvalPage + 1,
 					pages: pageCount,
 					confirmedCount: confirmed.length,
@@ -224,9 +236,8 @@ function buildCaptureMessage(
 							: collectionSortId
 					)
 					.setLabel(
-						dashboard.text(
-							timeMode ? 'registration.sortPriority' : 'registration.sortTime'
-						)
+						sortMode === 'rating' ? captureSortLabel(sortMode) :
+							dashboard.text(timeMode ? 'registration.sortTime' : 'registration.sortPriority')
 					)
 					.setStyle(ButtonStyle.Secondary)
 			)
@@ -303,6 +314,7 @@ async function sendCollection(
 	if (!channel?.isSendable()) throw new Error('Канал регистрации недоступен')
 
 	const key = interaction.id
+	const sortMode = await captureSortPreference(pool, guild.id)
 	const messageData = buildCaptureMessage(
 		discordTimestamp,
 		[],
@@ -315,14 +327,14 @@ async function sendCollection(
 		[],
 		[],
 		0,
-		'priority',
+		sortMode,
 		key
 	)
 	for (const component of messageData.components) component.toJSON()
 	const claim = await pool.query(
 		`INSERT INTO collection_creations
-		(creation_key, expires_at, channel_id, guild_id, discord_timestamp, target, max_main)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		(creation_key, expires_at, channel_id, guild_id, discord_timestamp, target, max_main, sort_mode)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (creation_key) DO NOTHING RETURNING creation_key`,
 		[
 			key,
@@ -331,7 +343,8 @@ async function sendCollection(
 			guild.id,
 			discordTimestamp,
 			target,
-			maxMain
+			maxMain,
+			sortMode
 		]
 	)
 	if (!claim.rows.length) {
@@ -721,14 +734,16 @@ async function handleApproval(
 		let mainMeta = readMeta(row.main_list_meta)
 		let reserveMeta = readMeta(row.reserve_list_meta)
 		let approved = readIds(row.approved_users)
-		let sortMode = row.sort_mode === 'time' ? 'time' : 'priority'
+		let sortMode = row.sort_mode ?? 'priority'
 		const pageCount = capturePageCount(
 			main.length + reserve.length,
 			readIds(row.left_list).length
 		)
 		let page = Math.max(0, Math.min(row.approval_page || 0, pageCount - 1))
 		if (isCollectionSort(interaction.customId)) {
-			sortMode = sortMode === 'time' ? 'priority' : 'time'
+			sortMode = nextCaptureSort(sortMode)
+			await saveCaptureSort(client, interaction.guild.id, sortMode)
+			page = 0
 		} else {
 			const requestedPage = Number(
 				interaction.customId.slice('capt_approval_page_'.length)
