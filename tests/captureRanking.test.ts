@@ -175,15 +175,24 @@ test('imports available history once per battle, pins archive cards and picks up
 			id, name, archived: thread, deliveries, pins: () => pins,
 			isSendable: () => true, isThread: () => thread,
 			async setArchived(value: boolean) { this.archived = value },
-			messages: { fetch: async (arg: string | object) => typeof arg === 'string' ? saved.get(arg) : saved },
+			messages: { fetch: async (arg: string | { message?: string }) => {
+				const id = typeof arg === 'string' ? arg : arg.message
+				return id ? saved.get(id) : saved
+			} },
 			async send(payload: object) {
+				const components = (json: string) => (JSON.parse(json).components as { id: number }[])
+					.map(component => ({ id: component.id, toJSON: () => structuredClone(component) }))
 				const rendered = JSON.stringify(payload)
 				deliveries.push(rendered)
-				const marker = JSON.parse(rendered).components[0].id
 				const message = {
 					id: String(++sent),
-					pinned: false, author: { id: 'bot' }, components: [{ id: marker }],
-					async edit(next: object) { deliveries.push(JSON.stringify(next)); return this },
+					pinned: false, author: { id: 'bot' }, components: components(rendered),
+					async edit(next: object) {
+						const json = JSON.stringify(next)
+						deliveries.push(json)
+						this.components = components(json)
+						return this
+					},
 					async pin() { pins++; this.pinned = true; return this }
 				}
 				saved.set(message.id, message as unknown as Message)
@@ -207,6 +216,7 @@ test('imports available history once per battle, pins archive cards and picks up
 	}
 	const discordId = '123456789012345678'
 	const mitsukiDiscordId = '876543210987654321'
+	let majesticAvailable = true
 	const snapshot = (statics: string[], linked: [string, string][] = []) => ({
 		statics: new Set(statics), linked: new Map(linked)
 	}) as MembershipSnapshot
@@ -214,7 +224,7 @@ test('imports available history once per battle, pins archive cards and picks up
 		id: 'guild', client: {
 			user: { id: 'bot' },
 			majesticSync: {
-				state: async () => ({ configured: true, decisions: {} }),
+				state: async () => ({ configured: majesticAvailable, decisions: {} }),
 				membershipSnapshot: async () => snapshot(['1'])
 			}
 		},
@@ -224,7 +234,7 @@ test('imports available history once per battle, pins archive cards and picks up
 			[mitsukiDiscordId, { id: mitsukiDiscordId, user: { bot: false }, nickname: 'Mitsuki | 75' }]
 		]) }
 	} as unknown as Guild
-	const service = createCaptureRankings({
+	const makeService = () => createCaptureRankings({
 		pool, store, env: { FAMILY_WARS_API_KEY: 'fake' },
 		fetchMitsuki: () => fetchMitsukiCaptureRanking(async () => Response.json({
 			players: [mitsukiPlayer(75, 700), mitsukiPlayer(81, null)]
@@ -233,6 +243,7 @@ test('imports available history once per battle, pins archive cards and picks up
 			code: 200, status: true, result: { serverId: 'RU8', captures: [recent] }
 		})
 	})
+	const service = makeService()
 	await service.refresh(guild)
 	await service.refresh(guild)
 	assert.equal(stored.size, 2)
@@ -329,4 +340,30 @@ test('imports available history once per battle, pins archive cards and picks up
 	assert.match(longNamesPage, /Страница 1\/2/)
 	assert.equal(entries(longNamesPage).length, 40)
 	assert.ok(longNamesPage.length <= 4000)
+
+	const older = await ranking.messages.fetch(mitsukiMessage.message_id) as Message
+	const newer = await ranking.messages.fetch(internalMessage.message_id) as Message
+	const originalMitsuki = older.components.map(component => component.toJSON())
+	await older.edit({ components: [{
+		id: 1698002, type: 17, components: [{
+			type: 10,
+			content: '## Рейтинг каптов\nИгроков: 48 · Страница 1/2\n\n' +
+				'**Игрок — капты · ср. урон · K/D · MVP**\n' +
+				`**1.** <@${discordId}> — \`6 · 374,83 · — · 2\``
+		}]
+	}] })
+	await newer.edit({ components: originalMitsuki })
+	// A previous refresh already recorded the desired slots, but Discord still had the old pair.
+	messages.set('ranking:mitsuki', { message_id: older.id, fingerprint: '' })
+	messages.set('ranking:rank', { message_id: newer.id, fingerprint: '' })
+	majesticAvailable = false
+	const restarted = makeService()
+	const sentBeforeRestart = sent
+	await restarted.refresh(guild)
+	assert.equal(restarted.view().ready, false)
+	assert.equal(sent, sentBeforeRestart)
+	assert.match(JSON.stringify(older.components), /Рейтинг Mitsuki/)
+	assert.match(JSON.stringify(newer.components), /Капты.*│.*Ср\. урон/)
+	assert.match(JSON.stringify(newer.components), new RegExp(`374,83.*<@${discordId}>`))
+	assert.match(JSON.stringify(newer.components), /Страница 1\/2/)
 })

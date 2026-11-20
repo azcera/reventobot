@@ -1,8 +1,8 @@
 import {
-	ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+	ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, MessageFlags,
 	TextDisplayBuilder, escapeMarkdown
 } from 'discord.js'
-import type { ButtonInteraction, Guild, SendableChannels, ThreadChannel } from 'discord.js'
+import type { ButtonInteraction, Guild, Message, MessageEditOptions, SendableChannels, ThreadChannel } from 'discord.js'
 import { createHash } from 'node:crypto'
 import type { Pool } from 'pg'
 import { fetchArchiveThreads } from '../features/archive/unusedArchives'
@@ -28,6 +28,50 @@ const MITSUKI_MARKER = 1698003
 const PREFIX = 'capstats:'
 const CAPTURE_KILL_WEIGHT = 'CAPTURE_RANK_KILL_WEIGHT'
 const RANK_CHANNEL = 'CAPTURE_RANK_CHANNEL_ID'
+const RANK_COLUMNS = ['#', 'Капты', 'Ср. урон', 'K/D', 'MVP']
+
+function rankTable(columns: string[], rows: { label: string; values: string[] }[]) {
+	const widths = columns.map((heading, index) =>
+		rows.reduce((width, row) => Math.max(width, row.values[index].length), heading.length))
+	const cells = (values: string[]) =>
+		'\`' + values.map((value, index) => value.padStart(widths[index])).join(' │ ') + '\`'
+	return {
+		header: `${cells(columns)} **Игрок**`,
+		lines: rows.map(row => `${cells(row.values)} ${row.label}`)
+	}
+}
+
+function publishedRank(message: Message) {
+	const components = message.components.map(component => component.toJSON())
+	const container = components.find(component =>
+		component.type === ComponentType.Container && component.id === MARKER)
+	if (!container || container.type !== ComponentType.Container) return
+	let restyled = false
+	for (const component of container.components) {
+		if (component.type !== ComponentType.TextDisplay) continue
+		const lines = component.content.split('\n')
+		const rows = lines.flatMap(line => {
+			const match = /^\*\*(\d+)\.\*\* (.+) — \`([^\`]+)\`$/.exec(line)
+			if (!match) return []
+			const values = match[3].split(' · ')
+			return values.length === 4 ? [{ line, label: match[2], values: [match[1], ...values] }] : []
+		})
+		if (!rows.length) continue
+		const table = rankTable(RANK_COLUMNS, rows)
+		const replacement = new Map(rows.map((row, index) => [row.line, table.lines[index]]))
+		const content = lines.filter(line => line !== '**Игрок — капты · ср. урон · K/D · MVP**')
+			.flatMap(line => line === rows[0].line
+				? [table.header, table.lines[0]] : [replacement.get(line) ?? line]).join('\n')
+		if (content.length <= TEXT_LIMIT) {
+			component.content = content
+			restyled = true
+		}
+	}
+	const payload: MessageEditOptions = {
+		components, flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] }
+	}
+	return { payload, restyled }
+}
 
 interface RankedCapture extends CaptureStats {
 	included: boolean
@@ -116,7 +160,7 @@ export function createCaptureRankings({
 	function card(guild: Guild, key: string, requested = 0) {
 		const history = histories.get(key)
 		const external = key === 'mitsuki'
-		if (external ? !mitsuki : key !== 'rank' && !history?.length) return
+		if (external ? !mitsuki : key === 'rank' ? !roster : !history?.length) return
 		const { rows, statics } = ranking()
 		const bindings = history ? undefined : discordBindings(guild)
 		const included = history?.filter(game => !excluded.has(game.key)) ?? []
@@ -129,7 +173,7 @@ export function createCaptureRankings({
 		}
 		const columns = external
 			? ['#', 'Капты', 'Ср. урон', 'K/D', 'Победы', 'Рейт.']
-			: ['#', 'Капты', 'Ср. урон', 'K/D', 'MVP']
+			: RANK_COLUMNS
 		const table = history ? [] : external
 			? mitsuki!.map(player => ({
 				label: label(player.name, player.staticId),
@@ -141,17 +185,14 @@ export function createCaptureRankings({
 				values: [player.position, player.captures, average(player.damage),
 					player.kd === null ? '—' : average(player.kd), player.mvp].map(String)
 			}))
-		const widths = columns.map((heading, index) =>
-			table.reduce((width, row) => Math.max(width, row.values[index].length), heading.length))
-		const cells = (values: string[]) =>
-			'\`' + values.map((value, index) => value.padStart(widths[index])).join(' │ ') + '\`'
+		const formatted = rankTable(columns, table)
 		const tableText = (list: string) => list
-			? `${cells(columns)} **Игрок**\n${list}`
+			? `${formatted.header}\n${list}`
 			: 'Пока нет игроков с результатами.'
 		const lines = history
 			? history.map(game =>
 				`<t:${Math.floor(game.at / 1000)}:d> · ${clean(game.enemy)} · ${game.attack ? 'Атака' : 'Защита'} · ${game.result} · ${game.damage ?? '—'} урона · ${game.kills ?? '—'} килл.${excluded.has(game.key) ? ' · Вне рейтинга' : ''}`)
-			: table.map(row => `${cells(row.values)} ${row.label}`)
+			: formatted.lines
 		const render = (list: string, page: number, pages: number) => history
 			? store.text('captureHistory.document', {
 				player: clean(history[0].name), static: key, captures: included.length,
@@ -251,27 +292,51 @@ export function createCaptureRankings({
 	}
 	async function orderRankMessages(guild: Guild, channel: SendableChannels) {
 		const values = [guild.id, channel.id]
-		const { rows } = await pool.query<{ card_key: string; message_id: string }>(
-			`SELECT card_key, message_id FROM capture_stat_messages
+		const { rows } = await pool.query<{ card_key: string; message_id: string; fingerprint: string }>(
+			`SELECT card_key, message_id, fingerprint FROM capture_stat_messages
 			WHERE guild_id = $1 AND channel_id = $2 AND card_key IN ('rank', 'mitsuki')`, values
 		)
 		const rank = rows.find(row => row.card_key === 'rank')
 		const external = rows.find(row => row.card_key === 'mitsuki')
-		if (!rank) return
-		if (!external) {
-			// Reuse the older slot for Mitsuki so the internal card can be sent below it.
-			await pool.query(
-				`UPDATE capture_stat_messages SET card_key = 'mitsuki', fingerprint = ''
-				WHERE guild_id = $1 AND channel_id = $2 AND card_key = 'rank'`, values
-			)
-		} else if (BigInt(rank.message_id) < BigInt(external.message_id)) {
-			await pool.query(
-				`UPDATE capture_stat_messages
-				SET message_id = CASE card_key WHEN 'mitsuki' THEN $3 ELSE $4 END, fingerprint = ''
-				WHERE guild_id = $1 AND channel_id = $2 AND card_key IN ('rank', 'mitsuki')`,
-				[...values, rank.message_id, external.message_id]
-			)
-		}
+		if (!rank || !external) return false
+		const reversed = BigInt(rank.message_id) < BigInt(external.message_id)
+		if (!reversed && roster && rank.fingerprint && external.fingerprint) return true
+
+		const fetchMessage = (id: string) => channel.messages.fetch({ message: id, force: true }).catch(error => {
+			if (Number(getError(error).code) !== 10008) throw error
+			return null
+		})
+		const [older, newer] = await Promise.all([
+			fetchMessage(reversed ? rank.message_id : external.message_id),
+			fetchMessage(reversed ? external.message_id : rank.message_id)
+		])
+		if (!older || !newer || older.author.id !== guild.client.user?.id ||
+			newer.author.id !== guild.client.user?.id) return true
+
+		const hasMarker = (message: Message, marker: number) =>
+			message.components.some(component => component.id === marker)
+		const newerIsRank = hasMarker(newer, MARKER)
+		const olderIsMitsuki = hasMarker(older, MITSUKI_MARKER)
+		const saved = newerIsRank ? newer : hasMarker(older, MARKER) ? older : undefined
+		const fallback = !roster && saved ? publishedRank(saved) : undefined
+		const rankCard = card(guild, 'rank')
+		const mitsukiCard = card(guild, 'mitsuki')
+		const payload = rankCard?.payload ?? fallback?.payload
+		if (!payload || !mitsukiCard) return true
+
+		// Keep the published table available until its replacement is on the later message.
+		if (!newerIsRank || fallback?.restyled)
+			await enqueueCaptureEdit(newer.id, () => newer.edit(payload))
+		if (!olderIsMitsuki)
+			await enqueueCaptureEdit(older.id, () => older.edit(mitsukiCard.payload))
+
+		if (reversed) await pool.query(
+			`UPDATE capture_stat_messages
+			SET message_id = CASE card_key WHEN 'mitsuki' THEN $3 ELSE $4 END, fingerprint = ''
+			WHERE guild_id = $1 AND channel_id = $2 AND card_key IN ('rank', 'mitsuki')`,
+			[...values, older.id, newer.id]
+		)
+		return true
 	}
 	async function save(guildId: string, captures: CaptureStats[], historical = false) {
 		if (!captures.length) return
@@ -394,11 +459,12 @@ export function createCaptureRankings({
 			try {
 				const channel = await guild.channels.fetch(channelId)
 				if (channel?.isSendable()) {
-					if (roster && mitsuki) await orderRankMessages(guild, channel)
+					const hasPair = mitsuki && await orderRankMessages(guild, channel)
 					if (mitsuki) await publish(guild, channel, 'mitsuki').catch(error =>
 						console.error('[CaptureRankings] Mitsuki:', getError(error).message))
 					if (roster) await publish(guild, channel, 'rank').catch(error =>
 						console.error('[CaptureRankings] Рейтинг:', getError(error).message))
+					if (mitsuki && !hasPair) await orderRankMessages(guild, channel)
 				}
 			} catch (error) {
 				console.error('[CaptureRankings] Рейтинг:', getError(error).message)
