@@ -817,6 +817,15 @@
 		"variables": ["ranking", "players", "page", "pages"],
 		"default": "## Рейтинг каптов\nИгроков: {players} · Страница {page}/{pages}\n\n{ranking}"
 	},
+	"mitsukiRanking.document": {
+		"group": "Рейтинг Mitsuki",
+		"label": "Сообщение рейтинга целиком",
+		"type": "text",
+		"components": true,
+		"maxLength": 4000,
+		"variables": ["ranking", "players", "page", "pages"],
+		"default": "## Рейтинг Mitsuki\nЗа месяц · Игроков: {players} · Страница {page}/{pages}\nБез оценки Mitsuki — по киллам за капт (K/D Mitsuki).\n\n{ranking}"
+	},
 	"captureHistory.document": {
 		"group": "История каптов",
 		"label": "Архивное сообщение целиком",

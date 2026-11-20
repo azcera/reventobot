@@ -169,9 +169,16 @@ test('imports available history once per battle, pins archive cards and picks up
 		}
 	} as unknown as Pool
 	const config = createStore()
+	assert.ok(config.snapshot().templates.some(field =>
+		field.key === 'mitsukiRanking.document' && field.group === 'Рейтинг Mitsuki' && field.components))
+	let mitsukiTitle: string | undefined
 	const store = {
 		ready: true,
-		text: config.text,
+		text: (key: string, variables?: Record<string, unknown>) => {
+			const value = config.text(key, variables)
+			return key === 'mitsukiRanking.document' && mitsukiTitle
+				? value.replace('## Рейтинг Mitsuki', mitsukiTitle) : value
+		},
 		async audit(_actor: unknown, action: string, _target: string, details: unknown) {
 			audits.push({ action, details })
 		},
@@ -229,6 +236,7 @@ test('imports available history once per battle, pins archive cards and picks up
 	}
 	const discordId = '123456789012345678'
 	const mitsukiDiscordId = '876543210987654321'
+	const partialDiscordId = '234567890123456789'
 	let majesticAvailable = true
 	const snapshot = (statics: string[], linked: [string, string][] = []) => ({
 		statics: new Set(statics), linked: new Map(linked)
@@ -244,7 +252,10 @@ test('imports available history once per battle, pins archive cards and picks up
 		channels: { fetch: async (id: string) => id === 'archives' ? parent : ranking },
 		members: { cache: new Collection([
 			[discordId, { id: discordId, user: { bot: false }, nickname: null }],
-			[mitsukiDiscordId, { id: mitsukiDiscordId, user: { bot: false }, nickname: 'Mitsuki | 75' }]
+			[mitsukiDiscordId, {
+				id: mitsukiDiscordId, user: { bot: false }, nickname: 'Mitsuki | 75', displayName: 'Mitsuki [RU8]'
+			}],
+			[partialDiscordId, { id: partialDiscordId, user: { bot: false }, partial: true, nickname: 'Mitsuki | 81' }]
 		]) }
 	} as unknown as Guild
 	const makeService = () => createCaptureRankings({
@@ -269,7 +280,10 @@ test('imports available history once per battle, pins archive cards and picks up
 	assert.equal(idle.pins(), 1)
 	assert.match(archive.deliveries[0], /Rivals/)
 	assert.match(ranking.deliveries[0], /Рейтинг Mitsuki/)
-	assert.match(ranking.deliveries[0], new RegExp(`<@${mitsukiDiscordId}>`))
+	const externalText = JSON.parse(ranking.deliveries[0]).components[0].components[0].content
+	assert.ok(externalText.includes(`[Mitsuki \\[RU8\\]](https://discord.com/users/${mitsukiDiscordId})`))
+	assert.match(externalText, /Mitsuki Player 81 \(81\)/)
+	assert.doesNotMatch(externalText, /<@/)
 	assert.doesNotMatch(ranking.deliveries[0], /Mitsuki Player 75/)
 	assert.match(ranking.deliveries[1], /Player 1 \(1\)/)
 	assert.doesNotMatch(ranking.deliveries[1], /STATIC|Player 2/)
@@ -278,6 +292,12 @@ test('imports available history once per battle, pins archive cards and picks up
 	assert.ok(Number(mitsukiMessage.message_id) < Number(internalMessage.message_id))
 	assert.equal(ranking.pins(), 0)
 	assert.doesNotMatch(archive.deliveries[0], /Рейтинг Mitsuki/)
+	mitsukiTitle = '## Месячная таблица'
+	await service.refresh(guild)
+	assert.match(ranking.deliveries.at(-1)!, /Месячная таблица/)
+	assert.equal(messages.get('ranking:mitsuki')?.message_id, mitsukiMessage.message_id)
+	mitsukiTitle = undefined
+	await service.refresh(guild)
 
 	messages.set('ranking:mitsuki', internalMessage)
 	messages.set('ranking:rank', mitsukiMessage)

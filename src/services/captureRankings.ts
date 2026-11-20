@@ -171,12 +171,20 @@ export function createCaptureRankings({
 		const { rows, statics } = ranking()
 		const bindings = history ? undefined : discordBindings(guild)
 		const included = history?.filter(game => !excluded.has(game.key)) ?? []
-		const label = (name: string, staticId: string | null) => {
-			const discordId = staticId ? bindings?.get(staticId) : undefined
+		const shortDisplay = (name: string) => {
 			const shortName = name.length > 32 ? `${name.slice(0, 31)}…` : name
 			const escaped = clean(shortName)
-			const display = escaped.length > 40 ? clean(name.slice(0, 19)) + '…' : escaped
-			return discordId ? `<@${discordId}>` : `${display}${staticId ? ` (${staticId})` : ''}`
+			return escaped.length > 40 ? clean(name.slice(0, 19)) + '…' : escaped
+		}
+		const label = (name: string, staticId: string | null) => {
+			const discordId = staticId ? bindings?.get(staticId) : undefined
+			if (discordId && !external) return `<@${discordId}>`
+			const member = discordId ? guild.members.cache.get(discordId) : undefined
+			if (member && !member.partial && !member.user.partial) {
+				const display = shortDisplay(member.displayName).replace(/[\[\]]/g, '\\$&')
+				return `[${display}](https://discord.com/users/${member.id})`
+			}
+			return `${shortDisplay(name)}${staticId ? ` (${staticId})` : ''}`
 		}
 		const columns = external
 			? ['#', 'Капты', 'Ср. урон', 'K/D', 'Победы', 'Рейт.']
@@ -207,7 +215,9 @@ export function createCaptureRankings({
 				position: statics.get(key) ?? '—', history: list, page, pages
 			})
 			: external
-				? `## Рейтинг Mitsuki\nЗа месяц · Игроков: ${lines.length} · Страница ${page}/${pages}\nБез оценки Mitsuki — по киллам за капт (K/D Mitsuki).\n\n${tableText(list)}`
+				? store.text('mitsukiRanking.document', {
+					ranking: tableText(list), players: lines.length, page, pages
+				})
 				: store.text('captureRanking.document', {
 				ranking: tableText(list),
 				players: rows.length, page, pages
