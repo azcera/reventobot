@@ -14,3 +14,17 @@ mtime_ms = 1794735049694
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:e637dcc3-2aec-4b08-a969-36aeb777e1aa/87aac678-5a75-4458-ae2d-07c7398dba16/fa6306d0-8f08-41cf-b00d-6b574ca9c5c4"
 storage_version_token = "1794735054391428"
 content_type = "text/plain"
+
+[[outputs]]
+id = "nD3OawJsYvpX0uH6LEuux"
+uri = "file://generated-artifacts/deployment-logs-2026-11-20-1500-to-now-msk.txt"
+type = "text"
+title = "Deployment logs — 20 Nov 2026, 15:00 to 17:54 MSK"
+description = "Paginated production runtime log export for the requested interval; credential-like values redacted where detected."
+logical_id = "3b56b5af-e4e2-4a76-af1c-461719ea08f8"
+content_hash = "sha256:2f6d903e5477379812abbf6ad4e119062a1836639d0481c86f860cff0a701856"
+size = 125348
+mtime_ms = 1795186499498
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:e637dcc3-2aec-4b08-a969-36aeb777e1aa/3b56b5af-e4e2-4a76-af1c-461719ea08f8/3045c3b2-33f3-4bd1-bc3b-733938704805"
+storage_version_token = "1795186500139939"
+content_type = "text/plain"
