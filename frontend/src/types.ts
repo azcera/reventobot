@@ -198,9 +198,42 @@ export interface ApiRoutes {
 			name: string
 			position: number
 			captures: number
-			kills: number
+			kd: number | null
 			damage: number
 			mvp: number
+		}[]
+	}
+	'capture-ranking/captures': {
+		ready: boolean
+		captures: {
+			key: string
+			at: number
+			enemy: string
+			attack: boolean
+			result: string
+			included: boolean
+			players: {
+				staticId: string
+				name: string
+				kills: number | null
+				deaths?: number | null
+				damage: number | null
+				mvp: number
+			}[]
+		}[]
+	}
+	'capture-ranking/mitsuki': {
+		ready: boolean
+		players: {
+			key: string
+			staticId: string | null
+			name: string
+			captures: number
+			avgDamage: number
+			avgKills: number
+			winrate: number
+			rating: number | null
+			position: number
 		}[]
 	}
 	'capture-presets': { presets: CapturePreset[]; revision: number }

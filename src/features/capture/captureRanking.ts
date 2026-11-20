@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS capture_statistics (
 	guild_id TEXT NOT NULL, war_key TEXT NOT NULL, result JSONB NOT NULL,
 	PRIMARY KEY (guild_id, war_key)
 );
+ALTER TABLE capture_statistics ADD COLUMN IF NOT EXISTS included BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE TABLE IF NOT EXISTS capture_stat_messages (
 	guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, card_key TEXT NOT NULL,
 	message_id TEXT NOT NULL, fingerprint TEXT NOT NULL,
@@ -19,6 +20,7 @@ interface PlayerStats {
 	staticId: string
 	name: string
 	kills: number | null
+	deaths?: number | null
 	damage: number | null
 	mvp: number
 }
@@ -48,6 +50,7 @@ export function captureStats(war: War): CaptureStats | null {
 			staticId: String(player.id),
 			name: player.name,
 			kills,
+			deaths: Number.isSafeInteger(player.deaths) ? stat(player.deaths) : null,
 			damage,
 			mvp: Number(kills === battle.killsMvp?.kills) +
 				Number(damage === battle.damageMvp?.damage)
@@ -64,6 +67,7 @@ export function captureStats(war: War): CaptureStats | null {
 }
 
 export interface CaptureHistoryRow extends PlayerStats {
+	key: string
 	at: number
 	enemy: string
 	attack: boolean
@@ -76,7 +80,7 @@ export function captureHistories(captures: CaptureStats[]) {
 		for (const player of capture.players) {
 			const history = histories.get(player.staticId) ?? []
 			history.push({
-				...player, at: capture.at, enemy: capture.enemy,
+				...player, key: capture.key, at: capture.at, enemy: capture.enemy,
 				attack: capture.attack, result: capture.result
 			})
 			histories.set(player.staticId, history)
@@ -85,33 +89,89 @@ export function captureHistories(captures: CaptureStats[]) {
 	return histories
 }
 
+const HALF_LIFE = 30 * 86400000
+const PRIOR_CAPTURES = 5
+
+function performance(games: CaptureHistoryRow[], latest: number) {
+	let damage = 0, damageWeight = 0, kills = 0, deaths = 0, kdWeight = 0
+	let rawKills = 0, rawDeaths = 0, rawDamage = 0, reportedDamage = 0
+	let wins = 0, decided = 0, mvps = 0, weight = 0, mvp = 0
+	for (const game of games) {
+		const recent = 2 ** ((game.at - latest) / HALF_LIFE)
+		weight += recent
+		mvp += game.mvp
+		mvps += recent * game.mvp
+		if (game.damage !== null) {
+			rawDamage += game.damage
+			reportedDamage++
+			damage += recent * game.damage
+			damageWeight += recent
+		}
+		if (game.kills !== null && game.deaths != null) {
+			rawKills += game.kills
+			rawDeaths += game.deaths
+			kills += recent * game.kills
+			deaths += recent * game.deaths
+			kdWeight += recent
+		}
+		if (game.result === 'Победа' || game.result === 'Поражение') {
+			decided += recent
+			if (game.result === 'Победа') wins += recent
+		}
+	}
+	return {
+		damage, damageWeight, kills, deaths, kdWeight, wins, decided, mvps, weight, mvp,
+		averageDamage: rawDamage / (reportedDamage || 1),
+		kd: kdWeight ? rawKills / Math.max(1, rawDeaths) : null
+	}
+}
+
 export function rankCapturePlayers(
 	histories: ReturnType<typeof captureHistories>,
 	members: ReadonlySet<string>,
-	killPercent: number
+	kdPercent: number,
+	excluded: ReadonlySet<string> = new Set()
 ) {
-	const players = [...histories].flatMap(([staticId, games]) => {
+	const players = [...histories].flatMap(([staticId, history]) => {
 		if (!members.has(staticId)) return []
-		const average = (key: 'kills' | 'damage') => {
-			const values = games.flatMap(game => game[key] ?? [])
-			return values.reduce((total, value) => total + value, 0) / (values.length || 1)
-		}
-		return [{
-			staticId, name: games[0].name, captures: games.length,
-			kills: average('kills'), damage: average('damage'),
-			mvp: games.reduce((total, game) => total + game.mvp, 0)
-		}]
+		const games = history.filter(game => !excluded.has(game.key))
+		return games.length ? [{ staticId, name: history[0].name, games }] : []
 	})
-	const max = (key: 'kills' | 'damage' | 'mvp') =>
-		players.reduce((top, player) => Math.max(top, player[key]), 0) || 1
-	const maxKills = max('kills')
-	const maxDamage = max('damage')
-	const maxMvp = max('mvp')
-	const score = (player: typeof players[number]) =>
-		0.85 * (player.kills / maxKills * killPercent +
-			player.damage / maxDamage * (100 - killPercent)) / 100 +
-		0.15 * player.mvp / maxMvp
-	return players.sort((a, b) => score(b) - score(a) || b.mvp - a.mvp ||
-		b.captures - a.captures || Number(a.staticId) - Number(b.staticId))
-		.map((player, index) => ({ ...player, position: index + 1 }))
+	const latest = players.reduce((max, player) => Math.max(max, player.games[0].at), 0)
+	const samples = players.map(player => ({ ...player, performance: performance(player.games, latest) }))
+	const total = (key: keyof Omit<ReturnType<typeof performance>, 'kd'>) =>
+		samples.reduce((sum, player) => sum + player.performance[key], 0)
+	const mean = (value: number, exposure: number) => exposure ? value / exposure : 0
+	const baseDamage = mean(total('damage'), total('damageWeight'))
+	const kdExposure = total('kdWeight')
+	const baseKills = mean(total('kills'), kdExposure)
+	const baseDeaths = mean(total('deaths'), kdExposure)
+	const baseMvp = mean(total('mvps'), total('weight'))
+	const baseWins = total('decided') ? total('wins') / total('decided') : 0.5
+	const smooth = (value: number, exposure: number, baseline: number) =>
+		(value + PRIOR_CAPTURES * baseline) / (exposure + PRIOR_CAPTURES)
+	const compareToFamily = (value: number, baseline: number) =>
+		baseline > 0 ? value / (value + baseline) : 0.5
+	// Small samples trend toward a conservative estimate on the 0–1 scale.
+	const combatEstimate = (value: number, exposure: number, baseline: number) =>
+		smooth(compareToFamily(value, baseline) * exposure, exposure, 0.15)
+
+	return samples.map(({ staticId, name, games, performance: stats }) => {
+		const damage = combatEstimate(mean(stats.damage, stats.damageWeight), stats.damageWeight, baseDamage)
+		const kd = stats.kills / Math.max(1, stats.deaths)
+		const kdSignal = combatEstimate(kd, stats.kdWeight,
+			PRIOR_CAPTURES * baseKills / Math.max(1, PRIOR_CAPTURES * baseDeaths))
+		const combatWeight = stats.kdWeight ? kdPercent / 100 : 0
+		const mvp = compareToFamily(smooth(stats.mvps, stats.weight, baseMvp), baseMvp)
+		const result = smooth(stats.wins, stats.decided, baseWins)
+		const experience = games.length / (games.length + 10)
+		const score = 0.65 * (kdSignal * combatWeight + damage * (1 - combatWeight)) +
+			0.15 * mvp + 0.05 * result + 0.15 * experience
+		return {
+			score, staticId, name, captures: games.length,
+			damage: stats.averageDamage, kd: stats.kd, mvp: stats.mvp
+		}
+	}).sort((a, b) => b.score - a.score || b.captures - a.captures ||
+		b.mvp - a.mvp || Number(a.staticId) - Number(b.staticId))
+		.map(({ score, ...player }, index) => ({ ...player, position: index + 1 }))
 }

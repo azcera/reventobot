@@ -7,6 +7,7 @@ export interface WarPlayer {
 	familyId?: number
 	damage?: number
 	kills?: number
+	deaths?: number
 }
 export interface RawWar {
 	id: number

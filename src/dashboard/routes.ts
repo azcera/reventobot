@@ -320,6 +320,39 @@ function registerDashboard(
 			client.captureRankings?.view() ?? { ready: false, players: [] }
 		)
 	)
+	app.get('/api/capture-ranking/captures', (_req: E.Request, res: E.Response) =>
+		res.set('Cache-Control', 'no-store').json(
+			client.captureRankings?.captures() ?? { ready: false, captures: [] }
+		)
+	)
+	app.get('/api/capture-ranking/mitsuki', (_req: E.Request, res: E.Response) =>
+		res.set('Cache-Control', 'no-store').json(
+			client.captureRankings?.mitsuki() ?? { ready: false, players: [] }
+		)
+	)
+	app.post('/api/capture-ranking/captures', async (req: E.Request, res: E.Response) => {
+		try {
+			const changes = req.body?.changes
+			if (
+				!Array.isArray(changes) || !changes.length ||
+				changes.some(change =>
+					!change || typeof change.key !== 'string' ||
+					!/^[A-Z0-9]{1,12}:[1-9]\d{0,15}$/.test(change.key) ||
+					typeof change.included !== 'boolean'
+				) ||
+				new Set(changes.map(change => change.key)).size !== changes.length
+			) throw problem(400, 'Некорректный список каптов.')
+			if (!client.captureRankings)
+				throw problem(503, 'Статистика каптов ещё загружается.')
+			res.set('Cache-Control', 'no-store').json(await client.captureRankings.saveInclusion(
+				req.guild,
+				changes.map(({ key, included }) => ({ key, included })),
+				req.dashboardUser
+			))
+		} catch (error) {
+			respondError(res, getError(error))
+		}
+	})
 	app.get('/api/schedule', (req: E.Request, res: E.Response) =>
 		res.set('Cache-Control', 'no-store').json(getSchedule())
 	)

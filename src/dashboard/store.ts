@@ -1,5 +1,5 @@
 import type { ContainerBuilder, Message } from 'discord.js'
-import type { Pool } from 'pg'
+import type { Pool, PoolClient } from 'pg'
 import { replaceTemplateVariables } from '../../shared/templateVariables'
 import type {
 	Actor,
@@ -123,7 +123,7 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 		channelTypes: [0]
 	},
 	CAPTURE_RANK_KILL_WEIGHT: {
-		label: 'Вес киллов и урона',
+		label: 'Вес K/D и урона',
 		type: 'percentage',
 		default: '70'
 	},
@@ -730,9 +730,10 @@ function createStore(env = process.env) {
 			actor: Actor | string | undefined,
 			action: string,
 			target: string,
-			details: Record<string, unknown> = {}
+			details: Record<string, unknown> = {},
+			db: Pool | PoolClient = pool
 		) {
-			await pool.query(
+			await db.query(
 				'INSERT INTO dashboard_audit (actor, action, target, details) VALUES ($1, $2, $3, $4::jsonb)',
 				[
 					typeof actor === 'string' ? actor : actor?.id,

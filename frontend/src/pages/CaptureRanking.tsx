@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Button, Field } from '../components/ui'
+import { Button, Field, useModal } from '../components/ui'
 import type { Api, ApiRoutes } from '../types'
 import { errorMessage } from '../types'
+import { CaptureRankingSelection } from './CaptureRankingSelection'
+import { MitsukiRanking } from './MitsukiRanking'
 
 export function CaptureRanking({
 	api, weight, revision, onChange
@@ -11,6 +13,7 @@ export function CaptureRanking({
 	revision: number
 	onChange(value: string): void
 }) {
+	const modal = useModal()
 	const [result, setResult] = useState<ApiRoutes['capture-ranking']>()
 	const [error, setError] = useState('')
 	const [refresh, setRefresh] = useState(0)
@@ -35,7 +38,7 @@ export function CaptureRanking({
 	return (
 		<div className='grid gap-4'>
 			<div className='grid gap-3 sm:grid-cols-2'>
-				<Field label='Вес киллов (%)'>
+				<Field label='Вес K/D (%)'>
 					<input type='number' min={0} max={100} step={1} value={weight}
 						onChange={event => change(event.target.value)} />
 				</Field>
@@ -46,11 +49,23 @@ export function CaptureRanking({
 				</Field>
 			</div>
 			<p className='text-sm text-muted'>
-				Киллы и урон составляют 85% балла в заданной пропорции. Оставшиеся 15% зависят от количества MVP.
+				K/D и урон составляют 65% оценки, частота MVP — 15%, результаты боёв — 5%, опыт — 15%.
+				Свежие капты влияют сильнее. При малом числе игр оценка осторожнее.
+				K/D учитывается по каптам с известными смертями.
 			</p>
-			<Button type='button' onClick={() => setRefresh(value => value + 1)}>
-				Обновить список
-			</Button>
+			<div className='flex flex-wrap gap-2'>
+				<Button type='button' onClick={() => setRefresh(value => value + 1)}>
+					Обновить список
+				</Button>
+				<Button type='button' onClick={() => void modal({
+					title: 'Капты в рейтинге',
+					hideFooter: true,
+					content: ({ close }) => <CaptureRankingSelection api={api} close={close}
+						onSaved={() => setRefresh(value => value + 1)} />
+				})}>
+					Настроить учитываемые капты
+				</Button>
+			</div>
 			{error ? <p role='alert'>{error}</p> : !result ? (
 				<p role='status'>Загружается рейтинг…</p>
 			) : !result.ready ? (
@@ -61,7 +76,7 @@ export function CaptureRanking({
 				<div className='overflow-x-auto'>
 					<table className='w-full text-left text-sm'>
 						<thead><tr>
-							{['Место', 'Игрок', 'STATIC', 'Капты', 'Ср. урон', 'Ср. киллы', 'MVP'].map(label =>
+							{['Место', 'Игрок', 'STATIC', 'Капты', 'Ср. урон', 'K/D', 'MVP'].map(label =>
 								<th key={label} scope='col' className='px-2 py-2 whitespace-nowrap'>{label}</th>
 							)}
 						</tr></thead>
@@ -72,13 +87,14 @@ export function CaptureRanking({
 								<td className='px-2 py-2'>{player.staticId}</td>
 								<td className='px-2 py-2'>{player.captures}</td>
 								<td className='px-2 py-2'>{average(player.damage)}</td>
-								<td className='px-2 py-2'>{average(player.kills)}</td>
+								<td className='px-2 py-2'>{player.kd === null ? '—' : average(player.kd)}</td>
 								<td className='px-2 py-2'>{player.mvp}</td>
 							</tr>)}
 						</tbody>
 					</table>
 				</div>
 			)}
+			<MitsukiRanking api={api} />
 		</div>
 	)
 }

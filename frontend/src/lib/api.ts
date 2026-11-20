@@ -174,7 +174,26 @@ function validResponse(path: string, value: unknown): boolean {
 	if (path === 'capture-ranking')
 		return record(value) && boolean(value.ready) && array(value.players, player =>
 			record(player) && text(player.staticId) && text(player.name) &&
-			['position', 'captures', 'kills', 'damage', 'mvp'].every(key => number(player[key]))
+			(player.kd === null || number(player.kd)) &&
+			['position', 'captures', 'damage', 'mvp'].every(key => number(player[key]))
+		)
+	if (path === 'capture-ranking/captures')
+		return record(value) && boolean(value.ready) && array(value.captures, capture =>
+			record(capture) && text(capture.key) && number(capture.at) &&
+			text(capture.enemy) && boolean(capture.attack) && text(capture.result) &&
+			boolean(capture.included) && array(capture.players, player =>
+				record(player) && text(player.name) && text(player.staticId) &&
+				number(player.mvp) && (player.kills === null || number(player.kills)) &&
+				(player.deaths == null || number(player.deaths)) &&
+				(player.damage === null || number(player.damage))
+			)
+		)
+	if (path === 'capture-ranking/mitsuki')
+		return record(value) && boolean(value.ready) && array(value.players, player =>
+			record(player) && text(player.key) && text(player.name) &&
+			(player.staticId === null || text(player.staticId)) &&
+			(player.rating === null || number(player.rating)) &&
+			['position', 'captures', 'avgDamage', 'avgKills', 'winrate'].every(key => number(player[key]))
 		)
 	if (path === 'role-prefixes/sync')
 		return (
