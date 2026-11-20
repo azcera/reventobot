@@ -87,7 +87,7 @@ test('Mitsuki positions use the API rating first and the site’s K/D for player
 			{ ...mitsukiPlayer(11, null), avgKills: 5 }] })
 	})
 	assert.deepEqual(rows.map(row => [row.staticId, row.position, row.rating]), [
-		['8', 1, 900], ['9', 1, 900], ['7', 3, 800],
+		['8', 1, 900], ['9', 2, 900], ['7', 3, 800],
 		['11', 4, null], ['6', 5, null], ['10', 6, null]
 	])
 })
@@ -107,6 +107,7 @@ test('imports available history once per battle, pins archive cards and picks up
 	let inclusion = new Map<string, boolean>()
 	const audits: unknown[] = []
 	const messages = new Map<string, { message_id: string; fingerprint: string }>()
+	let sent = 0
 	const historic = battle(1, [player(1, 2, 200), player(2, 10, 50)])
 	const recent = battle(2, [player(1, 5, 600)])
 	const pool = {
@@ -119,6 +120,16 @@ test('imports available history once per battle, pins archive cards and picks up
 			}
 			if (sql.includes('SELECT result')) return {
 				rows: [...stored.values()].map(result => ({ result, included: inclusion.get(result.key) ?? true }))
+			}
+			if (sql.startsWith('SELECT card_key, message_id')) return {
+				rows: ['rank', 'mitsuki'].flatMap(card_key => {
+					const message = messages.get(values[1] + ':' + card_key)
+					return message ? [{ card_key, ...message }] : []
+				})
+			}
+			if (sql.includes('SET message_id = CASE')) {
+				messages.set(values[1] + ':mitsuki', { message_id: values[2], fingerprint: '' })
+				messages.set(values[1] + ':rank', { message_id: values[3], fingerprint: '' })
 			}
 			if (sql.includes('FROM capture_stat_messages')) {
 				const message = messages.get(values[1] + ':' + values[2])
@@ -170,7 +181,7 @@ test('imports available history once per battle, pins archive cards and picks up
 				deliveries.push(rendered)
 				const marker = JSON.parse(rendered).components[0].id
 				const message = {
-					id: id + (marker === 1698003 ? '-mitsuki' : '-message'),
+					id: String(++sent),
 					pinned: false, author: { id: 'bot' }, components: [{ id: marker }],
 					async edit(next: object) { deliveries.push(JSON.stringify(next)); return this },
 					async pin() { pins++; this.pinned = true; return this }
@@ -195,10 +206,23 @@ test('imports available history once per battle, pins archive cards and picks up
 		}
 	}
 	const discordId = '123456789012345678'
+	const mitsukiDiscordId = '876543210987654321'
+	const snapshot = (statics: string[], linked: [string, string][] = []) => ({
+		statics: new Set(statics), linked: new Map(linked)
+	}) as MembershipSnapshot
 	const guild = {
-		id: 'guild', client: { user: { id: 'bot' } },
+		id: 'guild', client: {
+			user: { id: 'bot' },
+			majesticSync: {
+				state: async () => ({ configured: true, decisions: {} }),
+				membershipSnapshot: async () => snapshot(['1'])
+			}
+		},
 		channels: { fetch: async (id: string) => id === 'archives' ? parent : ranking },
-		members: { cache: new Collection([[discordId, {}]]) }
+		members: { cache: new Collection([
+			[discordId, { id: discordId, user: { bot: false }, nickname: null }],
+			[mitsukiDiscordId, { id: mitsukiDiscordId, user: { bot: false }, nickname: 'Mitsuki | 75' }]
+		]) }
 	} as unknown as Guild
 	const service = createCaptureRankings({
 		pool, store, env: { FAMILY_WARS_API_KEY: 'fake' },
@@ -209,11 +233,6 @@ test('imports available history once per battle, pins archive cards and picks up
 			code: 200, status: true, result: { serverId: 'RU8', captures: [recent] }
 		})
 	})
-	const snapshot = (statics: string[], linked: [string, string][] = []) => ({
-		statics: new Set(statics), linked: new Map(linked)
-	}) as MembershipSnapshot
-
-	service.updateRoster(snapshot(['1']))
 	await service.refresh(guild)
 	await service.refresh(guild)
 	assert.equal(stored.size, 2)
@@ -225,14 +244,26 @@ test('imports available history once per battle, pins archive cards and picks up
 	assert.equal(empty.deliveries.length, 0)
 	assert.equal(idle.pins(), 1)
 	assert.match(archive.deliveries[0], /Rivals/)
-	assert.match(ranking.deliveries[0], /Player 1 \(1\)/)
-	assert.doesNotMatch(ranking.deliveries[0], /STATIC/)
-	assert.doesNotMatch(ranking.deliveries[0], /Player 2/)
-	assert.match(ranking.deliveries[1], /Рейтинг Mitsuki/)
-	assert.equal(messages.get('ranking:mitsuki')?.message_id, 'ranking-mitsuki')
-	assert.equal(messages.get('ranking:rank')?.message_id, 'ranking-message')
+	assert.match(ranking.deliveries[0], /Рейтинг Mitsuki/)
+	assert.match(ranking.deliveries[0], new RegExp(`<@${mitsukiDiscordId}>`))
+	assert.doesNotMatch(ranking.deliveries[0], /Mitsuki Player 75/)
+	assert.match(ranking.deliveries[1], /Player 1 \(1\)/)
+	assert.doesNotMatch(ranking.deliveries[1], /STATIC|Player 2/)
+	const mitsukiMessage = messages.get('ranking:mitsuki')!
+	const internalMessage = messages.get('ranking:rank')!
+	assert.ok(Number(mitsukiMessage.message_id) < Number(internalMessage.message_id))
 	assert.equal(ranking.pins(), 0)
 	assert.doesNotMatch(archive.deliveries[0], /Рейтинг Mitsuki/)
+
+	messages.set('ranking:mitsuki', internalMessage)
+	messages.set('ranking:rank', mitsukiMessage)
+	const sentBeforeRepair = sent
+	await service.refresh(guild)
+	assert.equal(messages.get('ranking:mitsuki')?.message_id, mitsukiMessage.message_id)
+	assert.equal(messages.get('ranking:rank')?.message_id, internalMessage.message_id)
+	assert.equal(sent, sentBeforeRepair)
+	assert.match(ranking.deliveries.at(-2)!, /Рейтинг Mitsuki/)
+	assert.match(ranking.deliveries.at(-1)!, /Рейтинг каптов/)
 	service.updateRoster(snapshot(['1'], [[discordId, '1']]))
 	assert.equal(service.byDiscord(guild).get(discordId), 1)
 	await service.refresh(guild)
@@ -274,14 +305,14 @@ test('imports available history once per battle, pins archive cards and picks up
 	service.updateRoster(snapshot(['1', '2', ...extraPlayers.map(entry => String(entry.id))]))
 	await service.refresh(guild)
 	const text = (card: string) => JSON.parse(card).components[0].components[0].content as string
-	const entries = (content: string) => content.match(/^\*\*\d+\.\*\*/gm) ?? []
+	const entries = (content: string) => content.match(/^\`\s*\d+\s+│/gm) ?? []
 	const firstPage = text(ranking.deliveries.at(-1)!)
 	assert.match(firstPage, /Страница 1\/2/)
 	assert.equal(entries(firstPage).length, 40)
 	const pageInteraction = {
 		guild, guildId: guild.id, channel: ranking, channelId: ranking.id,
 		customId: 'capstats:rank:1',
-		message: { id: ranking.id + '-message', author: { id: 'bot' } },
+		message: { id: internalMessage.message_id, author: { id: 'bot' } },
 		client: guild.client,
 		deferUpdate: async () => {},
 		editReply: async (payload: object) => ranking.deliveries.push(JSON.stringify(payload))
@@ -290,12 +321,12 @@ test('imports available history once per battle, pins archive cards and picks up
 	const secondPage = text(ranking.deliveries.at(-1)!)
 	assert.match(secondPage, /Страница 2\/2/)
 	assert.equal(entries(secondPage).length, 8)
-	assert.match(secondPage, /\*\*48\.\*\*/)
+	assert.match(secondPage, /^\`48\s+│/m)
 
 	for (const entry of extraPlayers) entry.name = '*'.repeat(100)
 	await service.refresh(guild)
 	const longNamesPage = text(ranking.deliveries.at(-1)!)
-	assert.match(longNamesPage, /Страница 1\/[3-9]/)
-	assert.ok(entries(longNamesPage).length < 40)
+	assert.match(longNamesPage, /Страница 1\/2/)
+	assert.equal(entries(longNamesPage).length, 40)
 	assert.ok(longNamesPage.length <= 4000)
 })

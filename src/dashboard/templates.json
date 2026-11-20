@@ -815,7 +815,7 @@
 		"components": true,
 		"maxLength": 4000,
 		"variables": ["ranking", "players", "page", "pages"],
-		"default": "## Рейтинг каптов\nИгроков: {players} · Страница {page}/{pages}\n\n**Игрок — капты · ср. урон · K/D · MVP**\n{ranking}"
+		"default": "## Рейтинг каптов\nИгроков: {players} · Страница {page}/{pages}\n\n{ranking}"
 	},
 	"captureHistory.document": {
 		"group": "История каптов",

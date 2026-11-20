@@ -48,14 +48,5 @@ export async function fetchMitsukiCaptureRanking(fetchImpl = fetch) {
 		a.rating === null && b.rating === null
 			? b.avgKills - a.avgKills
 			: (b.rating ?? -Infinity) - (a.rating ?? -Infinity))
-	let position = 0
-	return rows.map((player, index) => {
-		const previous = rows[index - 1]
-		if (
-			player.rating !== previous?.rating ||
-			(player.rating === null && player.avgKills !== previous?.avgKills)
-		)
-			position = index + 1
-		return { ...player, position }
-	})
+	return rows.map((player, index) => ({ ...player, position: index + 1 }))
 }

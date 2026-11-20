@@ -10,10 +10,11 @@ import {
 	captureHistories, captureStats, rankCapturePlayers, type CaptureStats
 } from '../features/capture/captureRanking'
 import { enqueueCaptureEdit } from '../features/capture/captureMessageQueue'
-import { normalizeWar, rulesFromEnv, SERVER } from '../features/capture/familyWarData'
-import type { RawWar } from '../features/capture/familyWarTypes'
+import { bindingIndex, normalizeWar, rulesFromEnv, SERVER } from '../features/capture/familyWarData'
+import type { Decisions, RawWar } from '../features/capture/familyWarTypes'
 import type { Actor, MembershipSnapshot, Store } from '../types'
 import { getError } from '../utils/errors'
+import { loadDiscordMembers } from './discordMembers'
 import { fetchFinishedCaptures } from './finishedCaptures'
 import { ContainerBuilder } from './markdownContainer'
 import { fetchMitsukiCaptureRanking } from './mitsukiCaptureRanking'
@@ -42,6 +43,8 @@ export function createCaptureRankings({
 	fetchMitsuki?: typeof fetchMitsukiCaptureRanking
 }) {
 	let roster: MembershipSnapshot | undefined
+	let memberDecisions: Decisions = {}
+	let savedBindings: Record<string, string> = {}
 	let loaded = false
 	let captures: RankedCapture[] = []
 	let mitsuki: Awaited<ReturnType<typeof fetchMitsukiCaptureRanking>> | undefined
@@ -58,7 +61,7 @@ export function createCaptureRankings({
 	const clean = (value: string) =>
 		escapeMarkdown(value.replace(/[\r\n<>]/g, ' ').slice(0, 100))
 	const average = (value: number) => value.toLocaleString('ru-RU', {
-		maximumFractionDigits: 2
+		maximumFractionDigits: 2, useGrouping: false
 	})
 	function ranking() {
 		const weight = Number(store.getSetting(CAPTURE_KILL_WEIGHT))
@@ -73,15 +76,33 @@ export function createCaptureRankings({
 		cached = undefined
 	}
 	function discordBindings(guild: Guild) {
-		const byStatic = new Map<string, string | null>()
-		for (const [id, staticId] of roster?.linked ?? []) {
-			byStatic.set(staticId, byStatic.has(staticId) ? null : id)
+		const members = guild.members.cache
+		const decisions: Decisions = {}
+		for (const id of members.keys()) {
+			const decision = memberDecisions[id]
+			decisions[id] = {
+				...decision,
+				static: decision?.static || savedBindings[id] || roster?.linked.get(id)
+			}
 		}
 		const bindings = new Map<string, string>()
-		for (const [staticId, id] of byStatic) {
-			if (id && guild.members.cache.has(id)) bindings.set(staticId, id)
+		for (const [staticId, ids] of bindingIndex(members.values(), decisions)) {
+			if (ids.length === 1) bindings.set(staticId, ids[0])
 		}
 		return bindings
+	}
+	async function refreshMembers(guild: Guild) {
+		if (guild.members.cache.size < guild.memberCount)
+			await loadDiscordMembers(guild).catch(error =>
+				console.error('[CaptureRankings] Участники Discord:', getError(error).message))
+		const sync = guild.client.majesticSync
+		if (sync) {
+			const state = await sync.state(guild)
+			memberDecisions = state.decisions
+			savedBindings = state.familyMembership?.bindings ?? {}
+			// Ranking reads the roster even if the family cleanup worker cannot load kick events.
+			if (!roster && state.configured) updateRoster(await sync.membershipSnapshot(guild))
+		}
 	}
 	function byDiscord(guild?: Guild) {
 		const positions = new Map<string, number>()
@@ -101,22 +122,36 @@ export function createCaptureRankings({
 		const included = history?.filter(game => !excluded.has(game.key)) ?? []
 		const label = (name: string, staticId: string | null) => {
 			const discordId = staticId ? bindings?.get(staticId) : undefined
-			return discordId ? `<@${discordId}>` : `${clean(name)}${staticId ? ` (${staticId})` : ''}`
+			const shortName = name.length > 32 ? `${name.slice(0, 31)}…` : name
+			const escaped = clean(shortName)
+			const display = escaped.length > 40 ? clean(name.slice(0, 19)) + '…' : escaped
+			return discordId ? `<@${discordId}>` : `${display}${staticId ? ` (${staticId})` : ''}`
 		}
+		const columns = external
+			? ['#', 'Капты', 'Ср. урон', 'K/D', 'Победы', 'Рейт.']
+			: ['#', 'Капты', 'Ср. урон', 'K/D', 'MVP']
+		const table = history ? [] : external
+			? mitsuki!.map(player => ({
+				label: label(player.name, player.staticId),
+				values: [player.position, player.captures, average(player.avgDamage),
+					average(player.avgKills), `${player.winrate}%`, player.rating ?? '—'].map(String)
+			}))
+			: rows.map(player => ({
+				label: label(player.name, player.staticId),
+				values: [player.position, player.captures, average(player.damage),
+					player.kd === null ? '—' : average(player.kd), player.mvp].map(String)
+			}))
+		const widths = columns.map((heading, index) =>
+			table.reduce((width, row) => Math.max(width, row.values[index].length), heading.length))
+		const cells = (values: string[]) =>
+			'\`' + values.map((value, index) => value.padStart(widths[index])).join(' │ ') + '\`'
+		const tableText = (list: string) => list
+			? `${cells(columns)} **Игрок**\n${list}`
+			: 'Пока нет игроков с результатами.'
 		const lines = history
 			? history.map(game =>
 				`<t:${Math.floor(game.at / 1000)}:d> · ${clean(game.enemy)} · ${game.attack ? 'Атака' : 'Защита'} · ${game.result} · ${game.damage ?? '—'} урона · ${game.kills ?? '—'} килл.${excluded.has(game.key) ? ' · Вне рейтинга' : ''}`)
-			: external
-				? mitsuki!.map(player => {
-					const stats = [player.captures, average(player.avgDamage), average(player.avgKills),
-						`${player.winrate}%`, player.rating ?? '—']
-					return `**${player.position}.** ${label(player.name, player.staticId)} — \`${stats.join(' · ')}\``
-				})
-			: rows.map(player => {
-				const stats = [player.captures, average(player.damage),
-					player.kd === null ? '—' : average(player.kd), player.mvp]
-				return `**${player.position}.** ${label(player.name, player.staticId)} — \`${stats.join(' · ')}\``
-			})
+			: table.map(row => `${cells(row.values)} ${row.label}`)
 		const render = (list: string, page: number, pages: number) => history
 			? store.text('captureHistory.document', {
 				player: clean(history[0].name), static: key, captures: included.length,
@@ -124,9 +159,9 @@ export function createCaptureRankings({
 				position: statics.get(key) ?? '—', history: list, page, pages
 			})
 			: external
-				? `## Рейтинг Mitsuki\nЗа месяц · Игроков: ${lines.length} · Страница ${page}/${pages}\nБез оценки Mitsuki — по киллам за капт (K/D Mitsuki).\n\n**Игрок — капты · ср. урон · K/D Mitsuki · победы % · рейтинг Mitsuki**\n${list || 'Пока нет игроков с результатами.'}`
+				? `## Рейтинг Mitsuki\nЗа месяц · Игроков: ${lines.length} · Страница ${page}/${pages}\nБез оценки Mitsuki — по киллам за капт (K/D Mitsuki).\n\n${tableText(list)}`
 				: store.text('captureRanking.document', {
-				ranking: list || 'Пока нет игроков с результатами.',
+				ranking: tableText(list),
 				players: rows.length, page, pages
 			})
 		const lists: string[] = []
@@ -214,6 +249,30 @@ export function createCaptureRankings({
 			})
 		})
 	}
+	async function orderRankMessages(guild: Guild, channel: SendableChannels) {
+		const values = [guild.id, channel.id]
+		const { rows } = await pool.query<{ card_key: string; message_id: string }>(
+			`SELECT card_key, message_id FROM capture_stat_messages
+			WHERE guild_id = $1 AND channel_id = $2 AND card_key IN ('rank', 'mitsuki')`, values
+		)
+		const rank = rows.find(row => row.card_key === 'rank')
+		const external = rows.find(row => row.card_key === 'mitsuki')
+		if (!rank) return
+		if (!external) {
+			// Reuse the older slot for Mitsuki so the internal card can be sent below it.
+			await pool.query(
+				`UPDATE capture_stat_messages SET card_key = 'mitsuki', fingerprint = ''
+				WHERE guild_id = $1 AND channel_id = $2 AND card_key = 'rank'`, values
+			)
+		} else if (BigInt(rank.message_id) < BigInt(external.message_id)) {
+			await pool.query(
+				`UPDATE capture_stat_messages
+				SET message_id = CASE card_key WHEN 'mitsuki' THEN $3 ELSE $4 END, fingerprint = ''
+				WHERE guild_id = $1 AND channel_id = $2 AND card_key IN ('rank', 'mitsuki')`,
+				[...values, rank.message_id, external.message_id]
+			)
+		}
+	}
 	async function save(guildId: string, captures: CaptureStats[], historical = false) {
 		if (!captures.length) return
 		await pool.query(
@@ -290,6 +349,8 @@ export function createCaptureRankings({
 		if (!store.ready) return
 		const external = fetchMitsuki().then(rows => { mitsuki = rows }).catch(error =>
 			console.error('[CaptureRankings] Mitsuki:', getError(error).message))
+		const members = refreshMembers(guild).catch(error =>
+			console.error('[CaptureRankings] Состав:', getError(error).message))
 		if (!historicalLoaded) {
 			const { rows } = await pool.query<{ raw: RawWar }>(
 				`SELECT data->'raw' AS raw FROM family_wars
@@ -319,7 +380,7 @@ export function createCaptureRankings({
 			}
 		}
 		await loadStatistics(guild.id)
-		await external
+		await Promise.all([external, members])
 		await queuePublication(guild)
 	}
 
@@ -333,10 +394,11 @@ export function createCaptureRankings({
 			try {
 				const channel = await guild.channels.fetch(channelId)
 				if (channel?.isSendable()) {
-					if (roster) await publish(guild, channel, 'rank').catch(error =>
-						console.error('[CaptureRankings] Рейтинг:', getError(error).message))
+					if (roster && mitsuki) await orderRankMessages(guild, channel)
 					if (mitsuki) await publish(guild, channel, 'mitsuki').catch(error =>
 						console.error('[CaptureRankings] Mitsuki:', getError(error).message))
+					if (roster) await publish(guild, channel, 'rank').catch(error =>
+						console.error('[CaptureRankings] Рейтинг:', getError(error).message))
 				}
 			} catch (error) {
 				console.error('[CaptureRankings] Рейтинг:', getError(error).message)
