@@ -198,7 +198,7 @@ export interface ApiRoutes {
 			name: string
 			position: number
 			captures: number
-			kd: number | null
+			averageKills: number | null
 			damage: number
 			mvp: number
 		}[]

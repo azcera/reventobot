@@ -28,7 +28,7 @@ const MITSUKI_MARKER = 1698003
 const PREFIX = 'capstats:'
 const CAPTURE_KILL_WEIGHT = 'CAPTURE_RANK_KILL_WEIGHT'
 const RANK_CHANNEL = 'CAPTURE_RANK_CHANNEL_ID'
-const RANK_COLUMNS = ['#', 'Капты', 'Ср. урон', 'K/D', 'MVP']
+const RANK_COLUMNS = ['#', 'Капты', 'Ср. урон', 'Ср. киллы', 'MVP']
 
 function rankTable(columns: string[], rows: { label: string; values: string[] }[]) {
 	const widths = columns.map((heading, index) =>
@@ -41,7 +41,7 @@ function rankTable(columns: string[], rows: { label: string; values: string[] }[
 	}
 }
 
-function publishedRank(message: Message) {
+function publishedRank(message: Message, averageKills: (label: string) => string) {
 	const components = message.components.map(component => component.toJSON())
 	const container = components.find(component =>
 		component.type === ComponentType.Container && component.id === MARKER)
@@ -50,16 +50,23 @@ function publishedRank(message: Message) {
 	for (const component of container.components) {
 		if (component.type !== ComponentType.TextDisplay) continue
 		const lines = component.content.split('\n')
+		const isOldHeader = (line: string) =>
+			line === '**Игрок — капты · ср. урон · K/D · MVP**' ||
+			(line.endsWith(' **Игрок**') && /│\s*K\/D\s*│/.test(line))
+		if (!lines.some(isOldHeader)) continue
 		const rows = lines.flatMap(line => {
 			const match = /^\*\*(\d+)\.\*\* (.+) — \`([^\`]+)\`$/.exec(line)
-			if (!match) return []
-			const values = match[3].split(' · ')
-			return values.length === 4 ? [{ line, label: match[2], values: [match[1], ...values] }] : []
+			const aligned = /^\`([^\`]+)\` (.+)$/.exec(line)
+			const label = match?.[2] ?? aligned?.[2]
+			const values = match ? [match[1], ...match[3].split(' · ')]
+				: aligned?.[1].split('│').map(value => value.trim())
+			if (!label || values?.length !== RANK_COLUMNS.length || !/^\d+$/.test(values[0])) return []
+			return [{ line, label, values: [values[0], values[1], values[2], averageKills(label), values[4]] }]
 		})
 		if (!rows.length) continue
 		const table = rankTable(RANK_COLUMNS, rows)
 		const replacement = new Map(rows.map((row, index) => [row.line, table.lines[index]]))
-		const content = lines.filter(line => line !== '**Игрок — капты · ср. урон · K/D · MVP**')
+		const content = lines.filter(line => !isOldHeader(line))
 			.flatMap(line => line === rows[0].line
 				? [table.header, table.lines[0]] : [replacement.get(line) ?? line]).join('\n')
 		if (content.length <= TEXT_LIMIT) {
@@ -183,7 +190,7 @@ export function createCaptureRankings({
 			: rows.map(player => ({
 				label: label(player.name, player.staticId),
 				values: [player.position, player.captures, average(player.damage),
-					player.kd === null ? '—' : average(player.kd), player.mvp].map(String)
+					player.averageKills === null ? '—' : average(player.averageKills), player.mvp].map(String)
 			}))
 		const formatted = rankTable(columns, table)
 		const tableText = (list: string) => list
@@ -318,7 +325,16 @@ export function createCaptureRankings({
 		const newerIsRank = hasMarker(newer, MARKER)
 		const olderIsMitsuki = hasMarker(older, MITSUKI_MARKER)
 		const saved = newerIsRank ? newer : hasMarker(older, MARKER) ? older : undefined
-		const fallback = !roster && saved ? publishedRank(saved) : undefined
+		const statics = !roster && saved
+			? new Map([...discordBindings(guild)].map(([staticId, discordId]) => [discordId, staticId]))
+			: undefined
+		const fallback = !roster && saved ? publishedRank(saved, label => {
+			const discordId = /^<@!?(\d+)>$/.exec(label)?.[1]
+			const staticId = discordId ? statics?.get(discordId) : / \((\d+)\)$/.exec(label)?.[1]
+			const kills = staticId ? histories.get(staticId)?.flatMap(game =>
+				excluded.has(game.key) ? [] : game.kills ?? []) : undefined
+			return kills?.length ? average(kills.reduce((sum, value) => sum + value, 0) / kills.length) : '—'
+		}) : undefined
 		const rankCard = card(guild, 'rank')
 		const mitsukiCard = card(guild, 'mitsuki')
 		const payload = rankCard?.payload ?? fallback?.payload

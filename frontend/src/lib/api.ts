@@ -174,7 +174,7 @@ function validResponse(path: string, value: unknown): boolean {
 	if (path === 'capture-ranking')
 		return record(value) && boolean(value.ready) && array(value.players, player =>
 			record(player) && text(player.staticId) && text(player.name) &&
-			(player.kd === null || number(player.kd)) &&
+			(player.averageKills === null || number(player.averageKills)) &&
 			['position', 'captures', 'damage', 'mvp'].every(key => number(player[key]))
 		)
 	if (path === 'capture-ranking/captures')

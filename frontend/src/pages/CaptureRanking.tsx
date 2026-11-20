@@ -38,7 +38,7 @@ export function CaptureRanking({
 	return (
 		<div className='grid gap-4'>
 			<div className='grid gap-3 sm:grid-cols-2'>
-				<Field label='Вес K/D (%)'>
+				<Field label='Вес киллов (%)'>
 					<input type='number' min={0} max={100} step={1} value={weight}
 						onChange={event => change(event.target.value)} />
 				</Field>
@@ -49,9 +49,8 @@ export function CaptureRanking({
 				</Field>
 			</div>
 			<p className='text-sm text-muted'>
-				K/D и урон составляют 65% оценки, частота MVP — 15%, результаты боёв — 5%, опыт — 15%.
+				Средние киллы и урон составляют 65% оценки, частота MVP — 15%, результаты боёв — 5%, опыт — 15%.
 				Свежие капты влияют сильнее. При малом числе игр оценка осторожнее.
-				K/D учитывается по каптам с известными смертями.
 			</p>
 			<div className='flex flex-wrap gap-2'>
 				<Button type='button' onClick={() => setRefresh(value => value + 1)}>
@@ -76,7 +75,7 @@ export function CaptureRanking({
 				<div className='overflow-x-auto'>
 					<table className='w-full text-left text-sm'>
 						<thead><tr>
-							{['Место', 'Игрок', 'STATIC', 'Капты', 'Ср. урон', 'K/D', 'MVP'].map(label =>
+							{['Место', 'Игрок', 'STATIC', 'Капты', 'Ср. урон', 'Ср. киллы', 'MVP'].map(label =>
 								<th key={label} scope='col' className='px-2 py-2 whitespace-nowrap'>{label}</th>
 							)}
 						</tr></thead>
@@ -87,7 +86,7 @@ export function CaptureRanking({
 								<td className='px-2 py-2'>{player.staticId}</td>
 								<td className='px-2 py-2'>{player.captures}</td>
 								<td className='px-2 py-2'>{average(player.damage)}</td>
-								<td className='px-2 py-2'>{player.kd === null ? '—' : average(player.kd)}</td>
+								<td className='px-2 py-2'>{player.averageKills === null ? '—' : average(player.averageKills)}</td>
 								<td className='px-2 py-2'>{player.mvp}</td>
 							</tr>)}
 						</tbody>

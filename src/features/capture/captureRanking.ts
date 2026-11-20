@@ -93,8 +93,8 @@ const HALF_LIFE = 30 * 86400000
 const PRIOR_CAPTURES = 5
 
 function performance(games: CaptureHistoryRow[], latest: number) {
-	let damage = 0, damageWeight = 0, kills = 0, deaths = 0, kdWeight = 0
-	let rawKills = 0, rawDeaths = 0, rawDamage = 0, reportedDamage = 0
+	let damage = 0, damageWeight = 0, kills = 0, killsWeight = 0
+	let rawKills = 0, reportedKills = 0, rawDamage = 0, reportedDamage = 0
 	let wins = 0, decided = 0, mvps = 0, weight = 0, mvp = 0
 	for (const game of games) {
 		const recent = 2 ** ((game.at - latest) / HALF_LIFE)
@@ -107,12 +107,11 @@ function performance(games: CaptureHistoryRow[], latest: number) {
 			damage += recent * game.damage
 			damageWeight += recent
 		}
-		if (game.kills !== null && game.deaths != null) {
+		if (game.kills !== null) {
 			rawKills += game.kills
-			rawDeaths += game.deaths
+			reportedKills++
 			kills += recent * game.kills
-			deaths += recent * game.deaths
-			kdWeight += recent
+			killsWeight += recent
 		}
 		if (game.result === 'Победа' || game.result === 'Поражение') {
 			decided += recent
@@ -120,16 +119,16 @@ function performance(games: CaptureHistoryRow[], latest: number) {
 		}
 	}
 	return {
-		damage, damageWeight, kills, deaths, kdWeight, wins, decided, mvps, weight, mvp,
+		damage, damageWeight, kills, killsWeight, wins, decided, mvps, weight, mvp,
 		averageDamage: rawDamage / (reportedDamage || 1),
-		kd: kdWeight ? rawKills / Math.max(1, rawDeaths) : null
+		averageKills: reportedKills ? rawKills / reportedKills : null
 	}
 }
 
 export function rankCapturePlayers(
 	histories: ReturnType<typeof captureHistories>,
 	members: ReadonlySet<string>,
-	kdPercent: number,
+	killPercent: number,
 	excluded: ReadonlySet<string> = new Set()
 ) {
 	const players = [...histories].flatMap(([staticId, history]) => {
@@ -139,13 +138,11 @@ export function rankCapturePlayers(
 	})
 	const latest = players.reduce((max, player) => Math.max(max, player.games[0].at), 0)
 	const samples = players.map(player => ({ ...player, performance: performance(player.games, latest) }))
-	const total = (key: keyof Omit<ReturnType<typeof performance>, 'kd'>) =>
+	const total = (key: keyof Omit<ReturnType<typeof performance>, 'averageKills'>) =>
 		samples.reduce((sum, player) => sum + player.performance[key], 0)
 	const mean = (value: number, exposure: number) => exposure ? value / exposure : 0
 	const baseDamage = mean(total('damage'), total('damageWeight'))
-	const kdExposure = total('kdWeight')
-	const baseKills = mean(total('kills'), kdExposure)
-	const baseDeaths = mean(total('deaths'), kdExposure)
+	const baseKills = mean(total('kills'), total('killsWeight'))
 	const baseMvp = mean(total('mvps'), total('weight'))
 	const baseWins = total('decided') ? total('wins') / total('decided') : 0.5
 	const smooth = (value: number, exposure: number, baseline: number) =>
@@ -158,18 +155,16 @@ export function rankCapturePlayers(
 
 	return samples.map(({ staticId, name, games, performance: stats }) => {
 		const damage = combatEstimate(mean(stats.damage, stats.damageWeight), stats.damageWeight, baseDamage)
-		const kd = stats.kills / Math.max(1, stats.deaths)
-		const kdSignal = combatEstimate(kd, stats.kdWeight,
-			PRIOR_CAPTURES * baseKills / Math.max(1, PRIOR_CAPTURES * baseDeaths))
-		const combatWeight = stats.kdWeight ? kdPercent / 100 : 0
+		const kills = combatEstimate(mean(stats.kills, stats.killsWeight), stats.killsWeight, baseKills)
+		const combatWeight = stats.killsWeight ? killPercent / 100 : 0
 		const mvp = compareToFamily(smooth(stats.mvps, stats.weight, baseMvp), baseMvp)
 		const result = smooth(stats.wins, stats.decided, baseWins)
 		const experience = games.length / (games.length + 10)
-		const score = 0.65 * (kdSignal * combatWeight + damage * (1 - combatWeight)) +
+		const score = 0.65 * (kills * combatWeight + damage * (1 - combatWeight)) +
 			0.15 * mvp + 0.05 * result + 0.15 * experience
 		return {
 			score, staticId, name, captures: games.length,
-			damage: stats.averageDamage, kd: stats.kd, mvp: stats.mvp
+			damage: stats.averageDamage, averageKills: stats.averageKills, mvp: stats.mvp
 		}
 	}).sort((a, b) => b.score - a.score || b.captures - a.captures ||
 		b.mvp - a.mvp || Number(a.staticId) - Number(b.staticId))

@@ -37,7 +37,7 @@ test('counts both MVP categories independently, including ties and partially rep
 
 test('the leaderboard is keyed by STATIC, configurable and limited to the current roster', () => {
 	const first = captureStats(normalize(battle(1, [
-		player(1, 10, 100, 1), player(2, 1, 1000, 5), player(3, 2, 200)
+		player(1, 10, 100), player(2, 1, 1000), player(3, 2, 200)
 	])))!
 	const second = captureStats(normalize(battle(2, [player(2, 1), player(3, 2, 600)])))!
 	const histories = captureHistories([first, second])
@@ -48,7 +48,7 @@ test('the leaderboard is keyed by STATIC, configurable and limited to the curren
 	assert.equal(damage[0].staticId, '2')
 	assert.equal(damage[0].damage, 1000)
 	assert.equal(damage[0].captures, 2)
-	assert.equal(damage[0].kd, 0.2)
+	assert.equal(damage[0].averageKills, 1)
 	assert.equal(histories.get('3')?.length, 2)
 	assert.ok(!Object.hasOwn(damage[0], 'score'))
 	const equalPerformance = { ...first, players: [
@@ -69,8 +69,21 @@ test('experience rewards consistent performance, but exceptional form can still 
 	const row = (id: string) => rows.find(entry => entry.staticId === id)!
 	assert.ok(row('1').position < row('2').position)
 	assert.ok(row('3').position < row('1').position)
-	assert.equal(row('1').kd, 1.5)
-	assert.equal(row('4').kd, null)
+	assert.equal(row('1').averageKills, 3)
+	assert.equal(row('4').averageKills, 5)
+})
+
+test('average kills counts reported zeroes and skips unreported kills', () => {
+	const games = [
+		battle(1, [player(1, 4, 200)]),
+		battle(2, [player(1, 0, 100)]),
+		battle(3, [player(1, undefined, 100), player(2, undefined, 50)])
+	].map(raw => captureStats(normalize(raw))!)
+	const histories = captureHistories(games)
+	const roster = new Set(['1', '2'])
+	const rows = rankCapturePlayers(histories, roster, 70)
+	assert.equal(rows.find(row => row.staticId === '1')?.averageKills, 2)
+	assert.equal(rows.find(row => row.staticId === '2')?.averageKills, null)
 })
 
 const mitsukiPlayer = (id: number, rating: number | null) => ({
@@ -292,8 +305,8 @@ test('imports available history once per battle, pins archive cards and picks up
 	service.updateRoster(snapshot(['1']))
 	await service.saveInclusion(guild, [{ key: 'RU8:2', included: false }])
 	await service.stop()
-	assert.deepEqual(service.view().players.map(({ captures, kd, damage, mvp }) =>
-		[captures, kd, damage, mvp]), [[1, null, 200, 1]])
+	assert.deepEqual(service.view().players.map(({ captures, averageKills, damage, mvp }) =>
+		[captures, averageKills, damage, mvp]), [[1, 2, 200, 1]])
 	assert.equal(service.mitsuki().players[0].rating, 700)
 	assert.match(archive.deliveries.at(-1)!, /600 урона.*Вне рейтинга/)
 	assert.equal(service.captures().captures[0].included, false)
@@ -319,6 +332,7 @@ test('imports available history once per battle, pins archive cards and picks up
 	const entries = (content: string) => content.match(/^\`\s*\d+\s+│/gm) ?? []
 	const firstPage = text(ranking.deliveries.at(-1)!)
 	assert.match(firstPage, /Страница 1\/2/)
+	assert.match(firstPage, /Ср\. киллы/)
 	assert.equal(entries(firstPage).length, 40)
 	const pageInteraction = {
 		guild, guildId: guild.id, channel: ranking, channelId: ranking.id,
@@ -348,14 +362,15 @@ test('imports available history once per battle, pins archive cards and picks up
 		id: 1698002, type: 17, components: [{
 			type: 10,
 			content: '## Рейтинг каптов\nИгроков: 48 · Страница 1/2\n\n' +
-				'**Игрок — капты · ср. урон · K/D · MVP**\n' +
-				`**1.** <@${discordId}> — \`6 · 374,83 · — · 2\``
+				'\`# │ Капты │ Ср. урон │ K/D │ MVP\` **Игрок**\n' +
+				`\`1 │ 6 │ 374,83 │ — │ 2\` <@${discordId}>`
 		}]
 	}] })
 	await newer.edit({ components: originalMitsuki })
 	// A previous refresh already recorded the desired slots, but Discord still had the old pair.
 	messages.set('ranking:mitsuki', { message_id: older.id, fingerprint: '' })
 	messages.set('ranking:rank', { message_id: newer.id, fingerprint: '' })
+	Object.assign(guild.members.cache.get(discordId)!, { nickname: 'Player | 1' })
 	majesticAvailable = false
 	const restarted = makeService()
 	const sentBeforeRestart = sent
@@ -363,7 +378,7 @@ test('imports available history once per battle, pins archive cards and picks up
 	assert.equal(restarted.view().ready, false)
 	assert.equal(sent, sentBeforeRestart)
 	assert.match(JSON.stringify(older.components), /Рейтинг Mitsuki/)
-	assert.match(JSON.stringify(newer.components), /Капты.*│.*Ср\. урон/)
-	assert.match(JSON.stringify(newer.components), new RegExp(`374,83.*<@${discordId}>`))
+	assert.match(JSON.stringify(newer.components), /Капты.*│.*Ср\. урон.*│.*Ср\. киллы/)
+	assert.match(JSON.stringify(newer.components), new RegExp(`374,83.*│\\s*3,5.*<@${discordId}>`))
 	assert.match(JSON.stringify(newer.components), /Страница 1\/2/)
 })

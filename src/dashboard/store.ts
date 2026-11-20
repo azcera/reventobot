@@ -123,7 +123,7 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 		channelTypes: [0]
 	},
 	CAPTURE_RANK_KILL_WEIGHT: {
-		label: 'Вес K/D и урона',
+		label: 'Вес киллов и урона',
 		type: 'percentage',
 		default: '70'
 	},
