@@ -79,39 +79,30 @@ function fixture() {
 	return { rows, edits, original, options, setFail(value: boolean) { fail = value }, setCaptures(value: RawWar[]) { captures = value }, getFetches: () => fetches }
 }
 
-test('polls only on capture days from the scheduled start through 21:15 Moscow, retaining pending notices', async () => {
-	const { options, rows, getFetches } = fixture()
-	let time = ''
-	const service = createCaptureResults({ ...options, now: () => Date.parse(time) })
+test('polls every minute during captures and every 15 minutes outside the window, including after restart', async t => {
+	t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: Date.parse('2026-11-13T21:14:00+03:00') })
+	const { options, getFetches, rows } = fixture()
+	const service = createCaptureResults({ ...options, now: Date.now })
 	await service.track({ id: 'message', channelId: 'channel', guildId: 'guild' }, notice)
-	const query = options.pool.query
-	let queries = 0
-	options.pool.query = (async (...args: any[]) => { queries++; return (query as any)(...args) }) as typeof query
-	for (const date of ['2026-11-09', '2026-11-11', '2026-11-13', '2026-11-14']) {
-		for (const clock of ['15:00:00', '21:00:00', '21:15:00', '21:15:59']) {
-			time = `${date}T${clock}+03:00`
-			const before = getFetches()
-			await service.poll()
-			assert.equal(getFetches(), before + 1, time)
-		}
-	}
-	for (const date of ['2026-11-10', '2026-11-12', '2026-11-15']) {
-		time = `${date}T18:00:00+03:00`
-		const before = queries
-		await service.poll()
-		assert.equal(queries, before, time)
-	}
-	for (const value of ['2026-11-13T14:59:59+03:00', '2026-11-13T21:16:00+03:00', '2026-11-13T23:59:59+03:00', '2026-11-14T22:53:02.096Z']) {
-		time = value
-		const before = queries
-		await service.poll()
-		assert.equal(queries, before, time)
-	}
+	const settle = () => new Promise(resolve => setImmediate(resolve))
+	service.start()
+	await settle()
+	assert.equal(getFetches(), 1)
+	t.mock.timers.tick(60000)
+	await settle()
+	assert.equal(getFetches(), 2)
+	t.mock.timers.tick(14 * 60000)
+	await settle()
+	assert.equal(getFetches(), 2)
+	t.mock.timers.tick(60000)
+	await settle()
+	assert.equal(getFetches(), 3)
 	assert.equal(rows[0].api_id, null)
-	time = '2026-11-16T15:00:00+03:00'
-	const before = getFetches()
-	await service.poll()
-	assert.equal(getFetches(), before + 1)
+	await service.stop()
+	t.mock.timers.setTime(Date.parse('2026-11-15T12:00:00+03:00'))
+	service.start()
+	await service.stop()
+	assert.equal(getFetches(), 4)
 })
 
 test('only processes null IDs, retries failed edits after restart and stops polling completed notices', async () => {
@@ -129,7 +120,7 @@ test('only processes null IDs, retries failed edits after restart and stops poll
 	assert.equal(rows[0].version, null)
 	assert.equal(rows[0].api_id, null)
 	setFail(false)
-	const restarted = createCaptureResults(options)
+	const restarted = createCaptureResults({ ...options, now: () => Date.parse('2026-11-13T23:30:00+03:00') })
 	captures[0].startAt = '2026-11-13T15:50:00Z'
 	await restarted.poll()
 	assert.equal(edits.length, 1)

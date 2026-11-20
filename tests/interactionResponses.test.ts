@@ -70,7 +70,7 @@ test('opening an application form remains the initial response', async () => {
 
 test('failed capture acknowledgement is logged once and never starts capture processing', async t => {
 	const errors: unknown[][] = []
-	t.mock.method(console, 'error', (...args: unknown[]) => { errors.push(args) })
+	t.mock.method(console, 'warn', (...args: unknown[]) => { errors.push(args) })
 	const f = fixture('capt_join')
 	Object.assign(f.interaction, { async deferUpdate() { throw Object.assign(new Error('Unknown interaction'), { code: 10062 }) } })
 	await f.dispatch()
@@ -80,11 +80,13 @@ test('failed capture acknowledgement is logged once and never starts capture pro
 	assert.equal(typeof (errors[0][1] as { receivedAgeMs: number }).receivedAgeMs, 'number')
 })
 
-test('expired unacknowledged actions do not attempt another initial reply', async t => {
-	t.mock.method(console, 'error', () => {})
-	const f = fixture('war_join_RU8_1', { familyWars: { async handle() { throw new Error('Network failure') } } })
+test('actions received after the initial response deadline never enter their handler', async t => {
+	t.mock.method(console, 'warn', () => {})
+	const handle = t.mock.fn(async () => {})
+	const f = fixture('war_join_RU8_1', { familyWars: { handle } })
 	f.interaction.createdTimestamp = Date.now() - 4000
 	await f.dispatch()
+	assert.equal(handle.mock.callCount(), 0)
 	assert.deepEqual(f.responses, [])
 })
 

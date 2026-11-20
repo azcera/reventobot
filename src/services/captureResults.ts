@@ -40,6 +40,21 @@ interface NoticeRow {
 	version: string | null
 }
 const RESULT_ID = 1698001
+const CATCH_UP_INTERVAL = 15 * 60000
+
+function inCaptureWindow(timestamp: number) {
+	const capture = events.find(event => event.id === 'captures')
+	const moscow = new Date(timestamp + 3 * 3600000)
+	const day = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][moscow.getUTCDay()]
+	if (!capture?.days.some(value => value === day)) return false
+	const [start, end] = capture.time.split('–').map(time => {
+		const [hours, minutes] = time.split(':').map(Number)
+		return hours * 60 + minutes
+	})
+	const minute = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
+	return minute >= start && minute <= end + 15
+}
+
 function disableRegistration(component: RawComponent) {
 	if (
 		component.type === ComponentType.Button &&
@@ -189,22 +204,6 @@ export function createCaptureResults({
 	async function pollOnce() {
 		const key = env.FAMILY_WARS_API_KEY?.trim()
 		if (!key) return
-		const capture = events.find(event => event.id === 'captures')
-		const moscow = new Date(now() + 3 * 3600000)
-		if (
-			!capture ||
-			!capture.days.some(
-				day =>
-					day === ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][moscow.getUTCDay()]
-			)
-		)
-			return
-		const [start, end] = capture.time.split('–').map(time => {
-			const [hours, minutes] = time.split(':').map(Number)
-			return hours * 60 + minutes
-		})
-		const minute = moscow.getUTCHours() * 60 + moscow.getUTCMinutes()
-		if (!(minute >= start && minute <= end + 15)) return
 		await ensureSchema()
 		const rows = (
 			await pool.query<NoticeRow>(
@@ -357,7 +356,15 @@ export function createCaptureResults({
 		poll,
 		start() {
 			if (timer) return
+			let lastPoll = -Infinity
 			const run = () => {
+				const timestamp = now()
+				if (
+					!inCaptureWindow(timestamp) &&
+					timestamp - lastPoll < CATCH_UP_INTERVAL
+				)
+					return
+				lastPoll = timestamp
 				void poll().catch(error => logger.error('[CaptureResults]', error))
 			}
 			run()

@@ -26,26 +26,33 @@ import submitRejectModal = require('../features/invite/inviteModalHandler')
 export = (client: import('discord.js').Client) => {
 	client.on('interactionCreate', async interaction => {
 		if (!interaction.isRepliable()) return
-		if (!interaction.inCachedGuild()) {
-			await interaction
-				.reply({
+		const receivedAgeMs = Date.now() - interaction.createdTimestamp
+		const action =
+			'customId' in interaction ? interaction.customId : interaction.commandName
+		if (receivedAgeMs >= 3000) {
+			console.warn('[Interaction] Истёк срок первичного ответа', {
+				action,
+				receivedAgeMs
+			})
+			return
+		}
+		const startedAt = performance.now()
+		try {
+			if (!interaction.inCachedGuild()) {
+				await interaction.reply({
 					content:
 						'Действие доступно только на сервере. Повторите после восстановления подключения.',
 					flags: MessageFlags.Ephemeral
 				})
-				.catch(console.error)
-			return
-		}
-		const startedAt = performance.now()
-		const receivedAgeMs = Date.now() - interaction.createdTimestamp
-		try {
+				return
+			}
 			if (
 				interaction.isChatInputCommand() ||
 				interaction.isUserContextMenuCommand()
 			) {
 				const command = client.commands.get(interaction.commandName)
 				if (!command || !('data' in command))
-					return interaction.reply({
+					return await interaction.reply({
 						content: 'Команда больше недоступна.',
 						flags: MessageFlags.Ephemeral
 					})
@@ -53,8 +60,8 @@ export = (client: import('discord.js').Client) => {
 					await command.execute(interaction)
 				} catch (caught) {
 					const error = getError(caught)
+					if (error.code === 10062 || error.code === 40060) throw error
 					console.error(error)
-					if (error?.code === 10062) return
 					if (
 						!interaction.replied &&
 						!interaction.deferred &&
@@ -80,7 +87,7 @@ export = (client: import('discord.js').Client) => {
 					interaction.customId.startsWith('war_'))
 			) {
 				if (!client.familyWars)
-					return interaction.reply({
+					return await interaction.reply({
 						content: 'API-регистрация каптов временно отключена.',
 						flags: MessageFlags.Ephemeral
 					})
@@ -105,7 +112,7 @@ export = (client: import('discord.js').Client) => {
 				interaction.customId.startsWith('role_curator_')
 			) {
 				if (!client.roleCurators)
-					return interaction.reply({
+					return await interaction.reply({
 						content: 'Управление ролями временно недоступно.',
 						flags: MessageFlags.Ephemeral
 					})
@@ -117,7 +124,7 @@ export = (client: import('discord.js').Client) => {
 				interaction.customId.startsWith('family_cleanup_')
 			) {
 				if (!client.familyMembership)
-					return interaction.reply({
+					return await interaction.reply({
 						content: 'Проверка семьи ещё не готова.',
 						flags: MessageFlags.Ephemeral
 					})
@@ -170,7 +177,7 @@ export = (client: import('discord.js').Client) => {
 				customId.startsWith('modal_capture_preset_')
 			) {
 				if (!client.capturePresets)
-					return interaction.reply({
+					return await interaction.reply({
 						content: 'Сборы временно недоступны.',
 						flags: MessageFlags.Ephemeral
 					})
@@ -184,7 +191,7 @@ export = (client: import('discord.js').Client) => {
 			}
 			if (interaction.isModalSubmit() && customId === 'archive_notice') {
 				if (!(await authorize(interaction, dashboard))) return
-				return interaction.reply({
+					return await interaction.reply({
 					content: 'Уведомление закрыто.',
 					flags: MessageFlags.Ephemeral
 				})
@@ -289,9 +296,11 @@ export = (client: import('discord.js').Client) => {
 				})
 		} catch (caught) {
 			const error = getError(caught)
-			console.error('[Interaction]', {
+			const rejected = error.code === 10062 || error.code === 40060
+			const log = rejected ? console.warn : console.error
+			log('[Interaction]', {
 				id: interaction.id,
-				customId: 'customId' in interaction ? interaction.customId : undefined,
+				customId: 'customId' in interaction ? action : undefined,
 				receivedAgeMs,
 				ageMs: Date.now() - interaction.createdTimestamp,
 				elapsedMs: Math.round(performance.now() - startedAt),
@@ -299,7 +308,7 @@ export = (client: import('discord.js').Client) => {
 				code: error.code,
 				message: error.message
 			})
-			if (error.code === 10062 || error.code === 40060) return
+			if (rejected) return
 			if (
 				!interaction.deferred &&
 				!interaction.replied &&
@@ -319,7 +328,16 @@ export = (client: import('discord.js').Client) => {
 				else
 					await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral })
 			} catch (responseError) {
-				console.error('[Interaction response]', getError(responseError).message)
+				const error = getError(responseError)
+				const log =
+					error.code === 10062 || error.code === 40060
+						? console.warn
+						: console.error
+				log('[Interaction response]', {
+					action,
+					code: error.code,
+					message: error.message
+				})
 			}
 		}
 	})

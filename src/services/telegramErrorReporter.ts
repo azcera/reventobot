@@ -2,6 +2,34 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { formatWithOptions } from 'node:util'
 import type * as T from '../types'
 
+const CONNECTION_ALERT_INTERVAL = 15 * 60000
+const NETWORK_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'UND_ERR_CONNECT_TIMEOUT']
+
+function connectionAlert(context: string, error: {
+	name?: string
+	message?: string
+	code?: string | number
+	cause?: { code?: string }
+	causeCode?: string
+	connectionTimeout?: boolean
+	connectionTerminated?: boolean
+}) {
+	if (
+		error.code === '08006' ||
+		error.connectionTimeout ||
+		error.connectionTerminated ||
+		/^(Connection terminated (?:due to connection timeout|unexpectedly)|timeout exceeded when trying to connect|\(EAUTHTIMEOUT\) timeout while waiting for message)$/.test(error.message || '')
+	)
+		return 'PostgreSQL'
+	if (
+		error.name === 'TimeoutError' ||
+		NETWORK_CODES.includes(String(error.causeCode || error.cause?.code || error.code))
+	) {
+		if (context.startsWith('[Telegram broadcast]')) return 'Telegram broadcast'
+		if (context === '[CaptureResults]') return 'CaptureResults'
+	}
+}
+
 function installTelegramErrorReporter({
 	env = process.env,
 	logger = console,
@@ -21,7 +49,7 @@ function installTelegramErrorReporter({
 		.filter(
 			([key, value]) =>
 				value &&
-				/TOKEN|SECRET|PASSWORD|API_HASH|SESSION|DATABASE_URL|SUPABASE_URL/i.test(
+				/TOKEN|SECRET|PASSWORD|API_HASH|API_KEY|SESSION|DATABASE_URL|SUPABASE_URL/i.test(
 					key
 				)
 		)
@@ -37,6 +65,7 @@ function installTelegramErrorReporter({
 		})
 		.sort((a, b) => b.length - a.length)
 	const pending = new Map<string, number>()
+	const connectionAlerts = new Map<string, { next: number; skipped: number }>()
 	let discarded = 0
 
 	async function deliver(text: string) {
@@ -81,16 +110,37 @@ function installTelegramErrorReporter({
 	}
 	logger.error = (...args) => {
 		originalError(...args)
+		const context = typeof args[0] === 'string' ? args[0] : ''
+		const details = args.find(arg => arg && typeof arg === 'object')
+		if (details?.code === 10062 || details?.code === 40060) return
+		const group =
+			details && !/^(\[Startup\]|Необработанное исключение)/.test(context)
+				? connectionAlert(context, details)
+				: undefined
+		const timestamp = Date.now()
+		const previous = group ? connectionAlerts.get(group) : undefined
+		if (previous && timestamp < previous.next) {
+			previous.skipped++
+			return
+		}
 		let message = formatWithOptions(
 			{ depth: 3, maxStringLength: 8000, maxArrayLength: 20 },
 			...args
 		)
 		for (const secret of secrets)
 			message = message.split(secret).join('[скрыто]')
+		message = message.replace(/(\/(?:interactions|webhooks)\/\d+\/)[^/\s?'"]+/g, '$1[скрыто]')
 		message = message.slice(0, 3800).replace(/[\uD800-\uDBFF]$/, '')
 		if (pending.has(message)) pending.set(message, pending.get(message)! + 1)
-		else if (pending.size >= 32) discarded++
-		else pending.set(message, 1)
+		else if (pending.size >= 32) {
+			discarded++
+			return
+		} else pending.set(message, 1 + (previous?.skipped ?? 0))
+		if (group)
+			connectionAlerts.set(group, {
+				next: timestamp + CONNECTION_ALERT_INTERVAL,
+				skipped: 0
+			})
 		if (!running)
 			running = Promise.resolve()
 				.then(drain)
