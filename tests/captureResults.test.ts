@@ -2,11 +2,24 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Collection, ContainerBuilder, type Client, type Message, TextDisplayBuilder } from 'discord.js'
 import type { Pool } from 'pg'
+import { captureNoticeKey } from '../src/features/capture/captureNotice'
 import { createCaptureResults, matchesCapture, captureResultText } from '../src/services/captureResults'
 import { normalizeWar, rulesFromEnv } from '../src/features/capture/familyWarData'
 import type { RawWar } from '../src/features/capture/familyWarTypes'
 
 const notice = { attack: true, enemy: 'Enemy', startTime: '13.11.2026 18:30', zone: 'C50' }
+
+test('identifies the same Majestic capture independently of notification formatting', () => {
+	const capture = { attack: true, enemy: 'Masquerade', startTime: '20.11.2026 16:38:00', zone: 'BD58', server: 'Miami' }
+	const key = captureNoticeKey(capture)
+	assert.ok(key)
+	assert.equal(captureNoticeKey({ ...capture, enemy: ' MASQUERADE ', startTime: '20.11.2026  16:38', zone: 'bd58' }), key)
+	for (const change of [{ attack: false }, { server: 'Other' }, { enemy: 'Other' }, { zone: 'AB53' }, { startTime: '20.11.2026 16:39:00' }]) {
+		assert.notEqual(captureNoticeKey({ ...capture, ...change }), key)
+	}
+	assert.equal(captureNoticeKey({ ...capture, startTime: 'Не указано' }), undefined)
+})
+
 function raw(): RawWar {
 	return { id: 1, attackersId: 1698, defendersId: 2, defendersName: 'Enemy',
 		startAt: '2026-11-13T15:30:00Z', gangZoneId: 12, status: 'finished', winner: 1698,
@@ -41,6 +54,7 @@ test('matches Moscow time with up to 20 minutes delay, opponent and our side; ig
 function fixture() {
 	const rows: any[] = [], edits: any[] = []
 	let captures = [raw()], fail = true, fetches = 0
+	const missing = new Set<string>()
 	const original = new ContainerBuilder().setAccentColor(0x5865f2)
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent('Telegram announcement and registration @everyone'))
 		.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -55,8 +69,7 @@ function fixture() {
 	const pool = { async query(sql: string, args: any[] = []) {
 		if (sql.startsWith('INSERT')) rows.push({ message_id: args[0], channel_id: args[1], guild_id: args[2], notice: JSON.parse(args[3]), api_id: null, version: null })
 		if (sql.startsWith('SELECT *')) {
-			assert.match(sql, /api_id IS NULL/)
-			return { rows: rows.filter(row => row.api_id === null).map(row => ({ ...row })) }
+			return { rows: rows.map(row => ({ ...row })) }
 		}
 		if (sql.startsWith('SELECT api_id')) return { rows: rows.filter(row => row.api_id !== null).map(row => ({ api_id: row.api_id })) }
 		if (sql.startsWith('UPDATE')) {
@@ -72,11 +85,14 @@ function fixture() {
 		return { rows: [] }
 	} } as unknown as Pool
 	const members = new Collection<string, any>([['bound', { id: 'bound', nickname: 'Damage | 10', user: { bot: false } }]])
-	const options = { pool, client: { user: { id: 'bot' }, guilds: { async fetch() { return { members: { async fetch() { return members } } } } }, channels: { async fetch() { return { guildId: 'guild', isTextBased: () => true, messages: { async fetch() { return message } } } } } } as unknown as Client,
+	const options = { pool, client: { user: { id: 'bot' }, guilds: { async fetch() { return { members: { async fetch() { return members } } } } }, channels: { async fetch() { return { guildId: 'guild', isTextBased: () => true, messages: { async fetch(id: string) {
+		if (missing.has(id)) throw Object.assign(new Error('Unknown Message'), { code: 10008 })
+		return message
+	} } } } } } as unknown as Client,
 		now: () => Date.parse('2026-11-13T18:30:00+03:00'),
 		env: { FAMILY_WARS_API_KEY: 'test', GUILD_ID: 'guild' }, logger: { error() {} },
 		fetchImpl: (async () => { fetches++; return { ok: true, json: async () => ({ code: 200, status: true, result: { serverId: 'RU8', captures } }) } }) as unknown as typeof fetch }
-	return { rows, edits, original, options, setFail(value: boolean) { fail = value }, setCaptures(value: RawWar[]) { captures = value }, getFetches: () => fetches }
+	return { rows, edits, original, options, missing, setFail(value: boolean) { fail = value }, setCaptures(value: RawWar[]) { captures = value }, getFetches: () => fetches }
 }
 
 test('polls every minute during captures and every 15 minutes outside the window, including after restart', async t => {
@@ -157,13 +173,29 @@ test('skips ambiguous battles, competing notices and already claimed IDs', async
 	assert.equal(rows[0].api_id, null)
 	assert.equal(edits.length, 0)
 	setCaptures([raw()])
-	await service.track({ id: 'second', channelId: 'channel', guildId: 'guild' }, notice)
+	await service.track({ id: 'second', channelId: 'channel', guildId: 'guild' }, { ...notice, zone: 'different' })
 	await service.poll()
 	assert.ok(rows.every(row => row.api_id === null))
 	rows[0].api_id = '1'
 	await service.poll()
 	assert.equal(rows[1].api_id, null)
 	assert.equal(edits.length, 0)
+})
+
+test('assigns results once for duplicate legacy announcements, using the surviving copy if needed', async () => {
+	for (const firstDeleted of [false, true]) {
+		const { options, rows, edits, missing, setFail, getFetches } = fixture()
+		setFail(false)
+		if (firstDeleted) missing.add('first')
+		const service = createCaptureResults(options)
+		await service.track({ id: 'first', channelId: 'channel', guildId: 'guild' }, notice)
+		await service.track({ id: 'second', channelId: 'channel', guildId: 'guild' }, { ...notice, startTime: notice.startTime + ':00' })
+		await service.poll()
+		assert.deepEqual(rows.map(row => row.api_id), firstDeleted ? [null, '1'] : ['1', null])
+		assert.equal(edits.length, 1)
+		await service.poll()
+		assert.equal(getFetches(), 1)
+	}
 })
 
 test('renders defeat in red, replaces an old result and coalesces concurrent polls', async () => {

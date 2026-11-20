@@ -7,6 +7,10 @@ import {
 } from 'discord.js'
 import type { Pool } from 'pg'
 import {
+	captureNoticeKey,
+	type CaptureNotice
+} from '../features/capture/captureNotice'
+import {
 	battleSummary,
 	bindingIndex,
 	FAMILY_ID,
@@ -22,15 +26,10 @@ import type {
 	WarPlayer
 } from '../features/capture/familyWarTypes'
 import type { Env, RawComponent } from '../types'
+import { getError } from '../utils/errors'
 import { loadDiscordMembers } from './discordMembers'
 import events = require('../config/eventSchedule')
 
-interface CaptureNotice {
-	attack: boolean
-	enemy: string
-	startTime: string
-	zone: string
-}
 interface NoticeRow {
 	message_id: string
 	channel_id: string
@@ -208,11 +207,22 @@ export function createCaptureResults({
 		const rows = (
 			await pool.query<NoticeRow>(
 				`SELECT * FROM telegram_capture_results
-			WHERE guild_id = $1 AND api_id IS NULL AND created_at > NOW() - INTERVAL '7 days'`,
+			WHERE guild_id = $1 AND created_at > NOW() - INTERVAL '7 days'
+			ORDER BY created_at, message_id`,
 				[env.GUILD_ID]
 			)
 		).rows
-		if (!rows.length) return
+		const groups = new Map<string, NoticeRow[]>()
+		for (const row of rows) {
+			const key = captureNoticeKey(row.notice) ?? row.message_id
+			const group = groups.get(key)
+			if (group) group.push(row)
+			else groups.set(key, [row])
+		}
+		const pending = [...groups.values()].filter(group =>
+			group.every(row => row.api_id === null)
+		)
+		if (!pending.length) return
 		const response = await fetchImpl(
 			`https://api.majestic-files.net/v1/ext/family-wars/${SERVER}`,
 			{
@@ -268,14 +278,32 @@ export function createCaptureResults({
 			return { members: [...members.values()], decisions }
 		}
 		// Match both directions before binding: one announcement must not steal another's battle.
-		const candidates = rows.map(row => ({
-			row,
+		const candidates = pending.map(group => ({
+			group,
 			wars: wars.filter(
 				war =>
-					!claimed.has(String(war.apiId)) && matchesCapture(row.notice, war)
+					!claimed.has(String(war.apiId)) && matchesCapture(group[0].notice, war)
 			)
 		}))
-		for (const { row, wars: matches } of candidates) {
+		async function findAnnouncement(group: NoticeRow[]) {
+			for (const row of group) {
+				const channel = await client.channels.fetch(row.channel_id)
+				if (
+					!channel ||
+					!('guildId' in channel) ||
+					channel.guildId !== row.guild_id ||
+					!channel.isTextBased()
+				)
+					continue
+				try {
+					const message = await channel.messages.fetch(row.message_id)
+					if (message.author.id === client.user?.id) return { row, message }
+				} catch (error) {
+					if (getError(error).code !== 10008) throw error
+				}
+			}
+		}
+		for (const { group, wars: matches } of candidates) {
 			try {
 				if (matches.length !== 1) continue
 				const war = matches[0]
@@ -285,19 +313,12 @@ export function createCaptureResults({
 					).length !== 1
 				)
 					continue
+				const announcement = await findAnnouncement(group)
+				if (!announcement) continue
+				const { row, message } = announcement
 				bindings ||= loadBindings(row.guild_id)
 				const linked = await bindings
 				const version = captureResultText(war, linked.members, linked.decisions)
-				const channel = await client.channels.fetch(row.channel_id)
-				if (
-					!channel ||
-					!('guildId' in channel) ||
-					channel.guildId !== row.guild_id ||
-					!channel.isTextBased()
-				)
-					continue
-				const message = await channel.messages.fetch(row.message_id)
-				if (message.author.id !== client.user?.id) continue
 				const result = battleSummary(war).result
 				const color =
 					result === 'Неопределено'
@@ -342,7 +363,7 @@ export function createCaptureResults({
 					[row.message_id, war.apiId, version]
 				)
 			} catch (error) {
-				logger.error('[CaptureResults]', row.message_id, error)
+				logger.error('[CaptureResults]', group[0].message_id, error)
 			}
 		}
 	}

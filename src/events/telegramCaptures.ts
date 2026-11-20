@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -10,6 +11,10 @@ import {
 import { NewMessage } from 'teleproto/events'
 import { store } from '../dashboard/store'
 import { templateText } from '../dashboard/templateText'
+import {
+	captureNoticeKey,
+	type CaptureNotice
+} from '../features/capture/captureNotice'
 import { ContainerBuilder } from '../services/markdownContainer'
 import { initTelegramClient } from '../services/telegramService'
 import { getError } from '../utils/errors'
@@ -29,7 +34,7 @@ interface CaptureDelivery {
 	channel_id: string | null
 	message_id: string | null
 	started_at: Date | null
-	notice: { attack: boolean; enemy: string; startTime: string; zone: string }
+	notice: CaptureNotice
 	payload: import('discord.js').APIContainerComponent
 }
 
@@ -200,7 +205,6 @@ export = (client: import('discord.js').Client) => {
 						'Не указано'
 					).trim()
 
-					const source = `${message.chatId ?? senderId}:${message.id}`
 					const marker = message.id
 					const enemyFaction = Buffer.from(isAttack ? defender : attacker)
 						.toString('base64url')
@@ -237,20 +241,34 @@ export = (client: import('discord.js').Client) => {
 						)
 						.addActionRowComponents(actionRow)
 
-					const notice = {
+					const legacyNotice = {
 						attack: isAttack,
 						enemy: isAttack ? defender : attacker,
 						startTime,
 						zone: zoneNum
 					}
+					const notice = {
+						...legacyNotice,
+						server: text.match(/^Сервер:[ \t]*([^\r\n]+)/im)?.[1].trim()
+					}
+					const key = captureNoticeKey(notice)
+					const source = key
+						? 'capture:' + createHash('sha256').update(key).digest('hex')
+						: `${message.chatId ?? senderId}:${message.id}`
 					await pool.query(
 						`INSERT INTO telegram_capture_deliveries (source, marker, notice, payload)
-						VALUES ($1, $2, $3::jsonb, $4::jsonb) ON CONFLICT (source) DO NOTHING`,
+						SELECT $1::text, $2::integer, $3::jsonb, $4::jsonb
+						WHERE $5::jsonb IS NULL OR NOT EXISTS (
+							SELECT 1 FROM telegram_capture_deliveries
+							WHERE source NOT LIKE 'capture:%' AND notice = $5::jsonb
+						)
+						ON CONFLICT (source) DO NOTHING`,
 						[
 							source,
 							marker,
 							JSON.stringify(notice),
-							JSON.stringify(container.toJSON())
+							JSON.stringify(container.toJSON()),
+							key ? JSON.stringify(legacyNotice) : null
 						]
 					)
 					tick()
