@@ -180,10 +180,7 @@ export function createCaptureRankings({
 			const discordId = staticId ? bindings?.get(staticId) : undefined
 			if (discordId && !external) return `<@${discordId}>`
 			const member = discordId ? guild.members.cache.get(discordId) : undefined
-			if (member && !member.partial && !member.user.partial) {
-				const display = shortDisplay(member.displayName).replace(/[\[\]]/g, '\\$&')
-				return `[${display}](https://discord.com/users/${member.id})`
-			}
+			if (member && !member.partial && !member.user.partial) return `<@${member.id}>`
 			return `${shortDisplay(name)}${staticId ? ` (${staticId})` : ''}`
 		}
 		const columns = external

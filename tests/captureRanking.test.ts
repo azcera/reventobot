@@ -253,7 +253,7 @@ test('imports available history once per battle, pins archive cards and picks up
 		members: { cache: new Collection([
 			[discordId, { id: discordId, user: { bot: false }, nickname: null }],
 			[mitsukiDiscordId, {
-				id: mitsukiDiscordId, user: { bot: false }, nickname: 'Mitsuki | 75', displayName: 'Mitsuki [RU8]'
+				id: mitsukiDiscordId, user: { bot: false }, nickname: 'Mitsuki | 75'
 			}],
 			[partialDiscordId, { id: partialDiscordId, user: { bot: false }, partial: true, nickname: 'Mitsuki | 81' }]
 		]) }
@@ -281,9 +281,11 @@ test('imports available history once per battle, pins archive cards and picks up
 	assert.match(archive.deliveries[0], /Rivals/)
 	assert.match(ranking.deliveries[0], /Рейтинг Mitsuki/)
 	const externalText = JSON.parse(ranking.deliveries[0]).components[0].components[0].content
-	assert.ok(externalText.includes(`[Mitsuki \\[RU8\\]](https://discord.com/users/${mitsukiDiscordId})`))
+	assert.ok(externalText.includes(`<@${mitsukiDiscordId}>`))
 	assert.match(externalText, /Mitsuki Player 81 \(81\)/)
-	assert.doesNotMatch(externalText, /<@/)
+	assert.ok(!externalText.includes(`<@${partialDiscordId}>`))
+	assert.doesNotMatch(externalText, /discord\.com\/users/)
+	assert.deepEqual(JSON.parse(ranking.deliveries[0]).allowedMentions, { parse: [] })
 	assert.doesNotMatch(ranking.deliveries[0], /Mitsuki Player 75/)
 	assert.match(ranking.deliveries[1], /Player 1 \(1\)/)
 	assert.doesNotMatch(ranking.deliveries[1], /STATIC|Player 2/)
@@ -297,6 +299,16 @@ test('imports available history once per battle, pins archive cards and picks up
 	assert.match(ranking.deliveries.at(-1)!, /Месячная таблица/)
 	assert.equal(messages.get('ranking:mitsuki')?.message_id, mitsukiMessage.message_id)
 	mitsukiTitle = undefined
+	await service.refresh(guild)
+
+	service.updateRoster(snapshot(['1'], [[mitsukiDiscordId, '75']]))
+	const departed = guild.members.cache.get(mitsukiDiscordId)!
+	guild.members.cache.delete(mitsukiDiscordId)
+	await service.refresh(guild)
+	const departedCard = ranking.deliveries.at(-1)!
+	assert.match(departedCard, /Mitsuki Player 75 \(75\)/)
+	assert.ok(!departedCard.includes(`<@${mitsukiDiscordId}>`))
+	guild.members.cache.set(mitsukiDiscordId, departed)
 	await service.refresh(guild)
 
 	messages.set('ranking:mitsuki', internalMessage)
