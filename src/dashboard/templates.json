@@ -814,8 +814,8 @@
 		"type": "text",
 		"components": true,
 		"maxLength": 4000,
-		"variables": ["ranking", "players", "page", "pages"],
-		"default": "## Рейтинг каптов\nИгроков: {players} · Страница {page}/{pages}\n\n{ranking}"
+		"variables": ["ranking", "players", "page", "pages", "updatedAt"],
+		"default": "## Рейтинг каптов\nИгроков: {players} · Страница {page}/{pages}\nОбновлено: {updatedAt}\n\n{ranking}"
 	},
 	"mitsukiRanking.document": {
 		"group": "Рейтинг Mitsuki",
@@ -823,8 +823,8 @@
 		"type": "text",
 		"components": true,
 		"maxLength": 4000,
-		"variables": ["ranking", "players", "page", "pages"],
-		"default": "## Рейтинг Mitsuki\nЗа месяц · Игроков: {players} · Страница {page}/{pages}\nБез оценки Mitsuki — по киллам за капт (K/D Mitsuki).\n\n{ranking}"
+		"variables": ["ranking", "players", "page", "pages", "updatedAt"],
+		"default": "## Рейтинг Mitsuki\nЗа месяц · Игроков: {players} · Страница {page}/{pages}\nОбновлено: {updatedAt}\nБез оценки Mitsuki — по киллам за капт (K/D Mitsuki).\n\n{ranking}"
 	},
 	"captureHistory.document": {
 		"group": "История каптов",

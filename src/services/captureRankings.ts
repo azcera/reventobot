@@ -29,6 +29,8 @@ const PREFIX = 'capstats:'
 const CAPTURE_KILL_WEIGHT = 'CAPTURE_RANK_KILL_WEIGHT'
 const RANK_CHANNEL = 'CAPTURE_RANK_CHANNEL_ID'
 const RANK_COLUMNS = ['#', 'Капты', 'Ср. урон', 'Ср. киллы', 'MVP']
+const UPDATE_PLACEHOLDER = '<t:9999999999:f>'
+const updateTime = (time: number) => `<t:${Math.floor(time / 1000)}:f>`
 
 function rankTable(columns: string[], rows: { label: string; values: string[] }[]) {
 	const widths = columns.map((heading, index) =>
@@ -41,7 +43,7 @@ function rankTable(columns: string[], rows: { label: string; values: string[] }[
 	}
 }
 
-function publishedRank(message: Message, averageKills: (label: string) => string) {
+function publishedRank(message: Message, averageKills: (label: string) => string, updatedAt: number) {
 	const components = message.components.map(component => component.toJSON())
 	const container = components.find(component =>
 		component.type === ComponentType.Container && component.id === MARKER)
@@ -73,6 +75,13 @@ function publishedRank(message: Message, averageKills: (label: string) => string
 			component.content = content
 			restyled = true
 		}
+	}
+	const text = container.components.filter(component => component.type === ComponentType.TextDisplay)
+	const footer = `\n\nОбновлено: ${updateTime(updatedAt)}`
+	if (text.length && !text.some(component => /<t:\d+:f>/.test(component.content)) &&
+		text.reduce((length, component) => length + component.content.length, footer.length) <= TEXT_LIMIT) {
+		text[0].content += footer
+		restyled = true
 	}
 	const payload: MessageEditOptions = {
 		components, flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] }
@@ -164,7 +173,7 @@ export function createCaptureRankings({
 		}
 		return positions
 	}
-	function card(guild: Guild, key: string, requested = 0) {
+	function card(guild: Guild, key: string, requested = 0, updatedAt = Date.now()) {
 		const history = histories.get(key)
 		const external = key === 'mitsuki'
 		if (external ? !mitsuki : key === 'rank' ? !roster : !history?.length) return
@@ -205,20 +214,20 @@ export function createCaptureRankings({
 			? history.map(game =>
 				`<t:${Math.floor(game.at / 1000)}:d> · ${clean(game.enemy)} · ${game.attack ? 'Атака' : 'Защита'} · ${game.result} · ${game.damage ?? '—'} урона · ${game.kills ?? '—'} килл.${excluded.has(game.key) ? ' · Вне рейтинга' : ''}`)
 			: formatted.lines
-		const render = (list: string, page: number, pages: number) => history
-			? store.text('captureHistory.document', {
-				player: clean(history[0].name), static: key, captures: included.length,
-				mvp: included.reduce((total, game) => total + game.mvp, 0),
-				position: statics.get(key) ?? '—', history: list, page, pages
-			})
-			: external
-				? store.text('mitsukiRanking.document', {
-					ranking: tableText(list), players: lines.length, page, pages
+		const render = (list: string, page: number, pages: number) => {
+			if (history)
+				return store.text('captureHistory.document', {
+					player: clean(history[0].name), static: key, captures: included.length,
+					mvp: included.reduce((total, game) => total + game.mvp, 0),
+					position: statics.get(key) ?? '—', history: list, page, pages
 				})
-				: store.text('captureRanking.document', {
-				ranking: tableText(list),
-				players: rows.length, page, pages
+			const content = store.text(external ? 'mitsukiRanking.document' : 'captureRanking.document', {
+				ranking: tableText(list), players: lines.length, page, pages,
+				updatedAt: UPDATE_PLACEHOLDER
 			})
+			return content.includes(UPDATE_PLACEHOLDER) ? content
+				: `${content}\n\nОбновлено: ${UPDATE_PLACEHOLDER}`
+		}
 		const lists: string[] = []
 		for (let start = 0; start < lines.length;) {
 			let end = Math.min(lines.length, start + (history ? HISTORY_PAGE_SIZE : RANK_PAGE_SIZE))
@@ -235,7 +244,9 @@ export function createCaptureRankings({
 		const content = render(lists[page] ?? '', page + 1, pages)
 		const marker = external ? MITSUKI_MARKER : MARKER
 		const container = new ContainerBuilder().setId(marker)
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(content))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+				history ? content : content.replaceAll(UPDATE_PLACEHOLDER, updateTime(updatedAt))
+			))
 		if (pages > 1)
 			container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder().setCustomId(`${PREFIX}${key}:${page - 1}`)
@@ -266,7 +277,8 @@ export function createCaptureRankings({
 		}
 	}
 	async function publish(guild: Guild, channel: SendableChannels | ThreadChannel, key: string) {
-		const document = card(guild, key)
+		const updatedAt = new Date(Date.now())
+		const document = card(guild, key, 0, updatedAt.getTime())
 		if (!document) return
 		const values = [guild.id, channel.id, key]
 		const { rows } = await pool.query<{ message_id: string; fingerprint: string }>(
@@ -296,18 +308,19 @@ export function createCaptureRankings({
 				}
 				if (histories.has(key) && !message.pinned) await message.pin()
 				await pool.query(
-					`INSERT INTO capture_stat_messages VALUES ($1, $2, $3, $4, $5)
+					`INSERT INTO capture_stat_messages (guild_id, channel_id, card_key, message_id, fingerprint, updated_at)
+					VALUES ($1, $2, $3, $4, $5, $6)
 					ON CONFLICT (guild_id, channel_id, card_key) DO UPDATE
-					SET message_id = EXCLUDED.message_id, fingerprint = EXCLUDED.fingerprint`,
-					[...values, message.id, document.fingerprint]
+					SET message_id = EXCLUDED.message_id, fingerprint = EXCLUDED.fingerprint, updated_at = EXCLUDED.updated_at`,
+					[...values, message.id, document.fingerprint, updatedAt]
 				)
 			})
 		})
 	}
 	async function orderRankMessages(guild: Guild, channel: SendableChannels) {
 		const values = [guild.id, channel.id]
-		const { rows } = await pool.query<{ card_key: string; message_id: string; fingerprint: string }>(
-			`SELECT card_key, message_id, fingerprint FROM capture_stat_messages
+		const { rows } = await pool.query<{ card_key: string; message_id: string; fingerprint: string; updated_at: Date | null }>(
+			`SELECT card_key, message_id, fingerprint, updated_at FROM capture_stat_messages
 			WHERE guild_id = $1 AND channel_id = $2 AND card_key IN ('rank', 'mitsuki')`, values
 		)
 		const rank = rows.find(row => row.card_key === 'rank')
@@ -341,9 +354,9 @@ export function createCaptureRankings({
 			const kills = staticId ? histories.get(staticId)?.flatMap(game =>
 				excluded.has(game.key) ? [] : game.kills ?? []) : undefined
 			return kills?.length ? average(kills.reduce((sum, value) => sum + value, 0) / kills.length) : '—'
-		}) : undefined
-		const rankCard = card(guild, 'rank')
-		const mitsukiCard = card(guild, 'mitsuki')
+		}, rank.updated_at?.getTime() ?? saved.editedTimestamp ?? saved.createdTimestamp) : undefined
+		const rankCard = card(guild, 'rank', 0, rank.updated_at?.getTime())
+		const mitsukiCard = card(guild, 'mitsuki', 0, external.updated_at?.getTime())
 		const payload = rankCard?.payload ?? fallback?.payload
 		if (!payload || !mitsukiCard) return true
 
@@ -534,12 +547,15 @@ export function createCaptureRankings({
 			if (!match || interaction.message.author.id !== interaction.client.user.id) return
 			await interaction.deferUpdate()
 			await enqueueCaptureEdit(interaction.message.id, async () => {
-				const { rowCount } = await pool.query(
-					`SELECT 1 FROM capture_stat_messages
+				const { rows } = await pool.query<{ updated_at: Date | null }>(
+					`SELECT updated_at FROM capture_stat_messages
 					WHERE guild_id = $1 AND channel_id = $2 AND card_key = $3 AND message_id = $4`,
 					[interaction.guildId, interaction.channelId, match[1], interaction.message.id]
 				)
-				const document = rowCount && card(interaction.guild, match[1], Number(match[2]))
+				const saved = rows[0]
+				const updatedAt = saved?.updated_at?.getTime() ??
+					interaction.message.editedTimestamp ?? interaction.message.createdTimestamp
+				const document = saved && card(interaction.guild, match[1], Number(match[2]), updatedAt)
 				const channel = interaction.channel
 				if (document && channel?.isSendable())
 					await withOpenThread(channel, () => interaction.editReply(document.payload))

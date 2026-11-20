@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS capture_stat_messages (
 	message_id TEXT NOT NULL, fingerprint TEXT NOT NULL,
 	PRIMARY KEY (guild_id, channel_id, card_key)
 );
+ALTER TABLE capture_stat_messages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS capture_sort_preferences (
 	guild_id TEXT PRIMARY KEY, mode TEXT NOT NULL
 )`

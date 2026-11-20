@@ -115,11 +115,14 @@ test('registration cycles through rating, role priority and time; unranked entri
 	assert.deepEqual(rows.map(row => row.static), ['2', '1', '3'])
 })
 
-test('imports available history once per battle, pins archive cards and picks up later Discord bindings', async () => {
+test('publishes and refreshes capture cards without losing bindings or update times', async t => {
+	let now = Date.parse('2026-11-21T11:00:00Z')
+	t.mock.method(Date, 'now', () => now)
+	const stamp = () => `<t:${Math.floor(now / 1000)}:f>`
 	const stored = new Map<string, CaptureStats>()
 	let inclusion = new Map<string, boolean>()
 	const audits: unknown[] = []
-	const messages = new Map<string, { message_id: string; fingerprint: string }>()
+	const messages = new Map<string, { message_id: string; fingerprint: string; updated_at?: Date }>()
 	let sent = 0
 	const historic = battle(1, [player(1, 2, 200), player(2, 10, 50)])
 	const recent = battle(2, [player(1, 5, 600)])
@@ -146,11 +149,14 @@ test('imports available history once per battle, pins archive cards and picks up
 			}
 			if (sql.includes('FROM capture_stat_messages')) {
 				const message = messages.get(values[1] + ':' + values[2])
-				if (sql.startsWith('SELECT 1')) return { rowCount: message?.message_id === values[3] ? 1 : 0 }
+				if (sql.startsWith('SELECT updated_at') && message?.message_id !== values[3])
+					return { rows: [] }
 				return { rows: message ? [message] : [] }
 			}
 			if (sql.includes('INSERT INTO capture_stat_messages'))
-				messages.set(values[1] + ':' + values[2], { message_id: values[3], fingerprint: values[4] })
+				messages.set(values[1] + ':' + values[2], {
+					message_id: values[3], fingerprint: values[4], updated_at: new Date(values[5])
+				})
 			return { rows: [] }
 		},
 		async connect() {
@@ -177,7 +183,8 @@ test('imports available history once per battle, pins archive cards and picks up
 		text: (key: string, variables?: Record<string, unknown>) => {
 			const value = config.text(key, variables)
 			return key === 'mitsukiRanking.document' && mitsukiTitle
-				? value.replace('## Рейтинг Mitsuki', mitsukiTitle) : value
+				? value.replace('## Рейтинг Mitsuki', mitsukiTitle).replace(/^Обновлено:.*\n/m, '')
+				: value
 		},
 		async audit(_actor: unknown, action: string, _target: string, details: unknown) {
 			audits.push({ action, details })
@@ -206,6 +213,7 @@ test('imports available history once per battle, pins archive cards and picks up
 				deliveries.push(rendered)
 				const message = {
 					id: String(++sent),
+					createdTimestamp: Date.now(),
 					pinned: false, author: { id: 'bot' }, components: components(rendered),
 					async edit(next: object) {
 						const json = JSON.stringify(next)
@@ -269,7 +277,11 @@ test('imports available history once per battle, pins archive cards and picks up
 	})
 	const service = makeService()
 	await service.refresh(guild)
+	const originalStamp = stamp()
+	now += 300000
 	await service.refresh(guild)
+	assert.equal(ranking.deliveries.length, 2)
+	assert.ok(ranking.deliveries.every(card => card.includes(`Обновлено: ${originalStamp}`)))
 	assert.equal(stored.size, 2)
 	assert.deepEqual(service.view().players.map(p => [p.staticId, p.captures]), [['1', 2]])
 	assert.equal(service.byDiscord(guild).size, 0)
@@ -297,6 +309,7 @@ test('imports available history once per battle, pins archive cards and picks up
 	mitsukiTitle = '## Месячная таблица'
 	await service.refresh(guild)
 	assert.match(ranking.deliveries.at(-1)!, /Месячная таблица/)
+	assert.ok(ranking.deliveries.at(-1)!.includes(`Обновлено: ${stamp()}`))
 	assert.equal(messages.get('ranking:mitsuki')?.message_id, mitsukiMessage.message_id)
 	mitsukiTitle = undefined
 	await service.refresh(guild)
@@ -363,6 +376,7 @@ test('imports available history once per battle, pins archive cards and picks up
 	const text = (card: string) => JSON.parse(card).components[0].components[0].content as string
 	const entries = (content: string) => content.match(/^\`\s*\d+\s+│/gm) ?? []
 	const firstPage = text(ranking.deliveries.at(-1)!)
+	const firstPageStamp = stamp()
 	assert.match(firstPage, /Страница 1\/2/)
 	assert.match(firstPage, /Ср\. киллы/)
 	assert.equal(entries(firstPage).length, 40)
@@ -374,9 +388,12 @@ test('imports available history once per battle, pins archive cards and picks up
 		deferUpdate: async () => {},
 		editReply: async (payload: object) => ranking.deliveries.push(JSON.stringify(payload))
 	} as unknown as ButtonInteraction<'cached'>
+	now += 300000
 	await service.handle(pageInteraction)
 	const secondPage = text(ranking.deliveries.at(-1)!)
 	assert.match(secondPage, /Страница 2\/2/)
+	assert.ok(secondPage.includes(`Обновлено: ${firstPageStamp}`))
+	assert.ok(!secondPage.includes(stamp()))
 	assert.equal(entries(secondPage).length, 8)
 	assert.match(secondPage, /^\`48\s+│/m)
 
