@@ -17,7 +17,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 - `index.ts` создаёт Discord-клиент и Express, подключает дашборд и API,
   рекурсивно загружает `src/commands/` и файлы верхнего уровня `src/events/`.
 - `src/events/ready.ts` — точка поиска запуска фоновых сервисов.
-- `npm run build` проверяет типы и собирает сервер в `dist/`, общие браузерные модули в `dist/browser/`, интерфейс в `public/dashboard/`. `npm start` запускает `dist/index.js`.
+- `npm run build` проверяет типы и собирает сервер в `dist/`, общие браузерные модули в `dist/browser/`, дашборд в `public/dashboard/` и Activity в `public/activity/`. `npm start` запускает `dist/index.js`.
 - Подробные сценарии и настройки описаны в тематических разделах `README.md`.
   Эта карта помогает найти код, но не заменяет проверку текущей реализации.
 
@@ -34,6 +34,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 | Majestic: получение состава, план и применение синхронизации | `src/services/majesticClient.ts`, `src/features/majestic/syncPreview.ts`, `src/services/majesticSync.ts` |
 | Majestic: фоновые задачи, Family Wars, членство | `src/services/majesticNicknameScheduler.ts`, `src/services/familyWars.ts`, `src/services/familyMembership.ts` |
 | Результаты каптов из API в объявлениях Telegram | `src/services/captureResults.ts`, `src/events/telegramCaptures.ts` |
+| Доска тактик в Discord Activity | `src/features/tactics/`, `frontend/src/activity/`, `frontend/src/pages/Tactics.tsx` |
 | Telegram | `src/services/telegram*.ts`, `src/events/telegram*.ts` |
 | Роли и префиксы ников | `src/services/rolePrefixSync.ts`, `src/utils/adminPrefix.ts`, `src/utils/parseDisplayName.ts` |
 | Кураторы ролей и команда ПКМ | `src/services/roleCurators.ts`, `frontend/src/pages/RoleCurators.tsx` |
@@ -70,7 +71,7 @@ Telegram, интеграции Majestic RP. Веб-дашборд управля
 
 ## Правки и ограничения
 
-- `public/dashboard/` — генерируемая сборка, правь исходники `frontend/`.
+- `public/dashboard/` и `public/activity/` — генерируемые сборки, правь исходники `frontend/`.
   Общие исходники `public/*.ts` используются сервером и браузером;
   проверь обоих потребителей перед изменением. Генерируемые `dist/` не редактируй.
 - Настройки и шаблоны проходят через `src/dashboard/store.ts`; учитывай значения

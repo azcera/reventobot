@@ -4,6 +4,7 @@ import type { SettingField } from '../../frontend/src/types'
 async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец', templateVariables: Record<string, Record<string, string>> = {}) {
 	const config = { revision: 3, bindings: {}, templateVariables, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] as SettingField[] }
 	config.settings.push({ key: 'ARCHIVE_AUTO_DELETE_EMPTY', label: 'Автоматически удалять пустые архивы при выходе участника с сервера', type: 'boolean', value: false })
+	config.settings.push({ key: 'TACTICS_EDITOR_ROLES', label: 'Роли редакторов доски тактик', type: 'roles', value: '' })
 	config.settings.push(
 		{ key: 'CAPTURE_RANK_CHANNEL_ID', label: 'Канал рейтинга каптов', type: 'channel', channelTypes: [0], value: 'parent' },
 		{ key: 'CAPTURE_RANK_KILL_WEIGHT', label: 'Вес киллов и урона', type: 'percentage', value: '70' }
@@ -29,9 +30,39 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 		await route.fulfill({ json: ['settings', 'template-variables'].includes(path) ? config : data[path] ?? {} })
 	})
 	await page.goto('/#' + hash)
-	await expect(page.getByRole('heading', { name: ({ overview: 'Обзор', settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', curators: 'Кураторы ролей' } as Record<string, string>)[hash], exact: true })).toBeVisible()
+	await expect(page.getByRole('heading', { name: ({ overview: 'Обзор', settings: 'Настройки', variables: 'Переменные шаблонов', templates: 'Шаблоны сообщений', captures: 'Управление сборами', curators: 'Кураторы ролей', tactics: 'Доска тактик' } as Record<string, string>)[hash], exact: true })).toBeVisible()
 	return requests
 }
+
+test('tactics dashboard saves editor roles and uploads a named map with CSRF', async ({ page }) => {
+	let uploaded = false
+	const map = { id: '12345678-1234-1234-1234-123456789012', name: 'Порт', width: 800, height: 600, archived: false }
+	const requests = await setup(page, 'tactics')
+	await page.route('**/api/tactics/maps**', async route => {
+		const request = route.request()
+		const url = new URL(request.url())
+		if (url.pathname.endsWith('/upload')) {
+			expect(url.searchParams.get('name')).toBe('Порт')
+			expect(request.headers()['x-csrf-token']).toBe('test')
+			expect(request.headers()['content-type']).toBe('application/octet-stream')
+			expect(request.postDataBuffer()).toEqual(Buffer.from('map-fixture'))
+			uploaded = true
+			return route.fulfill({ json: map })
+		}
+		return route.fulfill({ json: { maps: uploaded ? [map] : [], next: null } })
+	})
+	await page.getByLabel('Роли редакторов доски тактик').selectOption('one')
+	await page.getByRole('button', { name: 'Сохранить роли' }).click()
+	await expect.poll(() => requests.find(request => request.path === 'settings')?.body.values)
+		.toEqual({ TACTICS_EDITOR_ROLES: 'one' })
+	await page.getByLabel('Название карты').fill('Порт')
+	await page.getByLabel('Изображение PNG, JPEG или WebP до 12 МБ').setInputFiles({
+		name: 'map.png', mimeType: 'image/png', buffer: Buffer.from('map-fixture')
+	})
+	await page.getByRole('button', { name: 'Добавить карту' }).click()
+	await expect(page.getByText('Карта добавлена.')).toBeVisible()
+	await expect(page.getByRole('button', { name: 'Архивировать' })).toBeVisible()
+})
 
 test('variable history shows changed variable names instead of the internal action', async ({ page }) => {
 	await setup(page, 'settings')

@@ -82,6 +82,10 @@ function templateDefinition(key: string): TemplateField | null {
 }
 
 const settingDefinitions: Record<string, SettingDefinition> = {
+	TACTICS_EDITOR_ROLES: {
+		label: 'Роли редакторов доски тактик',
+		type: 'roles'
+	},
 	INVITE_CATEGORY_ID: {
 		label: 'Категория заявок',
 		type: 'channel',

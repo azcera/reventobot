@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev:dashboard": "vite --host 127.0.0.1",
-    "build": "npm run typecheck && npm run clean:dist && npm run build:server && npm run build:browser-modules && vite build",
+    "build": "npm run typecheck && npm run clean:dist && npm run build:server && npm run build:browser-modules && vite build && vite build --config vite.activity.config.mts",
     "test": "npm run build:test && node --test dist/tests/*.test.js",
     "pretest:dashboard": "npm run build && npm run build:test",
     "test:dashboard": "playwright test",
@@ -20,9 +20,12 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "engines": { "node": ">=24.22.3 <25" },
+  "engines": {
+    "node": ">=24.22.3 <25"
+  },
   "packageManager": "npm@11.13.0",
   "dependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource/noto-sans": "^5.3.0",
     "discord.js": "^14.25.1",
@@ -34,7 +37,9 @@
     "qrcode-terminal": "^0.12.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "teleproto": "^1.229.0"
+    "sharp": "^0.35.5",
+    "teleproto": "^1.229.0",
+    "ws": "^8.23.0"
   },
   "overrides": {
     "undici": "^6.24.0"
@@ -48,6 +53,7 @@
     "@types/qrcode-terminal": "^0.12.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",

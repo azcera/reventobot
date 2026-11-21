@@ -5,6 +5,6 @@
     "moduleResolution": "Bundler",
     "noEmit": true
   },
-  "include": ["vite.config.mts", "playwright.config.ts", "tests/browser/dashboard.spec.ts"],
+  "include": ["vite.config.mts", "vite.activity.config.mts", "playwright.config.ts", "tests/browser/dashboard.spec.ts"],
   "exclude": ["node_modules", "dist"]
 }

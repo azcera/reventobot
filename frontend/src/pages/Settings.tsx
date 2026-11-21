@@ -54,7 +54,7 @@ function MoveActions({
 	)
 }
 
-function OrderedChoices({
+export function OrderedChoices({
 	field,
 	value,
 	onChange,
@@ -276,7 +276,7 @@ export function Settings({
 			config.settings
 				.filter(
 					field =>
-						field.key.startsWith('ACCESS_') === access &&
+						field.key !== 'TACTICS_EDITOR_ROLES' && field.key.startsWith('ACCESS_') === access &&
 						JSON.stringify(field.value) !== JSON.stringify(draft[field.key])
 				)
 				.map(field => [field.key, draft[field.key]])
@@ -321,7 +321,7 @@ export function Settings({
 		})
 	}
 	const fieldsForPage = config.settings.filter(
-		field => field.key.startsWith('ACCESS_') === access
+		field => field.key !== 'TACTICS_EDITOR_ROLES' && field.key.startsWith('ACCESS_') === access
 	)
 	const missing = fieldsForPage.filter(
 		field =>

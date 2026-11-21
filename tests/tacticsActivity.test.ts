@@ -1,0 +1,189 @@
+import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
+import { EventEmitter, once } from 'node:events'
+import { test } from 'node:test'
+import { ChannelType, Events } from 'discord.js'
+import type { Client } from 'discord.js'
+import express from 'express'
+import type { Pool } from 'pg'
+import { WebSocket } from 'ws'
+import type { MapInfo, ServerMessage } from '../shared/tactics'
+import { store } from '../src/dashboard/store'
+import { registerTacticsActivity } from '../src/features/tactics/activity'
+import { TacticsBoard } from '../src/features/tactics/board'
+
+const map: MapInfo = { id: randomUUID(), name: 'Порт', width: 800, height: 600, archived: false }
+
+test('доска проверяет координаты и авторство штрихов, а метки берут ник из состава', () => {
+	const board = new TacticsBoard()
+	board.reset(map)
+	const id = randomUUID()
+	const add = { type: 'stroke', id, color: '#fa5577', width: 6, point: [0.1, 0.2], epoch: 1 }
+	assert.throws(() => board.edit({ ...add, point: [1.1, 0] }, 'editor', []), /Некорректное/)
+	assert.throws(() => board.edit({ ...add, width: 8 }, 'editor', []), /Некорректное/)
+	board.edit(add, 'editor', [])
+	const points = { type: 'points', id, points: [[.4, .6]], epoch: 1 }
+	assert.throws(() => board.edit(points, 'other', []), /существует/)
+	assert.deepEqual(board.edit(points, 'editor', []), { type: 'points', id, points: [[.4, .6]] })
+	const playerId = randomUUID()
+	const place = { type: 'player', id: playerId, userId: 'player', at: [0.5, 0.5], epoch: 1, label: 'Подмена' }
+	assert.throws(() => board.edit(place, 'editor', []), /покинул канал/)
+	assert.deepEqual(board.edit(place, 'editor', [{ id: 'player', name: 'Игрок' }]), {
+		type: 'put', object: { type: 'player', id: playerId, at: [0.5, 0.5], userId: 'player', label: 'Игрок' }
+	})
+	board.edit({ type: 'move', id: playerId, at: [0.8, 0.3], epoch: 1 }, 'editor', [])
+	const saved = JSON.parse(JSON.stringify(board.snapshot().objects))
+	board.reset(map, saved)
+	assert.equal(board.dirty, false)
+	assert.throws(() => board.edit(points, 'editor', []), /Доска обновилась/)
+	assert.deepEqual(board.snapshot().objects, saved)
+})
+
+test('Activity изолирует комнаты, проверяет права и восстанавливает тактику из хранилища', { timeout: 15000 }, async t => {
+	const appId = '100000000000000001'
+	const origin = `https://${appId}.discordsays.com`
+	const guildId = '100000000000000002'
+	t.mock.method(store, 'roleIds', () => ['editor-role'])
+	t.mock.getter(store, 'ready', () => true)
+	const env = { CLIENT_ID: appId, GUILD_ID: guildId, DISCORD_CLIENT_SECRET: 'fixture-secret', TACTICS_ACTIVITY_ENABLED: 'true' }
+	const previous = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]))
+	Object.assign(process.env, env)
+	t.after(() => {
+		for (const [key, value] of Object.entries(previous)) {
+			if (value === undefined) delete process.env[key]
+			else process.env[key] = value
+		}
+	})
+	const member = (displayName: string, admin: boolean, editor: boolean) => ({
+		guild: { id: guildId }, displayName, permissions: { has: () => admin },
+		roles: { cache: new Set(editor ? ['editor-role'] : []) }
+	})
+	const members = {
+		editor: member('Редактор', false, true),
+		viewer: member('Зритель', false, false),
+		admin: member('Администратор', true, false),
+		other: member('На связи', false, false)
+	}
+	const states = new Map(Object.entries(members).map(([id, member]) => [id, {
+		id, member, channelId: id === 'admin' ? 'voice-b' : 'voice-a'
+	}]))
+	const guild = {
+		id: guildId, available: true,
+		channels: { cache: new Map(['voice-a', 'voice-b'].map(id => [id, { id, type: ChannelType.GuildVoice }])) },
+		members: { cache: new Map(Object.entries(members)) }, voiceStates: { cache: states }
+	}
+	const client = Object.assign(new EventEmitter(), {
+		isReady: () => true, guilds: { cache: new Map([[guildId, guild]]) },
+		rest: { get: async (url: string) => {
+			const id = url.split('/').at(-1)
+			return {
+				application_id: appId, instance_id: id,
+				location: { guild_id: guildId, channel_id: id === 'room-a' ? 'voice-a' : 'voice-b' },
+				users: id === 'room-a' ? ['editor', 'viewer'] : ['admin']
+			}
+		} }
+	})
+	const tacticId = randomUUID()
+	let stored: unknown
+	const pool = { query: async (sql: string, params: unknown[]) => {
+		assert.equal(params[0], guildId)
+		if (sql.includes('INSERT INTO tactics_presets')) {
+			stored = JSON.parse(String(params[4]))
+			return { rows: [{ id: tacticId, name: params[3] }] }
+		}
+		if (sql.includes('FROM tactics_presets')) return { rows: [{ mapId: map.id, snapshot: stored }] }
+		if (sql.includes('FROM tactics_maps')) return { rows: [map] }
+		throw new Error('Unexpected query')
+	} } as unknown as Pool
+	const http = fetch
+	t.mock.method(globalThis, 'fetch', async (url: string, init?: RequestInit) => {
+		assert.equal(url, 'https://discord.com/api/v10/oauth2/@me')
+		const id = new Headers(init?.headers).get('Authorization')?.slice(7)
+		return Response.json({ application: { id: appId }, user: { id } })
+	})
+	const app = express()
+	app.use(express.json())
+	const activity = registerTacticsActivity(app, client as unknown as Client, pool)
+	const server = app.listen(0, '127.0.0.1')
+	activity.attach(server)
+	t.after(async () => {
+		activity.stop()
+		await new Promise<void>(resolve => server.close(() => resolve()))
+	})
+	await once(server, 'listening')
+	const address = server.address()
+	assert.ok(address && typeof address !== 'string')
+	const base = `http://127.0.0.1:${address.port}`
+	const createSession = (user: string, instanceId: string) => http(`${base}/activity/api/session`, {
+		method: 'POST',
+		headers: { Origin: origin, Authorization: `Bearer ${user}`, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ instanceId })
+	})
+	assert.equal((await createSession('other', 'room-a')).status, 403)
+	assert.equal((await createSession('viewer', 'room-b')).status, 403)
+
+	async function join(user: string, room: string) {
+		const response = await createSession(user, room)
+		assert.equal(response.status, 200)
+		const { sessionToken } = await response.json()
+		const socket = new WebSocket(`${base.replace('http', 'ws')}/activity/socket`, { origin })
+		const inbox = new EventEmitter()
+		const messages: ServerMessage[] = []
+		socket.on('message', raw => {
+			messages.push(JSON.parse(raw.toString()))
+			inbox.emit('received')
+		})
+		await once(socket, 'open')
+		const send = (message: object) => socket.send(JSON.stringify(message))
+		send({ type: 'auth', token: sessionToken })
+		async function read<T extends ServerMessage['type']>(type: T) {
+			for (;;) {
+				const index = messages.findIndex(message => message.type === type)
+				if (index >= 0) return messages.splice(index, 1)[0] as Extract<ServerMessage, { type: T }>
+				await once(inbox, 'received', { signal: AbortSignal.timeout(2000) })
+			}
+		}
+		return { socket, send, read }
+	}
+	const editor = await join('editor', 'room-a')
+	const viewer = await join('viewer', 'room-a')
+	const admin = await join('admin', 'room-b')
+	assert.equal((await editor.read('snapshot')).canEdit, true)
+	const spectator = await viewer.read('snapshot')
+	assert.equal(spectator.canEdit, false)
+	assert.ok(spectator.players.some(player => player.name === 'На связи'))
+	assert.equal((await admin.read('snapshot')).board.map, null)
+	editor.send({ type: 'map', id: map.id, revision: 0 })
+	assert.equal((await editor.read('snapshot')).board.map?.id, map.id)
+	const { board } = await viewer.read('snapshot')
+	assert.equal(board.map?.id, map.id)
+	const strokeId = randomUUID()
+	const start = { type: 'stroke', epoch: board.epoch, id: strokeId, color: '#ff0000', width: 3, point: [.5, .5] }
+	viewer.send(start)
+	assert.match((await viewer.read('error')).message, /просмотр/)
+	await viewer.read('snapshot')
+	editor.send(start)
+	editor.send({ type: 'points', epoch: board.epoch, id: strokeId, points: [[.7, .8]] })
+	assert.equal((await viewer.read('change')).change.type, 'put')
+	const appended = await viewer.read('change')
+	assert.deepEqual(appended.change, { type: 'points', id: strokeId, points: [[.7, .8]] })
+	editor.send({ type: 'save', name: 'Подход', revision: appended.revision })
+	assert.equal((await editor.read('saved')).tactic.id, tacticId)
+	admin.send({ type: 'sync' })
+	assert.equal((await admin.read('snapshot')).board.map, null)
+	admin.send({ type: 'load', id: tacticId, revision: 0 })
+	const loaded = (await admin.read('snapshot')).board
+	assert.equal(loaded.map?.id, map.id)
+	assert.deepEqual(loaded.objects[0], { type: 'stroke', id: strokeId, color: '#ff0000', width: 3, points: [[.5, .5], [.7, .8]] })
+	const reconnected = await join('viewer', 'room-a')
+	assert.deepEqual((await reconnected.read('snapshot')).board.objects, loaded.objects)
+	members.editor.roles.cache.clear()
+	client.emit(Events.GuildMemberUpdate, null, { guild })
+	assert.equal((await editor.read('access')).canEdit, false)
+	editor.send({ type: 'remove', id: strokeId, epoch: board.epoch })
+	assert.match((await editor.read('error')).message, /просмотр/)
+	const closed = once(viewer.socket, 'close')
+	states.delete('viewer')
+	client.emit(Events.VoiceStateUpdate, null, { guild })
+	assert.equal((await closed)[0], 4001)
+})

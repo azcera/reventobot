@@ -6,6 +6,7 @@ public/component-markdown.js
 public/template-document.js
 public/template-layout.js
 public/dashboard/
+public/activity/
 playwright-report/
 test-results/
 output/dashboard-review/

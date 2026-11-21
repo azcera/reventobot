@@ -14,6 +14,7 @@ const telegramErrors = installTelegramErrorReporter()
 // Импорты сервисов
 import { registerDashboard } from './src/dashboard/routes'
 import { store as dashboard } from './src/dashboard/store'
+import { registerTacticsActivity } from './src/features/tactics/activity'
 import {
 	buildSendPayload,
 	parseMessageLink,
@@ -87,6 +88,7 @@ app.use((_req, res, next) => {
 	next()
 })
 app.use(express.json({ limit: '256kb', inflate: false }))
+const tactics = registerTacticsActivity(app, client, pool)
 registerDashboard(app, client, pool)
 app.get('/', (req, res) => {
 	res.sendFile(path.join(PUBLIC_PATH, 'dashboard', 'index.html'))
@@ -216,6 +218,7 @@ const port = Number(process.env.PORT || 3000)
 const server = app.listen(port, () => {
 	console.log(`🌐 Web server is running on port ${port}`)
 })
+tactics.attach(server)
 
 async function shutdown(exitCode = 0) {
 	if (stopping) return
@@ -244,6 +247,7 @@ async function shutdown(exitCode = 0) {
 		client.removeAllListeners(event)
 	}
 	stopRuntimeDiagnostics()
+	tactics.stop()
 	dashboard.stop()
 	const stopSteps = [
 		() => client.stopReconciliation?.(),

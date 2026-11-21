@@ -184,6 +184,8 @@ export interface Overview {
 	history: HistoryEntry[]
 }
 export interface ApiRoutes {
+	'tactics/maps': import('../../shared/tactics').MapPage
+	'tactics/maps/archive': { success: boolean }
 	config: Config
 	resources: Resources
 	session: Session
@@ -257,6 +259,8 @@ export interface ApiRoutes {
 	logout: { success: boolean }
 }
 export type Api = {
+	(path: `tactics/maps?${string}`): Promise<ApiRoutes['tactics/maps']>
+	(path: `tactics/maps/upload?${string}`, body: Blob): Promise<import('../../shared/tactics').MapInfo>
 	<P extends keyof ApiRoutes>(path: P, body?: unknown): Promise<ApiRoutes[P]>
 	(path: `history?${string}`): Promise<HistoryEntry[]>
 	(

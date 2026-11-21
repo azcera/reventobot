@@ -14,6 +14,9 @@ const resource = (value: unknown): boolean =>
 	text(value.id) &&
 	text(value.name) &&
 	(value.manageable === undefined || boolean(value.manageable))
+const tacticsMap = (value: unknown): boolean =>
+	record(value) && text(value.id) && text(value.name) && number(value.width) &&
+	number(value.height) && boolean(value.archived)
 const field = (value: unknown): boolean =>
 	record(value) &&
 	text(value.key) &&
@@ -100,6 +103,10 @@ const majestic = (value: unknown): boolean =>
 			Array.isArray(value.run.results)))
 
 function validResponse(path: string, value: unknown): boolean {
+	if (path === 'tactics/maps' || path.startsWith('tactics/maps?'))
+		return record(value) && array(value.maps, tacticsMap) && (value.next === null || text(value.next))
+	if (path.startsWith('tactics/maps/upload?')) return tacticsMap(value)
+	if (path === 'tactics/maps/archive') return record(value) && boolean(value.success)
 	if (
 		[
 			'config',
@@ -230,10 +237,10 @@ export function createApi(csrf: () => string, unauthorized: () => void): Api {
 					: {
 							method: 'POST',
 							headers: {
-								'Content-Type': 'application/json',
+								'Content-Type': body instanceof Blob ? 'application/octet-stream' : 'application/json',
 								'X-CSRF-Token': csrf()
 							},
-							body: JSON.stringify(body)
+							body: body instanceof Blob ? body : JSON.stringify(body)
 						})
 			})
 		} catch {

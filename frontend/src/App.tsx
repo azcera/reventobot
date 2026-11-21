@@ -42,6 +42,7 @@ import { createApi, readAuthStatus } from './lib/api'
 import { FormDraftContext, type FormDrafts } from './lib/drafts'
 import { dirtyGroup } from './lib/templates'
 import { CapturePresets } from './pages/CapturePresets'
+import { Tactics } from './pages/Tactics'
 import { Majestic } from './pages/Majestic'
 import { RoleCurators } from './pages/RoleCurators'
 import { Settings } from './pages/Settings'
@@ -105,6 +106,12 @@ const pages = {
 		description: 'Предустановки ручной регистрации на мероприятия.',
 		icon: CalendarDays
 	},
+	tactics: {
+		title: 'Доска тактик',
+		label: 'Доска тактик',
+		description: 'Карты и роли редакторов для Discord Activity.',
+		icon: Files
+	},
 	majestic: {
 		title: 'Majestic — синхронизация',
 		label: 'Majestic',
@@ -141,7 +148,7 @@ function currentPage() {
 const navigation = [
 	['Обзор', ['overview']],
 	['Контент', ['templates', 'variables']],
-	['Управление сервером', ['captures', 'curators', 'access']],
+	['Управление сервером', ['captures', 'tactics', 'curators', 'access']],
 	['Интеграции', ['majestic']],
 	['Система', ['settings', 'history']]
 ] satisfies [string, (keyof typeof pages)[]][]
@@ -1186,6 +1193,9 @@ export function App() {
 										setConfig={setConfig}
 									/>
 								</div>
+								{page === 'tactics' && <Tactics config={config} setConfig={setConfig}
+									resources={resources} draft={settings} setDraft={setSettings}
+									api={api} run={run} notify={notify} />}
 								<div
 									className='page-view'
 									hidden={page !== 'majestic'}

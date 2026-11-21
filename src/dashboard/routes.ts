@@ -3,6 +3,7 @@ import { PermissionsBitField } from 'discord.js'
 import type * as E from 'express'
 import { randomUUID } from 'node:crypto'
 import type * as Pg from 'pg'
+import { registerTacticsDashboard } from '../features/tactics/dashboard'
 import {
 	replaceTemplateVariables,
 	templateVariableName
@@ -233,6 +234,8 @@ async function validateSettings(
 			for (const id of ids) {
 				if (!/^\d{17,20}$/.test(id))
 					throw problem(400, 'Некорректный Discord ID.')
+				if (key === 'TACTICS_EDITOR_ROLES' && id === guild.id)
+					throw problem(400, 'Выберите отдельную роль редактора вместо @everyone.')
 				const item = field.type.startsWith('role')
 					? guild.roles.cache.get(id)
 					: await guild.channels.fetch(id)
@@ -303,6 +306,7 @@ function registerDashboard(
 			}
 		}
 	)
+	registerTacticsDashboard(app, pool)
 	app.get('/api/session', (req: E.Request, res: E.Response) =>
 		res.json({
 			user: {

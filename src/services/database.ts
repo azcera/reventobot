@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { checkServerIdentity } from 'node:tls'
 import { Pool } from 'pg'
+import { initTactics } from '../features/tactics/repository'
 
 const pool = new Pool({
 	max: 20,
@@ -149,6 +150,7 @@ async function initDb() {
 	);
 	CREATE INDEX IF NOT EXISTS telegram_notification_queue_pending_idx ON telegram_notification_queue (retry_at) WHERE completed_at IS NULL`)
 
+	await initTactics(pool)
 	console.log('✅ Все таблицы БД успешно проверены и инициализированы.')
 }
 
