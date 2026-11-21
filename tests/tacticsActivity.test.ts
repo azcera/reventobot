@@ -12,7 +12,7 @@ import { store } from '../src/dashboard/store'
 import { registerTacticsActivity } from '../src/features/tactics/activity'
 import { TacticsBoard } from '../src/features/tactics/board'
 
-const map: MapInfo = { id: randomUUID(), name: 'Порт', width: 800, height: 600, archived: false }
+const map: MapInfo = { id: randomUUID(), name: 'Порт', width: 800, height: 600, categoryId: randomUUID() }
 
 test('доска проверяет координаты и авторство штрихов, а метки берут ник из состава', () => {
 	const board = new TacticsBoard()
@@ -201,10 +201,12 @@ test('Activity изолирует комнаты, проверяет права 
 	assert.deepEqual(loaded.objects[0], { type: 'stroke', id: strokeId, color: '#ff0000', width: 3, points: [[.5, .5], [.7, .8]] })
 	const reconnected = await join('viewer', 'room-a')
 	assert.deepEqual((await reconnected.read('snapshot')).board.objects, loaded.objects)
-	activity.mapChanged(guildId, map.id, { ...map, name: 'Новый порт' }, true)
+	activity.mapChanged(guildId, { id: map.id, map: { ...map, name: 'Новый порт' }, imageChanged: true })
 	const update = await viewer.read('catalog')
 	assert.equal(update.map?.name, 'Новый порт')
 	assert.equal(update.imageChanged, true)
+	activity.mapChanged(guildId, { mapId: map.id })
+	assert.equal((await viewer.read('tactics')).mapId, map.id)
 	members.editor.roles.cache.clear()
 	client.emit(Events.GuildMemberUpdate, null, { guild })
 	assert.equal((await editor.read('access')).canEdit, false)

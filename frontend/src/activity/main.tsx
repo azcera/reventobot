@@ -1,9 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { ArrowUpRight, Circle, Eraser, Hand, Map as MapIcon, Minus, MousePointer2, Pencil, Plus, Redo2, RotateCcw, Save, Shapes, Square, Triangle, Undo2, Users } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { DragEvent, PointerEvent } from 'react'
 import { brushWidths, moveObject, shapes } from '../../../shared/tactics'
-import type { Arrow, Board, BoardObject, ClientMessage, Edit, MapPage, Player, Point, ServerMessage, Shape, Stroke, TacticInfo } from '../../../shared/tactics'
+import type { Arrow, Board, BoardObject, ClientMessage, Edit, MapCategory, MapPage, Player, Point, ServerMessage, Shape, Stroke, TacticInfo } from '../../../shared/tactics'
 import { hit, paint } from './canvas'
 import { connectActivity } from './connection'
 import './style.css'
@@ -40,8 +40,10 @@ function Activity() {
 	const [notice, setNotice] = useState('')
 	const connection = useRef<ReturnType<typeof connectActivity> | null>(null)
 	const [maps, setMaps] = useState<MapPage>({ maps: [], next: null })
+	const [categories, setCategories] = useState<MapCategory[]>([])
+	const [categoryId, setCategoryId] = useState('')
 	const [search, setSearch] = useState('')
-	const [searchLoaded, setSearchLoaded] = useState<string | null>(null)
+	const [loadedMapQuery, setLoadedMapQuery] = useState('')
 	const [mapGeneration, setMapGeneration] = useState(0)
 	const [imageGeneration, setImageGeneration] = useState(0)
 	const [tactics, setTactics] = useState<TacticInfo[]>([])
@@ -49,6 +51,7 @@ function Activity() {
 	const [image, setImage] = useState('')
 	const [imageError, setImageError] = useState('')
 	const [zoom, setZoom] = useState(1)
+	const zoomAnchor = useRef<{ point: Point; x: number; y: number } | null>(null)
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
 	const [panel, setPanel] = useState<'maps' | 'players' | null>('maps')
 	const [tool, setTool] = useState<keyof typeof tools>('brush')
@@ -71,6 +74,7 @@ function Activity() {
 	const pointer = useRef<number | null>(null)
 	const editable = connected && canEdit && !!board.map
 	const mapId = board.map?.id
+	const mapQuery = new URLSearchParams({ categoryId, search: search.trim() }).toString()
 
 	function update(next: Board) {
 		current.current = next
@@ -101,8 +105,12 @@ function Activity() {
 			else if (message.type === 'players') setPlayers(message.players)
 			else if (message.type === 'error') setNotice(message.message)
 			else if (message.type === 'history') setHistory({ undo: message.undo, redo: message.redo })
+			else if (message.type === 'tactics') {
+				if (board.map?.id === message.mapId) setPresetGeneration(value => value + 1)
+			}
 			else if (message.type === 'catalog') {
 				if (message.map && board.map?.id === message.id) {
+					if (board.map.categoryId !== message.map.categoryId) setCategoryId(message.map.categoryId)
 					update({ ...board, map: message.map })
 					if (message.imageChanged) setImageGeneration(value => value + 1)
 				}
@@ -197,19 +205,36 @@ function Activity() {
 
 	useEffect(() => {
 		if (!connected) return
+		const controller = new AbortController()
+		void connection.current?.get('categories', controller.signal).then(async response => {
+			const items = await response.json() as MapCategory[]
+			if (controller.signal.aborted) return
+			setCategories(items)
+			setCategoryId(selected => items.some(category => category.id === selected)
+				? selected : (current.current.map?.categoryId || items[0]?.id || ''))
+		}).catch(error => { if (!controller.signal.aborted) setNotice(error.message) })
+		return () => controller.abort()
+	}, [connected, mapGeneration])
+
+	useEffect(() => {
+		const activeCategory = current.current.map?.categoryId
+		if (activeCategory) setCategoryId(activeCategory)
+	}, [mapId])
+
+	useEffect(() => {
+		if (!connected || !categoryId) return
 		const signal = new AbortController()
 		const timeout = window.setTimeout(() => {
-			const query = new URLSearchParams({ search: search.trim() })
-			void connection.current?.get(`maps?${query}`, signal.signal).then(async response => {
+			void connection.current?.get(`maps?${mapQuery}`, signal.signal).then(async response => {
 				const page = await response.json() as MapPage
 				if (!signal.signal.aborted) {
 					setMaps(page)
-					setSearchLoaded(search)
+					setLoadedMapQuery(mapQuery)
 				}
 			}).catch(error => { if (!signal.signal.aborted) setNotice(error.message) })
 		}, 160)
 		return () => { signal.abort(); clearTimeout(timeout) }
-	}, [connected, search, mapGeneration])
+	}, [connected, categoryId, mapQuery, mapGeneration])
 
 	useEffect(() => {
 		if (!mapId || !connected) return
@@ -249,6 +274,35 @@ function Activity() {
 	}, [])
 
 	useEffect(() => { setZoom(1) }, [mapId])
+	useEffect(() => {
+		const target = viewport.current
+		if (!target || !image) return
+		function wheel(event: WheelEvent) {
+			const drawing = canvas.current
+			if (!drawing) return
+			event.preventDefault()
+			if (!event.deltaY || pointer.current !== null) return
+			const next = Math.min(4, Math.max(1, zoom * (event.deltaY < 0 ? 1.18 : 1 / 1.18)))
+			if (next === zoom) return
+			const bounds = drawing.getBoundingClientRect()
+			const clamp = (value: number) => Math.max(0, Math.min(1, value))
+			zoomAnchor.current = { point: [clamp((event.clientX - bounds.left) / bounds.width),
+				clamp((event.clientY - bounds.top) / bounds.height)], x: event.clientX, y: event.clientY }
+			setZoom(next)
+		}
+		target.addEventListener('wheel', wheel, { passive: false })
+		return () => target.removeEventListener('wheel', wheel)
+	}, [image, zoom])
+
+	useLayoutEffect(() => {
+		const anchor = zoomAnchor.current
+		zoomAnchor.current = null
+		const bounds = canvas.current?.getBoundingClientRect()
+		const target = viewport.current
+		if (!anchor || !target || !bounds) return
+		target.scrollLeft += bounds.left + bounds.width * anchor.point[0] - anchor.x
+		target.scrollTop += bounds.top + bounds.height * anchor.point[1] - anchor.y
+	}, [zoom])
 	const ratio = board.map ? board.map.width / board.map.height : 1
 	const width = Math.max(1, Math.min(viewportSize.width, viewportSize.height * ratio) * zoom)
 	const height = Math.max(1, width / ratio)
@@ -437,30 +491,29 @@ function Activity() {
 				setMapGeneration(value => value + 1)
 				setImageGeneration(value => value + 1)
 			}}><RotateCcw size={14} /></button></div>
+			<select aria-label='Категория карт' value={categoryId} disabled={!categories.length}
+				onChange={event => setCategoryId(event.target.value)}>
+				{!categories.length && <option value=''>Нет категорий</option>}
+				{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}
+			</select>
 			<input type='search' aria-label='Поиск карты' placeholder='Найти карту' value={search} maxLength={100}
 				onChange={event => setSearch(event.target.value)} />
 			<div className='list'>
-				{searchLoaded === search && maps.maps.map(map => <button key={map.id} disabled={!canEdit || !connected}
+				{categoryId && loadedMapQuery === mapQuery && maps.maps.map(map => <button key={map.id} disabled={!canEdit || !connected}
 					aria-current={map.id === mapId} onClick={() => { if (map.id !== mapId) switchBoard('map', map.id) }}>
-					{map.name}{map.archived && <small>Архив</small>}
+					{map.name}
 				</button>)}
-				{searchLoaded === search && !maps.maps.length && <p>Карты не найдены.</p>}
-				{searchLoaded === search && maps.next && <button onClick={async () => {
+				{categoryId && loadedMapQuery === mapQuery && !maps.maps.length && <p>Карты не найдены.</p>}
+				{categoryId && loadedMapQuery === mapQuery && maps.next && <button onClick={async () => {
 					try {
-						const query = new URLSearchParams({ search: search.trim(), cursor: maps.next! })
+						const query = new URLSearchParams(mapQuery)
+						query.set('cursor', maps.next!)
 						const response = await connection.current!.get(`maps?${query}`)
 						const next = await response.json() as MapPage
 						setMaps(current => current.next === maps.next ? { maps: [...current.maps, ...next.maps], next: next.next } : current)
 					} catch (error) { setNotice((error as Error).message) }
 				}}>Ещё карты</button>}
 			</div>
-			{mapId && <section className='presets'>
-				<div className='aside-title'>Тактики</div>
-				{!tactics.length && <p>Сохранённых тактик нет.</p>}
-				<div className='list'>
-					{tactics.map(tactic => <button key={tactic.id} disabled={!editable} onClick={() => switchBoard('load', tactic.id)}>{tactic.name}</button>)}
-				</div>
-			</section>}
 		</aside>
 		<div className='editor'>
 			{editable && <div className='toolbar' aria-label='Инструменты'>
@@ -498,15 +551,22 @@ function Activity() {
 					<input type='color' title='Произвольный цвет' aria-label='Произвольный цвет' value={color}
 						onChange={event => setColor(event.target.value)} />
 				</div>
-				<button title='Сохранить тактику' aria-label='Сохранить тактику' onClick={() => { setPendingChange(null); setSaveOpen(value => !value) }}>
-					<Save size={18} />
-				</button>
 				<button title='Отменить (Ctrl+Z)' aria-label='Отменить действие' disabled={!history.undo}
 					onClick={() => send({ type: 'undo', epoch: current.current.epoch })}><Undo2 size={18} /></button>
 				<button title='Повторить (Ctrl+Shift+Z, Ctrl+Y)' aria-label='Повторить действие' disabled={!history.redo}
 					onClick={() => send({ type: 'redo', epoch: current.current.epoch })}><Redo2 size={18} /></button>
 			</div>}
-			<div className='workspace'>
+			<div className='board-area'>
+				{mapId && <div className='tactics-picker'>
+					<select aria-label='Загрузка тактики' value='' disabled={!editable || !tactics.length}
+						onChange={event => { if (event.target.value) switchBoard('load', event.target.value) }}>
+						<option value=''>{tactics.length ? 'Выбрать тактику' : 'Сохранённых тактик нет'}</option>
+						{tactics.map(tactic => <option key={tactic.id} value={tactic.id}>{tactic.name}</option>)}
+					</select>
+					{editable && <button title='Сохранить тактику' aria-label='Сохранить тактику'
+						onClick={() => { setPendingChange(null); setSaveOpen(value => !value) }}><Save size={17} /></button>}
+				</div>}
+				<div className='workspace'>
 				<div ref={viewport} className='viewport'>
 					{board.map && image ? <div className='scene' style={{ width, height }}>
 						<img src={image} alt={board.map.name} draggable={false} onError={() => setImageError('Не удалось открыть изображение карты.')} />
@@ -551,6 +611,7 @@ function Activity() {
 					{placement ? 'Укажите место на карте.' : notice}
 					<button aria-label='Закрыть уведомление' onClick={() => { setNotice(''); setPlacement(null) }}>×</button>
 				</div>}
+				</div>
 			</div>
 		</div>
 		<aside className='players'>

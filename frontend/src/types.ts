@@ -184,10 +184,12 @@ export interface Overview {
 	history: HistoryEntry[]
 }
 export interface ApiRoutes {
-	'tactics/maps': import('../../shared/tactics').MapPage
-	'tactics/maps/archive': { success: boolean }
+	'tactics/catalog': import('../../shared/tactics').MapCatalog
+	'tactics/categories/create': import('../../shared/tactics').MapCategory
 	'tactics/maps/delete': { success: boolean }
 	'tactics/maps/edit': import('../../shared/tactics').MapInfo
+	'tactics/maps/reorder': { success: boolean }
+	'tactics/presets/delete': { success: boolean }
 	config: Config
 	resources: Resources
 	session: Session
@@ -261,7 +263,6 @@ export interface ApiRoutes {
 	logout: { success: boolean }
 }
 export type Api = {
-	(path: `tactics/maps?${string}`): Promise<ApiRoutes['tactics/maps']>
 	(path: `tactics/maps/upload?${string}`, body: Blob): Promise<import('../../shared/tactics').MapInfo>
 	(path: `tactics/maps/edit?${string}`, body: Blob): Promise<ApiRoutes['tactics/maps/edit']>
 	<P extends keyof ApiRoutes>(path: P, body?: unknown): Promise<ApiRoutes[P]>

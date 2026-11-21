@@ -5,7 +5,10 @@ import type { Board, ClientMessage, ServerMessage } from '../../shared/tactics'
 
 test('Activity отображает общую доску, размещает фигуры и ники и включает режим просмотра', async ({ page, isMobile }) => {
 	const appId = '100000000000000001'
-	const map = { id: randomUUID(), name: 'Порт', width: 800, height: 600, archived: false }
+	const categories = [{ id: randomUUID(), name: 'Капт' }, { id: randomUUID(), name: 'Другие' }]
+	const map = { id: randomUUID(), name: 'Порт', width: 800, height: 600, categoryId: categories[0].id }
+	const other = { ...map, id: randomUUID(), name: 'Аэропорт', categoryId: categories[1].id }
+	const tactic = { id: randomUUID(), name: 'Старая тактика' }
 	const board: Board = { map, epoch: 1, revision: 0, dirty: false, objects: [] }
 	const players = [{ id: '100000000000000002', name: 'Тактик' }]
 	const outgoing: (ClientMessage | { type: 'auth' })[] = []
@@ -43,8 +46,11 @@ test('Activity отображает общую доску, размещает ф
 			expect(route.request().headers().authorization).toBe('Bearer fixture-access')
 			return route.fulfill({ json: { sessionToken: 'fixture-session' } })
 		}
-		if (relative === 'api/maps') return route.fulfill({ json: { maps: [map], next: null } })
-		if (relative.endsWith('/tactics')) return route.fulfill({ json: [] })
+		if (relative === 'api/categories') return route.fulfill({ json: categories })
+		if (relative === 'api/maps') return route.fulfill({ json: {
+			maps: [map, other].filter(item => item.categoryId === url.searchParams.get('categoryId')), next: null
+		} })
+		if (relative.endsWith('/tactics')) return route.fulfill({ json: [tactic] })
 		if (relative.endsWith('/image')) return route.fulfill({
 			contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#355846"/></svg>'
 		})
@@ -66,7 +72,18 @@ test('Activity отображает общую доску, размещает ф
 	await expect(page.getByText('Редактирование', { exact: true })).toBeVisible()
 	const canvas = page.getByRole('img', { name: 'Порт' }).locator('..').locator('canvas')
 	await expect(canvas).toBeVisible()
+	await page.getByLabel('Категория карт').selectOption(categories[1].id)
+	await expect(page.getByRole('button', { name: 'Аэропорт', exact: true })).toBeVisible()
+	await expect(page.getByRole('button', { name: 'Порт', exact: true })).toHaveCount(0)
+	await page.getByLabel('Категория карт').selectOption(categories[0].id)
 	if (isMobile) await page.getByRole('button', { name: 'Карты', exact: true }).click()
+	await page.getByLabel('Загрузка тактики').selectOption(tactic.id)
+	await expect.poll(() => outgoing.at(-1)).toMatchObject({ type: 'load', id: tactic.id })
+	await canvas.hover()
+	await page.mouse.wheel(0, -120)
+	await expect(page.getByText('118%')).toBeVisible()
+	await page.mouse.wheel(0, 120)
+	await expect(page.getByText('100%')).toBeVisible()
 	await page.getByRole('button', { name: 'Большая кисть' }).click()
 	await page.getByLabel('Произвольный цвет').fill('#123abc')
 	await canvas.click()

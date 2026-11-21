@@ -1,8 +1,8 @@
-import type { Pool } from 'pg'
-import type { Board, BoardObject, MapInfo, MapPage, TacticInfo } from '../../../shared/tactics'
+import type { Pool, PoolClient } from 'pg'
+import type { Board, BoardObject, CatalogMap, MapCategory, MapCatalog, MapInfo, MapPage, TacticInfo } from '../../../shared/tactics'
 
 export const mapUploadLimit = 12 * 1024 * 1024
-const mapColumns = 'id, name, width, height, archived, sort_order AS "order"'
+const mapColumns = 'id, name, width, height, category_id AS "categoryId"'
 const pageSize = 40
 
 export async function initTactics(pool: Pool) {
@@ -14,11 +14,22 @@ export async function initTactics(pool: Pool) {
 			width INTEGER NOT NULL,
 			height INTEGER NOT NULL,
 			image BYTEA NOT NULL,
-			archived BOOLEAN NOT NULL DEFAULT FALSE,
 			PRIMARY KEY (guild_id, id)
 		);
 		ALTER TABLE tactics_maps ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
-		CREATE INDEX IF NOT EXISTS tactics_maps_order_idx ON tactics_maps (guild_id, sort_order, id);
+		CREATE TABLE IF NOT EXISTS tactics_categories (
+			guild_id TEXT NOT NULL,
+			id UUID NOT NULL DEFAULT gen_random_uuid(),
+			name TEXT NOT NULL,
+			PRIMARY KEY (guild_id, id)
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS tactics_categories_name_idx ON tactics_categories (guild_id, lower(name));
+		ALTER TABLE tactics_maps ADD COLUMN IF NOT EXISTS category_id UUID;
+		INSERT INTO tactics_categories (guild_id, name)
+			SELECT DISTINCT guild_id, 'Капт' FROM tactics_maps WHERE category_id IS NULL ON CONFLICT DO NOTHING;
+		UPDATE tactics_maps m SET category_id = c.id FROM tactics_categories c
+			WHERE m.guild_id = c.guild_id AND m.category_id IS NULL AND lower(c.name) = lower('Капт');
+		CREATE INDEX IF NOT EXISTS tactics_maps_category_order_idx ON tactics_maps (guild_id, category_id, sort_order, id);
 		CREATE TABLE IF NOT EXISTS tactics_presets (
 			guild_id TEXT NOT NULL,
 			id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -36,17 +47,57 @@ export async function initTactics(pool: Pool) {
 }
 
 export function tacticsRepository(pool: Pool) {
+	async function transaction<Result>(work: (db: PoolClient) => Promise<Result>) {
+		const db = await pool.connect()
+		try {
+			await db.query('BEGIN')
+			const result = await work(db)
+			await db.query('COMMIT')
+			return result
+		} catch (error) {
+			await db.query('ROLLBACK')
+			throw error
+		} finally {
+			db.release()
+		}
+	}
+
+	async function lockCategory(db: PoolClient, guildId: string, categoryId: string) {
+		const { rowCount } = await db.query(
+			'SELECT 1 FROM tactics_categories WHERE guild_id = $1 AND id = $2 FOR UPDATE', [guildId, categoryId])
+		return rowCount === 1
+	}
+
+	async function categories(guildId: string) {
+		const { rows } = await pool.query<MapCategory>(
+			'SELECT id, name FROM tactics_categories WHERE guild_id = $1 ORDER BY lower(name), id', [guildId])
+		return rows
+	}
+
 	return {
-		async maps(guildId: string, cursor: string | null, search: string, includeArchived: boolean): Promise<MapPage> {
+		categories,
+		async createCategory(guildId: string, name: string) {
+			const { rows } = await pool.query<MapCategory>(
+				'INSERT INTO tactics_categories (guild_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id, name',
+				[guildId, name])
+			return rows[0]
+		},
+		async catalog(guildId: string): Promise<MapCatalog> {
+			const [items, { rows }] = await Promise.all([categories(guildId), pool.query<CatalogMap>(`
+				SELECT ${mapColumns}, COALESCE((
+					SELECT jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name) ORDER BY p.created_at DESC, p.id)
+					FROM tactics_presets p WHERE p.guild_id = m.guild_id AND p.map_id = m.id
+				), '[]'::jsonb) AS tactics
+				FROM tactics_maps m WHERE guild_id = $1 ORDER BY sort_order, id`, [guildId])])
+			return { categories: items, maps: rows }
+		},
+		async maps(guildId: string, cursor: string | null, search: string, categoryId: string | null): Promise<MapPage> {
 			const { rows } = await pool.query<MapInfo>(`
 				SELECT ${mapColumns} FROM tactics_maps
 				WHERE guild_id = $1 AND ($2::uuid IS NULL OR (sort_order, id) >
 					(COALESCE((SELECT sort_order FROM tactics_maps WHERE guild_id = $1 AND id = $2), 0), $2))
-					AND ($3 OR NOT archived OR EXISTS (
-						SELECT 1 FROM tactics_presets p
-						WHERE p.guild_id = tactics_maps.guild_id AND p.map_id = tactics_maps.id
-					)) AND strpos(lower(name), lower($4)) > 0
-				ORDER BY sort_order, id LIMIT $5`, [guildId, cursor, includeArchived, search, pageSize + 1])
+					AND ($3::uuid IS NULL OR category_id = $3) AND strpos(lower(name), lower($4)) > 0
+				ORDER BY sort_order, id LIMIT $5`, [guildId, cursor, categoryId, search, pageSize + 1])
 			const maps = rows.slice(0, pageSize)
 			return { maps, next: rows.length > pageSize ? maps.at(-1)!.id : null }
 		},
@@ -60,29 +111,63 @@ export function tacticsRepository(pool: Pool) {
 				'SELECT image FROM tactics_maps WHERE guild_id = $1 AND id = $2', [guildId, id])
 			return rows[0]?.image
 		},
-		async createMap(guildId: string, name: string, width: number, height: number, image: Buffer) {
-			const { rows } = await pool.query<MapInfo>(`
-				INSERT INTO tactics_maps (guild_id, name, width, height, image)
-				VALUES ($1, $2, $3, $4, $5) RETURNING ${mapColumns}`, [guildId, name, width, height, image])
-			return rows[0]!
+		async createMap(guildId: string, categoryId: string, name: string, width: number, height: number, image: Buffer) {
+			return transaction(async db => {
+				if (!await lockCategory(db, guildId, categoryId)) return undefined
+				const { rows } = await db.query<MapInfo>(`
+					INSERT INTO tactics_maps (guild_id, category_id, name, width, height, image, sort_order)
+					SELECT $1, $2, $3, $4, $5, $6, COALESCE(MAX(sort_order), 0) + 1
+					FROM tactics_maps WHERE guild_id = $1 AND category_id = $2 RETURNING ${mapColumns}`,
+				[guildId, categoryId, name, width, height, image])
+				return rows[0]
+			})
 		},
-		async archive(guildId: string, id: string, archived: boolean) {
-			const { rows } = await pool.query<MapInfo>(
-				`UPDATE tactics_maps SET archived = $3 WHERE guild_id = $1 AND id = $2 RETURNING ${mapColumns}`, [guildId, id, archived])
-			return rows[0]
-		},
-		async update(guildId: string, id: string, name: string, order: number, replacement?: {
+		async update(guildId: string, id: string, name: string, categoryId: string, replacement?: {
 			data: Buffer; info: { width: number; height: number }
 		}) {
-			const { rows } = await pool.query<MapInfo>(`
-				UPDATE tactics_maps SET name = $3, sort_order = $4,
-					image = COALESCE($5, image), width = COALESCE($6, width), height = COALESCE($7, height)
-				WHERE guild_id = $1 AND id = $2 RETURNING ${mapColumns}`,
-			[guildId, id, name, order, replacement?.data, replacement?.info.width, replacement?.info.height])
-			return rows[0]
+			return transaction(async db => {
+				if (!await lockCategory(db, guildId, categoryId)) return undefined
+				const { rows } = await db.query<MapInfo>(`
+					UPDATE tactics_maps SET name = $3, category_id = $4,
+						sort_order = CASE WHEN category_id = $4 THEN sort_order ELSE
+							(SELECT COALESCE(MAX(other.sort_order), 0) + 1 FROM tactics_maps other
+								WHERE other.guild_id = $1 AND other.category_id = $4) END,
+						image = COALESCE($5, image), width = COALESCE($6, width), height = COALESCE($7, height)
+					WHERE guild_id = $1 AND id = $2 RETURNING ${mapColumns}`,
+				[guildId, id, name, categoryId, replacement?.data, replacement?.info.width, replacement?.info.height])
+				return rows[0]
+			})
+		},
+		async reorder(guildId: string, categoryId: string, id: string, targetId: string, after: boolean) {
+			return transaction(async db => {
+				if (!await lockCategory(db, guildId, categoryId)) return false
+				const { rows } = await db.query<{ id: string }>(
+					'SELECT id FROM tactics_maps WHERE guild_id = $1 AND category_id = $2 ORDER BY sort_order, id', [guildId, categoryId])
+				const order = rows.map(row => row.id)
+				if (!order.includes(id) || !order.includes(targetId)) return false
+				order.splice(order.indexOf(id), 1)
+				order.splice(order.indexOf(targetId) + Number(after), 0, id)
+				await db.query(`
+					UPDATE tactics_maps m SET sort_order = positions.position::integer
+					FROM unnest($3::uuid[]) WITH ORDINALITY AS positions(id, position)
+					WHERE m.guild_id = $1 AND m.category_id = $2 AND m.id = positions.id
+						AND m.sort_order <> positions.position`, [guildId, categoryId, order])
+				return true
+			})
 		},
 		async delete(guildId: string, id: string) {
-			const { rowCount } = await pool.query('DELETE FROM tactics_maps WHERE guild_id = $1 AND id = $2', [guildId, id])
+			return transaction(async db => {
+				const keys = [guildId, id]
+				const locked = await db.query('SELECT 1 FROM tactics_maps WHERE guild_id = $1 AND id = $2 FOR UPDATE', keys)
+				if (!locked.rowCount) return false
+				await db.query('DELETE FROM tactics_presets WHERE guild_id = $1 AND map_id = $2', keys)
+				await db.query('DELETE FROM tactics_maps WHERE guild_id = $1 AND id = $2', keys)
+				return true
+			})
+		},
+		async deletePreset(guildId: string, mapId: string, id: string) {
+			const { rowCount } = await pool.query(
+				'DELETE FROM tactics_presets WHERE guild_id = $1 AND map_id = $2 AND id = $3', [guildId, mapId, id])
 			return rowCount === 1
 		},
 		async presets(guildId: string, mapId: string) {

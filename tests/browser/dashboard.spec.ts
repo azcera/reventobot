@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import type { CatalogMap } from '../../shared/tactics'
 import type { SettingField } from '../../frontend/src/types'
 
 async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец', templateVariables: Record<string, Record<string, string>> = {}) {
@@ -34,61 +35,101 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 	return requests
 }
 
-test('tactics dashboard saves editor roles and uploads a named map with CSRF', async ({ page }) => {
-	let uploaded = false
-	let map = { id: '12345678-1234-1234-1234-123456789012', name: 'Порт', width: 800, height: 600, archived: false, order: 0 }
+test('tactics dashboard creates categories, edits, reorders and deletes maps and tactics with CSRF', async ({ page }) => {
+	const category = { id: '12345678-1234-1234-1234-123456789000', name: 'Капт' }
+	const tactic = { id: '12345678-1234-1234-1234-123456789100', name: 'Обход' }
+	const otherTactic = { ...tactic, id: '12345678-1234-1234-1234-123456789200', name: 'Атака' }
+	const categories = [category]
+	let map = { id: '12345678-1234-1234-1234-123456789012', name: 'Порт', width: 800, height: 600, categoryId: category.id, tactics: [tactic, otherTactic] }
+	const other = { ...map, id: '12345678-1234-1234-1234-123456789013', name: 'Аэропорт', tactics: [] }
+	let maps: CatalogMap[] = [other]
 	const requests = await setup(page, 'tactics')
-	await page.route('**/api/tactics/maps**', async route => {
+	await page.route('**/api/tactics/**', async route => {
 		const request = route.request()
 		const url = new URL(request.url())
-		if (url.pathname.endsWith('/upload')) {
-			expect(url.searchParams.get('name')).toBe('Порт')
-			expect(request.headers()['x-csrf-token']).toBe('test')
+		const operation = url.pathname.slice('/api/tactics/'.length)
+		if (operation === 'catalog') return route.fulfill({ json: { maps, categories } })
+		expect(request.headers()['x-csrf-token']).toBe('test')
+		if (operation === 'categories/create') {
+			expect(request.postDataJSON()).toEqual({ name: 'Тренировка' })
+			const item = { id: '12345678-1234-1234-1234-123456789001', name: 'Тренировка' }
+			categories.push(item)
+			return route.fulfill({ json: item })
+		}
+		if (operation === 'maps/upload') {
+			expect(url.searchParams.get('name')).toBe(map.name)
+			expect(url.searchParams.get('categoryId')).toBe(category.id)
 			expect(request.headers()['content-type']).toBe('application/octet-stream')
 			expect(request.postDataBuffer()).toEqual(Buffer.from('map-fixture'))
-			uploaded = true
+			maps.push(map)
 			return route.fulfill({ json: map })
 		}
-		if (url.pathname.endsWith('/edit')) {
-			expect(request.headers()['x-csrf-token']).toBe('test')
+		if (operation === 'maps/edit') {
 			expect(request.postDataBuffer()).toEqual(Buffer.from('replacement'))
 			expect(url.searchParams.get('id')).toBe(map.id)
 			expect(url.searchParams.get('name')).toBe('Новый порт')
-			expect(url.searchParams.get('order')).toBe('15')
-			map = { ...map, name: 'Новый порт', order: 15 }
+			expect(url.searchParams.get('categoryId')).toBe(category.id)
+			map = { ...map, name: 'Новый порт' }
+			maps = maps.map(item => item.id === map.id ? map : item)
 			return route.fulfill({ json: map })
 		}
-		if (url.pathname.endsWith('/delete')) {
-			expect(request.headers()['x-csrf-token']).toBe('test')
-			expect(request.postDataJSON()).toEqual({ id: map.id })
-			uploaded = false
-			return route.fulfill({ json: { success: true } })
+		if (operation === 'maps/reorder') {
+			expect(request.postDataJSON()).toEqual({ categoryId: category.id, id: map.id, targetId: other.id, after: false })
+			maps = [map, other]
 		}
-		return route.fulfill({ json: { maps: uploaded ? [map] : [], next: null } })
+		if (operation === 'presets/delete') {
+			expect(request.postDataJSON()).toEqual({ id: tactic.id, mapId: map.id })
+			map = { ...map, tactics: [otherTactic] }
+			maps = maps.map(item => item.id === map.id ? map : item)
+		}
+		if (operation === 'maps/delete') {
+			expect(request.postDataJSON()).toEqual({ id: map.id })
+			maps = [other]
+		}
+		return route.fulfill({ json: { success: true } })
 	})
+	await page.reload()
 	await page.getByLabel('Роли редакторов доски тактик').selectOption('one')
 	await page.getByRole('button', { name: 'Сохранить роли' }).click()
 	await expect.poll(() => requests.find(request => request.path === 'settings')?.body.values)
 		.toEqual({ TACTICS_EDITOR_ROLES: 'one' })
+	await page.getByRole('button', { name: 'Добавить категорию', exact: true }).click()
+	await page.getByLabel('Название категории').fill('Тренировка')
+	await page.getByRole('button', { name: 'Создать категорию' }).click()
+	await expect(page.getByRole('heading', { name: 'Тренировка' })).toBeVisible()
+	await page.getByRole('button', { name: 'Добавить карту в «Капт»' }).click()
 	await page.getByLabel('Название карты').fill('Порт')
-	await page.getByLabel('Изображение PNG, JPEG или WebP до 12 МБ').setInputFiles({
+	await page.getByLabel('Изображение карты').setInputFiles({
 		name: 'map.png', mimeType: 'image/png', buffer: Buffer.from('map-fixture')
 	})
-	await page.getByRole('button', { name: 'Добавить карту' }).click()
+	await page.getByRole('dialog').getByRole('button', { name: 'Добавить карту', exact: true }).click()
 	await expect(page.getByText('Карта добавлена.')).toBeVisible()
-	await expect(page.getByRole('button', { name: 'Архивировать' })).toBeVisible()
-	await page.getByRole('button', { name: 'Редактировать', exact: true }).click()
-	await page.getByLabel('Новое название карты').fill('Новый порт')
-	await page.getByLabel('Порядок отображения (меньшие числа выше)').fill('15')
+	await page.getByRole('button', { name: 'Редактировать карту «Порт»' }).click()
+	await page.getByLabel('Название карты').fill('Новый порт')
 	await page.getByLabel('Заменить изображение').setInputFiles({
 		name: 'replacement.png', mimeType: 'image/png', buffer: Buffer.from('replacement')
 	})
 	await page.getByRole('button', { name: 'Сохранить карту' }).click()
-	await expect(page.getByText('Новый порт · порядок 15')).toBeVisible()
-	await page.getByRole('button', { name: 'Удалить', exact: true }).click()
-	await page.getByRole('dialog').getByRole('button', { name: 'Удалить', exact: true }).click()
-	await expect(page.getByText('Карта удалена.')).toBeVisible()
-	await expect(page.getByText('Карты не найдены.')).toBeVisible()
+	await expect(page.getByText('Новый порт', { exact: true })).toBeVisible()
+	const handle = page.getByRole('button', { name: 'Переместить карту «Новый порт»' })
+	const row = page.locator(`[data-tactics-map="${other.id}"]`)
+	await handle.scrollIntoViewIfNeeded()
+	const source = (await handle.boundingBox())!
+	const target = (await row.boundingBox())!
+	await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+	await page.mouse.down()
+	await page.mouse.move(target.x + target.width / 2, target.y + 5, { steps: 8 })
+	await page.mouse.up()
+	await expect(page.getByText('Порядок карт сохранён.')).toBeVisible()
+	await expect(page.getByRole('region', { name: 'Капт' }).locator('[data-tactics-map]').first()).toContainText('Новый порт')
+	await page.getByRole('button', { name: 'Удалить тактику «Обход»' }).click()
+	await page.getByRole('button', { name: 'Подтвердить удаление тактики' }).click()
+	await expect(page.getByText('Обход', { exact: true })).toHaveCount(0)
+	await expect(page.getByText('Атака', { exact: true })).toBeVisible()
+	await page.getByRole('button', { name: 'Удалить карту «Новый порт»' }).click()
+	await page.getByRole('button', { name: 'Подтвердить удаление карты' }).click()
+	await expect(page.getByText('Карта и её тактики удалены.')).toBeVisible()
+	await expect(page.getByText('Атака', { exact: true })).toHaveCount(0)
 })
 
 test('variable history shows changed variable names instead of the internal action', async ({ page }) => {

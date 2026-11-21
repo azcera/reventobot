@@ -13,7 +13,10 @@ export type Arrow = { type: 'arrow'; id: string; at: Point; to: Point; color: st
 export type BoardObject = Stroke | Arrow
 	| { type: 'shape'; id: string; shape: Shape; at: Point; color: string }
 	| { type: 'player'; id: string; userId: string; at: Point; label: string }
-export type MapInfo = { id: string; name: string; width: number; height: number; archived: boolean; order?: number }
+export type MapCategory = { id: string; name: string }
+export type MapInfo = { id: string; name: string; width: number; height: number; categoryId: string }
+export type CatalogMap = MapInfo & { tactics: TacticInfo[] }
+export type MapCatalog = { categories: MapCategory[]; maps: CatalogMap[] }
 export type MapPage = { maps: MapInfo[]; next: string | null }
 export type Player = { id: string; name: string }
 export type TacticInfo = { id: string; name: string }
@@ -50,6 +53,7 @@ export type ServerMessage =
 	| { type: 'history'; undo: boolean; redo: boolean }
 	| { type: 'drag'; epoch: number; id: string; at: Point | null }
 	| { type: 'catalog'; id: string; map: MapInfo | null; imageChanged?: boolean }
+	| { type: 'tactics'; mapId: string }
 	| { type: 'change'; change: BoardChange; revision: number; epoch: number }
 	| { type: 'saved'; revision: number; mapId: string; tactic: TacticInfo }
 	| { type: 'error'; message: string }

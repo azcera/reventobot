@@ -50,7 +50,7 @@ function legacyObject(object: BoardObject): BoardObject {
 function send(socket: WebSocket, message: ServerMessage) {
 	if (socket.readyState !== WebSocket.OPEN) return
 	if (!currentClients.has(socket)) {
-		if (message.type === 'history' || message.type === 'drag' || message.type === 'catalog') return
+		if (message.type === 'history' || message.type === 'drag' || message.type === 'catalog' || message.type === 'tactics') return
 		if (message.type === 'snapshot')
 			message = { ...message, board: { ...message.board, objects: message.board.objects.map(legacyObject) } }
 		if (message.type === 'change' && message.change.type === 'put')
@@ -226,9 +226,18 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 		if (!session) return res.sendStatus(401)
 		const cursor = uuid(req.query.cursor) ? req.query.cursor : null
 		const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : ''
-		const maps = await repository.maps(session.room.guild.id, cursor, search, false)
+		const categoryId = uuid(req.query.categoryId) ? req.query.categoryId : null
+		const maps = await repository.maps(session.room.guild.id, cursor, search, categoryId)
 		if (!canEnter(session)) return res.sendStatus(401)
 		res.json(maps)
+	})
+	app.get('/activity/api/categories', async (req, res) => {
+		res.set('Cache-Control', 'no-store')
+		const session = httpSession(req)
+		if (!session) return res.sendStatus(401)
+		const categories = await repository.categories(session.room.guild.id)
+		if (!canEnter(session)) return res.sendStatus(401)
+		res.json(categories)
 	})
 	app.get('/activity/api/maps/:id/image', async (req, res) => {
 		res.set('Cache-Control', 'no-store')
@@ -409,19 +418,23 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 	client.on(Events.GuildMemberUpdate, (_, member) => refreshGuild(member.guild))
 	client.on(Events.GuildMemberRemove, member => refreshGuild(member.guild))
 
-	const mapChanged: MapChanged = (guildId, id, map, imageChanged) => {
+	const mapChanged: MapChanged = (guildId, change) => {
 		catalogRevision++
 		for (const room of rooms.values()) {
 			if (room.guild.id !== guildId) continue
-			if (room.board.map?.id === id) {
-				if (map) room.board.map = map
+			if (change && 'mapId' in change) {
+				if (room.board.map?.id === change.mapId) broadcast(room, { type: 'tactics', mapId: change.mapId })
+				continue
+			}
+			if (change && room.board.map?.id === change.id) {
+				if (change.map) room.board.map = change.map
 				else {
 					room.board.reset(null)
 					room.drags.clear()
 					for (const [peer, session] of room.sockets) snapshot(peer, session)
 				}
 			}
-			broadcast(room, { type: 'catalog', id, map, imageChanged })
+			broadcast(room, { type: 'catalog', id: change?.id ?? '', map: change?.map ?? null, imageChanged: change?.imageChanged })
 		}
 	}
 
