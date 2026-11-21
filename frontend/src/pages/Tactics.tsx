@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import type { MapPage } from '../../../shared/tactics'
-import { Button, Field, Panel } from '../components/ui'
+import type { MapInfo, MapPage } from '../../../shared/tactics'
+import { Button, Field, Panel, useModal } from '../components/ui'
 import type { Config, PageServices, Resources, Setter, SettingsDraft } from '../types'
 import { errorMessage } from '../types'
 import { OrderedChoices } from './Settings'
@@ -21,6 +21,8 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 	const [generation, setGeneration] = useState(0)
 	const [page, setPage] = useState<MapPage>({ maps: [], next: null })
 	const [loadedSearch, setLoadedSearch] = useState<string | null>(null)
+	const [editing, setEditing] = useState<{ id: string; name: string; order: string; file: File | null } | null>(null)
+	const modal = useModal()
 	const query = new URLSearchParams({ search: search.trim() })
 
 	useEffect(() => {
@@ -47,6 +49,37 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 			setFileKey(key => key + 1)
 			setGeneration(value => value + 1)
 			notify('Карта добавлена.')
+		})
+	}
+
+	function saveMap(event: FormEvent) {
+		event.preventDefault()
+		if (!editing) return
+		const { id, name, order, file } = editing
+		if (file && file.size > 12 * 1024 * 1024) return notify('Файл должен быть не больше 12 МБ.', true)
+		void run(async () => {
+			const fields = { id, name: name.trim(), order }
+			const map = file
+				? await api(`tactics/maps/edit?${new URLSearchParams(fields)}`, file)
+				: await api('tactics/maps/edit', fields)
+			setEditing(null)
+			setPage(current => ({ ...current, maps: current.maps.map(item => item.id === id ? map : item) }))
+			setGeneration(value => value + 1)
+			notify('Изменения карты сохранены.')
+		})
+	}
+
+	async function deleteMap(map: MapInfo) {
+		if (!await modal({
+			title: `Удалить карту «${map.name}»?`,
+			message: 'Изображение и несохранённая доска на этой карте будут удалены. Карту с сохранёнными тактиками можно архивировать.',
+			confirm: 'Удалить'
+		})) return
+		void run(async () => {
+			await api('tactics/maps/delete', { id: map.id })
+			setPage(current => ({ ...current, maps: current.maps.filter(item => item.id !== map.id) }))
+			setGeneration(value => value + 1)
+			notify('Карта удалена.')
 		})
 	}
 
@@ -84,13 +117,38 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 					<input type='search' value={search} maxLength={100} onChange={event => setSearch(event.target.value)} />
 				</Field>
 				{loadedSearch === search && !page.maps.length && <p>Карты не найдены.</p>}
-				{loadedSearch === search && page.maps.map(map => <div key={map.id} className='flex items-center justify-between gap-3'>
-					<span>{map.name}{map.archived && ' · в архиве'}</span>
-					<Button onClick={() => void run(async () => {
-						await api('tactics/maps/archive', { id: map.id, archived: !map.archived })
-						setGeneration(value => value + 1)
-						notify(map.archived ? 'Карта восстановлена.' : 'Карта в архиве. Сохранённые тактики доступны.')
-					})}>{map.archived ? 'Восстановить' : 'Архивировать'}</Button>
+				{loadedSearch === search && page.maps.map(map => <div key={map.id} className='grid gap-3 border-b border-current/10 pb-3'>
+					<div className='flex flex-wrap items-center justify-between gap-3'>
+						<span>{map.name}{map.archived && ' · в архиве'} · порядок {map.order ?? 0}</span>
+						<div className='flex flex-wrap gap-2'>
+							<Button onClick={() => setEditing({ id: map.id, name: map.name, order: String(map.order ?? 0), file: null })}>
+								Редактировать
+							</Button>
+							<Button onClick={() => void run(async () => {
+								await api('tactics/maps/archive', { id: map.id, archived: !map.archived })
+								setGeneration(value => value + 1)
+								notify(map.archived ? 'Карта восстановлена.' : 'Карта в архиве. Сохранённые тактики доступны.')
+							})}>{map.archived ? 'Восстановить' : 'Архивировать'}</Button>
+							<Button onClick={() => void deleteMap(map)}>Удалить</Button>
+						</div>
+					</div>
+					{editing?.id === map.id && <form className='grid gap-3' onSubmit={saveMap}>
+						<Field label='Новое название карты'>
+							<input required maxLength={100} value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} />
+						</Field>
+						<Field label='Порядок отображения (меньшие числа выше)'>
+							<input required type='number' min={0} max={999999} step={1} value={editing.order}
+								onChange={event => setEditing({ ...editing, order: event.target.value })} />
+						</Field>
+						<Field label='Заменить изображение'>
+							<input type='file' accept='image/png,image/jpeg,image/webp'
+								onChange={event => setEditing({ ...editing, file: event.target.files?.[0] ?? null })} />
+						</Field>
+						<div className='flex flex-wrap gap-2'>
+							<Button type='submit' variant='primary'>Сохранить карту</Button>
+							<Button onClick={() => setEditing(null)}>Отмена</Button>
+						</div>
+					</form>}
 				</div>)}
 				{loadedSearch === search && page.next && <Button onClick={() => void run(async () => {
 					query.set('cursor', page.next!)

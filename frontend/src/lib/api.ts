@@ -16,7 +16,7 @@ const resource = (value: unknown): boolean =>
 	(value.manageable === undefined || boolean(value.manageable))
 const tacticsMap = (value: unknown): boolean =>
 	record(value) && text(value.id) && text(value.name) && number(value.width) &&
-	number(value.height) && boolean(value.archived)
+	number(value.height) && boolean(value.archived) && (value.order === undefined || number(value.order))
 const field = (value: unknown): boolean =>
 	record(value) &&
 	text(value.key) &&
@@ -105,8 +105,9 @@ const majestic = (value: unknown): boolean =>
 function validResponse(path: string, value: unknown): boolean {
 	if (path === 'tactics/maps' || path.startsWith('tactics/maps?'))
 		return record(value) && array(value.maps, tacticsMap) && (value.next === null || text(value.next))
-	if (path.startsWith('tactics/maps/upload?')) return tacticsMap(value)
-	if (path === 'tactics/maps/archive') return record(value) && boolean(value.success)
+	if (path.startsWith('tactics/maps/upload?') || path === 'tactics/maps/edit' || path.startsWith('tactics/maps/edit?'))
+		return tacticsMap(value)
+	if (path === 'tactics/maps/archive' || path === 'tactics/maps/delete') return record(value) && boolean(value.success)
 	if (
 		[
 			'config',

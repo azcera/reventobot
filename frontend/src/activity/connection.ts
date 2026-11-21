@@ -64,7 +64,7 @@ export function connectActivity(
 			const peer = new WebSocket(url)
 			socket = peer
 			const timeout = window.setTimeout(() => peer.close(), 12000)
-			peer.onopen = () => peer.send(JSON.stringify({ type: 'auth', token: sessionToken }))
+			peer.onopen = () => peer.send(JSON.stringify({ type: 'auth', token: sessionToken, version: 2 }))
 			peer.onmessage = event => {
 				const message = JSON.parse(event.data) as ServerMessage
 				if (message.type === 'snapshot') {

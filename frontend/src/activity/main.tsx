@@ -1,9 +1,9 @@
 import { createRoot } from 'react-dom/client'
-import { ArrowUpRight, Circle, Eraser, Hand, Map, Minus, MousePointer2, Pencil, Plus, RotateCcw, Save, Shapes, Square, Triangle, Users } from 'lucide-react'
+import { ArrowUpRight, Circle, Eraser, Hand, Map as MapIcon, Minus, MousePointer2, Pencil, Plus, Redo2, RotateCcw, Save, Shapes, Square, Triangle, Undo2, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent, PointerEvent } from 'react'
-import { brushWidths, shapes } from '../../../shared/tactics'
-import type { Board, BoardObject, ClientMessage, Edit, MapPage, Player, Point, ServerMessage, Shape, Stroke, TacticInfo } from '../../../shared/tactics'
+import { brushWidths, moveObject, shapes } from '../../../shared/tactics'
+import type { Arrow, Board, BoardObject, ClientMessage, Edit, MapPage, Player, Point, ServerMessage, Shape, Stroke, TacticInfo } from '../../../shared/tactics'
 import { hit, paint } from './canvas'
 import { connectActivity } from './connection'
 import './style.css'
@@ -18,13 +18,15 @@ const figures = {
 const tools = {
 	select: { icon: MousePointer2, label: 'Выбрать и переместить' },
 	brush: { icon: Pencil, label: 'Кисть' },
+	arrow: { icon: ArrowUpRight, label: 'Рисовать стрелку' },
 	erase: { icon: Eraser, label: 'Удалить объект' },
 	pan: { icon: Hand, label: 'Переместить карту' }
 }
 type Placement = { shape: Shape } | { userId: string }
 type Gesture =
 	| { kind: 'stroke'; stroke: Stroke; sent: number; last: number }
-	| { kind: 'move'; object: Exclude<BoardObject, Stroke> }
+	| { kind: 'arrow'; arrow: Arrow }
+	| { kind: 'move'; object: Exclude<BoardObject, Stroke>; grab: Point; last: number; moved: boolean }
 	| { kind: 'pan'; x: number; y: number; left: number; top: number }
 const initialBoard: Board = { map: null, epoch: 0, revision: 0, dirty: false, objects: [] }
 
@@ -41,6 +43,7 @@ function Activity() {
 	const [search, setSearch] = useState('')
 	const [searchLoaded, setSearchLoaded] = useState<string | null>(null)
 	const [mapGeneration, setMapGeneration] = useState(0)
+	const [imageGeneration, setImageGeneration] = useState(0)
 	const [tactics, setTactics] = useState<TacticInfo[]>([])
 	const [presetGeneration, setPresetGeneration] = useState(0)
 	const [image, setImage] = useState('')
@@ -55,6 +58,10 @@ function Activity() {
 	const [placement, setPlacement] = useState<Placement | null>(null)
 	const [selected, setSelected] = useState<string | null>(null)
 	const [preview, setPreview] = useState<BoardObject | null>(null)
+	const [history, setHistory] = useState({ undo: false, redo: false })
+	const [remoteDrags, setRemoteDrags] = useState<Record<string, Point>>({})
+	const animated = useRef(new Map<string, Point>())
+	const pendingMove = useRef<string | null>(null)
 	const [saveOpen, setSaveOpen] = useState(false)
 	const [name, setName] = useState('')
 	const [pendingChange, setPendingChange] = useState<{ type: 'map' | 'load'; id: string } | null>(null)
@@ -71,6 +78,10 @@ function Activity() {
 	}
 
 	useEffect(() => {
+		function clearPreview() {
+			pendingMove.current = null
+			setPreview(null)
+		}
 		function receive(message: ServerMessage) {
 			const board = current.current
 			if (message.type === 'snapshot') {
@@ -78,15 +89,33 @@ function Activity() {
 					gesture.current = null
 					pointer.current = null
 					setSelected(null)
-					setPreview(null)
 					setPendingChange(null)
 				}
+				clearPreview()
+				setRemoteDrags({})
+				animated.current.clear()
 				update(message.board)
 				setCanEdit(message.canEdit)
 				setPlayers(message.players)
 			} else if (message.type === 'access') setCanEdit(message.canEdit)
 			else if (message.type === 'players') setPlayers(message.players)
 			else if (message.type === 'error') setNotice(message.message)
+			else if (message.type === 'history') setHistory({ undo: message.undo, redo: message.redo })
+			else if (message.type === 'catalog') {
+				if (message.map && board.map?.id === message.id) {
+					update({ ...board, map: message.map })
+					if (message.imageChanged) setImageGeneration(value => value + 1)
+				}
+				setMapGeneration(value => value + 1)
+			} else if (message.type === 'drag') {
+				if (message.epoch !== board.epoch) return
+				setRemoteDrags(current => {
+					const next = { ...current }
+					if (message.at) next[message.id] = message.at
+					else delete next[message.id]
+					return next
+				})
+			}
 			else if (message.type === 'saved') {
 				if (message.revision === board.revision) update({ ...board, dirty: false })
 				if (message.mapId === board.map?.id) {
@@ -99,6 +128,17 @@ function Activity() {
 					return
 				}
 				const change = message.change
+				const id = change.type === 'put' ? change.object.id : change.id
+				if (change.type !== 'points') {
+					setRemoteDrags(current => {
+						if (!current[id]) return current
+						const next = { ...current }
+						delete next[id]
+						return next
+					})
+					if (pendingMove.current === id) clearPreview()
+					if (change.type === 'remove') animated.current.delete(id)
+				}
 				let objects = board.objects
 				if (change.type === 'remove') objects = objects.filter(object => object.id !== change.id)
 				if (change.type === 'put') {
@@ -116,6 +156,11 @@ function Activity() {
 		const active = connectActivity(receive, (text, ready) => {
 			setStatus(text)
 			setConnected(ready)
+			if (!ready) {
+				setHistory({ undo: false, redo: false })
+				setRemoteDrags({})
+				animated.current.clear()
+			}
 		})
 		connection.current = active
 		void active.start()
@@ -128,10 +173,27 @@ function Activity() {
 		pointer.current = null
 		setPlacement(null)
 		setPreview(null)
+		pendingMove.current = null
 		setSelected(null)
 		setSaveOpen(false)
 		setPendingChange(null)
 	}, [editable])
+
+	useEffect(() => {
+		if (!editable) return
+		function key(event: KeyboardEvent) {
+			if (!(event.ctrlKey || event.metaKey) || event.altKey || event.defaultPrevented ||
+				(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]'))) return
+			const letter = event.code === 'KeyZ' ? 'z' : event.code === 'KeyY' ? 'y' : event.key.toLowerCase()
+			if (letter !== 'z' && letter !== 'y') return
+			event.preventDefault()
+			const type = letter === 'y' || event.shiftKey ? 'redo' : 'undo'
+			if (history[type] && pointer.current === null)
+				connection.current?.send({ type, epoch: current.current.epoch })
+		}
+		window.addEventListener('keydown', key)
+		return () => window.removeEventListener('keydown', key)
+	}, [editable, history])
 
 	useEffect(() => {
 		if (!connected) return
@@ -165,7 +227,7 @@ function Activity() {
 			if (url) URL.revokeObjectURL(url)
 			setImage('')
 		}
-	}, [mapId, connected, mapGeneration])
+	}, [mapId, connected, imageGeneration])
 
 	useEffect(() => {
 		if (!mapId || !connected) return
@@ -195,11 +257,31 @@ function Activity() {
 	useEffect(() => {
 		const target = canvas.current
 		if (!target) return
-		const frame = requestAnimationFrame(() => paint(target, preview
-			? [...board.objects.filter(object => object.id !== preview.id), preview]
-			: board.objects, selected))
+		let frame: number
+		function draw() {
+			let moving = false
+			const objects = board.objects.map(object => {
+				if (object.id === preview?.id) return preview
+				if (object.type === 'stroke') return object
+				const drag = remoteDrags[object.id]
+				const previous = animated.current.get(object.id)
+				if (!drag && !previous) return object
+				const from = previous ?? object.at
+				const to = drag ?? object.at
+				const done = Math.hypot(to[0] - from[0], to[1] - from[1]) < .0005
+				const at: Point = done ? to : [from[0] + (to[0] - from[0]) * .5, from[1] + (to[1] - from[1]) * .5]
+				if (done && !drag) animated.current.delete(object.id)
+				else animated.current.set(object.id, at)
+				if (!done) moving = true
+				return moveObject(object, at)
+			})
+			if (preview && !objects.some(object => object.id === preview.id)) objects.push(preview)
+			paint(target!, objects, selected)
+			if (moving) frame = requestAnimationFrame(draw)
+		}
+		frame = requestAnimationFrame(draw)
 		return () => cancelAnimationFrame(frame)
-	}, [board.objects, preview, selected, width, height, pixelScale, image])
+	}, [board.objects, preview, remoteDrags, selected, width, height, pixelScale, image])
 
 	function send(message: ClientMessage) {
 		if (!connection.current?.send(message)) setNotice('Нет связи с доской.')
@@ -210,11 +292,15 @@ function Activity() {
 	}
 
 	function place(item: Placement, at: Point) {
+		if ('shape' in item && item.shape === 'arrow') {
+			setPlacement(null)
+			setTool('arrow')
+			return
+		}
 		const id = crypto.randomUUID()
 		if ('shape' in item) edit({ type: 'shape', id, shape: item.shape, at, color })
 		else edit({ type: 'player', id, userId: item.userId, at })
 		setPlacement(null)
-		setFiguresOpen(false)
 		setTool('select')
 	}
 
@@ -238,6 +324,10 @@ function Activity() {
 				edit({ type: 'stroke', id, color, width: brush, point: at })
 				gesture.current = { kind: 'stroke', stroke, sent: 1, last: performance.now() }
 				setPreview(stroke)
+			} else if (tool === 'arrow') {
+				const arrow: Arrow = { type: 'arrow', id: crypto.randomUUID(), at, to: at, color, width: brush }
+				gesture.current = { kind: 'arrow', arrow }
+				setPreview(arrow)
 			} else {
 				const object = hit(current.current.objects, at, width, height)
 				if (tool === 'erase') {
@@ -246,7 +336,7 @@ function Activity() {
 				}
 				setSelected(object?.id ?? null)
 				if (!object || object.type === 'stroke') return
-				gesture.current = { kind: 'move', object }
+				gesture.current = { kind: 'move', object, grab: [object.at[0] - at[0], object.at[1] - at[1]], last: 0, moved: false }
 			}
 		}
 		pointer.current = event.pointerId
@@ -267,7 +357,15 @@ function Activity() {
 		if (active?.kind === 'pan') {
 			viewport.current?.scrollTo(active.left + active.x - event.clientX, active.top + active.y - event.clientY)
 		} else if (editable && active?.kind === 'move') {
-			setPreview({ ...active.object, at: point(event) })
+			const at = dragPoint(active, event)
+			active.moved = true
+			setPreview(moveObject(active.object, at))
+			if (performance.now() - active.last >= 32) {
+				active.last = performance.now()
+				send({ type: 'drag', id: active.object.id, at, epoch: current.current.epoch })
+			}
+		} else if (editable && active?.kind === 'arrow') {
+			setPreview({ ...active.arrow, to: point(event) })
 		} else if (editable && active?.kind === 'stroke') {
 			active.stroke.points.push(point(event))
 			setPreview({ ...active.stroke })
@@ -275,15 +373,34 @@ function Activity() {
 		}
 	}
 
+	function dragPoint(active: Extract<Gesture, { kind: 'move' }>, event: PointerEvent<HTMLCanvasElement>): Point {
+		const [x, y] = point(event)
+		return [Math.min(1, Math.max(0, x + active.grab[0])), Math.min(1, Math.max(0, y + active.grab[1]))]
+	}
+
 	function end(event: PointerEvent<HTMLCanvasElement>, canceled = false) {
 		if (pointer.current !== event.pointerId) return
 		const active = gesture.current
 		if (editable && active?.kind === 'stroke') flush(active)
-		if (editable && !canceled && active?.kind === 'move' && preview?.id === active.object.id)
-			edit({ type: 'move', id: active.object.id, at: point(event) })
+		let holdPreview = false
+		if (editable && active?.kind === 'move' && active.moved) {
+			if (canceled) send({ type: 'drag', id: active.object.id, at: null, epoch: current.current.epoch })
+			else {
+				const at = dragPoint(active, event)
+				pendingMove.current = active.object.id
+				holdPreview = true
+				setPreview(moveObject(active.object, at))
+				edit({ type: 'move', id: active.object.id, at })
+			}
+		}
+		if (editable && !canceled && active?.kind === 'arrow') {
+			const to = point(event)
+			if (Math.hypot((to[0] - active.arrow.at[0]) * width, (to[1] - active.arrow.at[1]) * height) >= 4)
+				edit({ ...active.arrow, to })
+		}
 		gesture.current = null
 		pointer.current = null
-		setPreview(null)
+		if (!holdPreview) setPreview(null)
 	}
 
 	function drop(event: DragEvent) {
@@ -308,7 +425,7 @@ function Activity() {
 
 	return <main className='activity' data-panel={panel ?? ''}>
 		<header>
-			<button className='panel-toggle' onClick={() => show('maps')} aria-label='Карты'><Map size={18} /></button>
+			<button className='panel-toggle' onClick={() => show('maps')} aria-label='Карты'><MapIcon size={18} /></button>
 			<strong>Доска тактик</strong>
 			<span className='map-title'>{board.map?.name}</span>
 			<span className='connection' data-live={connected}>{connected ? (canEdit ? 'Редактирование' : 'Просмотр') : status}</span>
@@ -316,7 +433,10 @@ function Activity() {
 			<button className='panel-toggle' onClick={() => show('players')} aria-label='Состав'><Users size={18} /></button>
 		</header>
 		<aside className='maps'>
-			<div className='aside-title'>Карты <button title='Обновить карты' onClick={() => setMapGeneration(value => value + 1)}><RotateCcw size={14} /></button></div>
+			<div className='aside-title'>Карты <button title='Обновить карты' onClick={() => {
+				setMapGeneration(value => value + 1)
+				setImageGeneration(value => value + 1)
+			}}><RotateCcw size={14} /></button></div>
 			<input type='search' aria-label='Поиск карты' placeholder='Найти карту' value={search} maxLength={100}
 				onChange={event => setSearch(event.target.value)} />
 			<div className='list'>
@@ -355,10 +475,13 @@ function Activity() {
 					{figuresOpen && <div className='figure-list'>
 						{shapes.map(shape => {
 							const { icon: Icon, label } = figures[shape]
-							return <button key={shape} draggable title={label} aria-label={label}
-								aria-pressed={!!placement && 'shape' in placement && placement.shape === shape}
+							return <button key={shape} draggable={shape !== 'arrow'} title={label} aria-label={label}
+								aria-pressed={shape === 'arrow' ? tool === 'arrow' : !!placement && 'shape' in placement && placement.shape === shape}
 								onDragStart={event => event.dataTransfer.setData('application/x-revento-shape', shape)}
-								onClick={() => { setPlacement({ shape }); setFiguresOpen(false) }}><Icon size={18} /></button>
+								onClick={() => {
+									if (shape === 'arrow') { setTool('arrow'); setPlacement(null) }
+									else setPlacement({ shape })
+								}}><Icon size={18} /></button>
 						})}
 					</div>}
 				</div>
@@ -378,6 +501,10 @@ function Activity() {
 				<button title='Сохранить тактику' aria-label='Сохранить тактику' onClick={() => { setPendingChange(null); setSaveOpen(value => !value) }}>
 					<Save size={18} />
 				</button>
+				<button title='Отменить (Ctrl+Z)' aria-label='Отменить действие' disabled={!history.undo}
+					onClick={() => send({ type: 'undo', epoch: current.current.epoch })}><Undo2 size={18} /></button>
+				<button title='Повторить (Ctrl+Shift+Z, Ctrl+Y)' aria-label='Повторить действие' disabled={!history.redo}
+					onClick={() => send({ type: 'redo', epoch: current.current.epoch })}><Redo2 size={18} /></button>
 			</div>}
 			<div className='workspace'>
 				<div ref={viewport} className='viewport'>
@@ -390,7 +517,7 @@ function Activity() {
 							onPointerCancel={event => end(event, true)} onLostPointerCapture={event => end(event, true)}
 							onDragOver={event => { if (editable) event.preventDefault() }} onDrop={drop} />
 					</div> : <div className='empty'>
-						<Map size={34} />
+						<MapIcon size={34} />
 						<p>{imageError || (board.map ? 'Загрузка карты…' : canEdit ? 'Выберите карту слева' : 'Ожидаем выбора карты редактором')}</p>
 					</div>}
 				</div>

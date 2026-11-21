@@ -89,7 +89,7 @@ app.use((_req, res, next) => {
 })
 app.use(express.json({ limit: '256kb', inflate: false }))
 const tactics = registerTacticsActivity(app, client, pool)
-registerDashboard(app, client, pool)
+registerDashboard(app, client, pool, { onTacticsMapChanged: tactics.mapChanged })
 app.get('/', (req, res) => {
 	res.sendFile(path.join(PUBLIC_PATH, 'dashboard', 'index.html'))
 })

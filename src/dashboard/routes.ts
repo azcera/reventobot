@@ -4,6 +4,7 @@ import type * as E from 'express'
 import { randomUUID } from 'node:crypto'
 import type * as Pg from 'pg'
 import { registerTacticsDashboard } from '../features/tactics/dashboard'
+import type { MapChanged } from '../features/tactics/dashboard'
 import {
 	replaceTemplateVariables,
 	templateVariableName
@@ -265,10 +266,12 @@ function registerDashboard(
 	pool: Pg.Pool,
 	{
 		auth = createAuth({ client, pool }),
-		majestic
+		majestic,
+		onTacticsMapChanged
 	}: {
 		auth?: ReturnType<typeof createAuth>
 		majestic?: ReturnType<typeof createMajesticSync>
+		onTacticsMapChanged?: MapChanged
 	} = {}
 ) {
 	auth.register(app)
@@ -306,7 +309,7 @@ function registerDashboard(
 			}
 		}
 	)
-	registerTacticsDashboard(app, pool)
+	registerTacticsDashboard(app, pool, onTacticsMapChanged)
 	app.get('/api/session', (req: E.Request, res: E.Response) =>
 		res.json({
 			user: {

@@ -7,10 +7,11 @@ import express from 'express'
 import type { Express, Request } from 'express'
 import type { Pool } from 'pg'
 import { WebSocket, WebSocketServer } from 'ws'
-import type { Player, ServerMessage } from '../../../shared/tactics'
+import type { BoardObject, Player, ServerMessage } from '../../../shared/tactics'
 import { PUBLIC_PATH } from '../../config/path'
 import { store } from '../../dashboard/store'
-import { TacticsBoard, uuid } from './board'
+import { point, TacticsBoard, uuid } from './board'
+import type { MapChanged } from './dashboard'
 import { tacticsRepository } from './repository'
 
 const refreshInterval = 30_000
@@ -28,6 +29,7 @@ type Room = {
 	verified: number
 	idleSince: number
 	sockets: Map<WebSocket, Session>
+	drags: Map<WebSocket, { id: string; epoch: number }>
 }
 type Instance = {
 	application_id: string
@@ -36,10 +38,35 @@ type Instance = {
 	users: string[]
 }
 
+const currentClients = new WeakSet<WebSocket>()
+const lastHistory = new WeakMap<WebSocket, number>()
+
+function legacyObject(object: BoardObject): BoardObject {
+	if (object.type !== 'arrow') return object
+	return { type: 'shape', shape: 'arrow', id: object.id, color: object.color,
+		at: [(object.at[0] + object.to[0]) / 2, (object.at[1] + object.to[1]) / 2] }
+}
+
 function send(socket: WebSocket, message: ServerMessage) {
 	if (socket.readyState !== WebSocket.OPEN) return
+	if (!currentClients.has(socket)) {
+		if (message.type === 'history' || message.type === 'drag' || message.type === 'catalog') return
+		if (message.type === 'snapshot')
+			message = { ...message, board: { ...message.board, objects: message.board.objects.map(legacyObject) } }
+		if (message.type === 'change' && message.change.type === 'put')
+			message = { ...message, change: { type: 'put', object: legacyObject(message.change.object) } }
+	}
 	if (socket.bufferedAmount > 2_000_000) return socket.terminate()
 	socket.send(JSON.stringify(message))
+}
+
+function sendHistory(socket: WebSocket, session: Session) {
+	if (!currentClients.has(socket)) return
+	const history = session.room.board.historyState(session.userId)
+	const flags = Number(history.undo) | (Number(history.redo) << 1)
+	if (lastHistory.get(socket) === flags) return
+	lastHistory.set(socket, flags)
+	send(socket, { type: 'history', ...history })
 }
 
 function broadcast(room: Room, message: ServerMessage) {
@@ -71,6 +98,15 @@ function snapshot(socket: WebSocket, session: Session) {
 		type: 'snapshot', board: session.room.board.snapshot(), players: roster(session.room),
 		canEdit: canEdit(session)
 	})
+	sendHistory(socket, session)
+}
+
+function clearDrag(room: Room, socket: WebSocket, announce = true) {
+	const drag = room.drags.get(socket)
+	if (!drag) return
+	room.drags.delete(socket)
+	if (announce && drag.epoch === room.board.epoch)
+		broadcast(room, { type: 'drag', ...drag, at: null })
 }
 
 export function registerTacticsActivity(app: Express, client: Client, pool: Pool) {
@@ -81,6 +117,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 	const repository = tacticsRepository(pool)
 	const sessions = new Map<string, Session>()
 	const rooms = new Map<string, Room>()
+	let catalogRevision = 0
 	const ws = new WebSocketServer({ noServer: true, maxPayload: 8192 })
 	const root = path.join(PUBLIC_PATH, 'activity')
 
@@ -161,7 +198,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 			if (!room) {
 				room = {
 					id: instanceId, guild, channelId, board: new TacticsBoard(),
-					participants: new Set(), verified: 0, idleSince: Date.now(), sockets: new Map()
+					participants: new Set(), verified: 0, idleSince: Date.now(), sockets: new Map(), drags: new Map()
 				}
 				rooms.set(instanceId, room)
 			}
@@ -224,6 +261,17 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 		if (!canEnter(session)) return socket.close(4001, 'Activity access expired')
 		if (input.type === 'sync') return snapshot(socket, session)
 		if (!canEdit(session)) throw new Error('Доступен только просмотр.')
+		if (input.type === 'drag') {
+			if (input.epoch !== board.epoch || !uuid(input.id)) return
+			if (input.at === null) return clearDrag(room, socket)
+			if (!point(input.at) || !board.movable(input.id)) return clearDrag(room, socket)
+			if (room.drags.get(socket)?.id !== input.id) clearDrag(room, socket)
+			room.drags.set(socket, { id: input.id, epoch: board.epoch })
+			for (const peer of room.sockets.keys()) {
+				if (peer !== socket) send(peer, { type: 'drag', id: input.id, at: input.at, epoch: board.epoch })
+			}
+			return
+		}
 		if (input.type === 'map' || input.type === 'load' || input.type === 'save') {
 			const revision = input.revision
 			const check = () => {
@@ -242,17 +290,25 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 				return
 			}
 			if (!uuid(input.id)) throw new Error('Некорректный ID.')
+			const mapRevision = catalogRevision
 			const preset = input.type === 'load' ? await repository.preset(guild.id, input.id) : undefined
-			if (input.type === 'load' && preset?.snapshot.version !== 1) throw new Error('Тактика недоступна.')
+			if (input.type === 'load' && (!preset || ![1, 2].includes(preset.snapshot.version)))
+				throw new Error('Тактика недоступна.')
 			const map = await repository.map(guild.id, preset?.mapId ?? input.id)
 			if (!map) throw new Error('Карта недоступна.')
+			if (catalogRevision !== mapRevision) throw new Error('Список карт изменился. Повторите действие.')
 			check()
 			board.reset(map, preset?.snapshot.objects)
+			room.drags.clear()
 			for (const [peer, peerSession] of room.sockets) snapshot(peer, peerSession)
 			return
 		}
-		const change = board.edit(input, userId, input.type === 'player' ? roster(room) : [])
+		const change = input.type === 'undo' || input.type === 'redo'
+			? board.replay(userId, input.type === 'redo', input.epoch)
+			: board.edit(input, userId, input.type === 'player' ? roster(room) : [])
+		if (input.type === 'move') clearDrag(room, socket, false)
 		broadcast(room, { type: 'change', change, revision: board.revision, epoch: board.epoch })
+		for (const [peer, peerSession] of room.sockets) sendHistory(peer, peerSession)
 	}
 
 	ws.on('connection', socket => {
@@ -276,6 +332,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 					const current = input.type === 'auth' && sessions.get(input.token)
 					if (!current || !canEnter(current)) return socket.close(4001, 'Authentication required')
 					session = current
+					if (input.version === 2) currentClients.add(socket)
 					clearTimeout(authTimeout)
 					current.room.sockets.set(socket, current)
 					snapshot(socket, current)
@@ -285,6 +342,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 				if (transaction && pending) throw new Error('Дождитесь завершения предыдущего действия.')
 				if (transaction) pending = true
 				void edit(socket, session, input).catch(error => {
+					clearDrag(session!.room, socket)
 					send(socket, { type: 'error', message: (error as { code?: unknown }).code
 						? 'Не удалось выполнить действие. Повторите попытку.' : String(error.message) })
 					if (canEnter(session!)) snapshot(socket, session!)
@@ -297,6 +355,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 			clearTimeout(authTimeout)
 			if (!session) return
 			session.room.sockets.delete(socket)
+			clearDrag(session.room, socket)
 			if (!session.room.sockets.size) session.room.idleSince = Date.now()
 		})
 	})
@@ -304,7 +363,11 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 	function refreshRoom(room: Room, players: boolean) {
 		for (const [socket, session] of room.sockets) {
 			if (!canEnter(session)) socket.close(4001, 'Activity access expired')
-			else send(socket, { type: 'access', canEdit: canEdit(session) })
+			else {
+				const editable = canEdit(session)
+				if (!editable) clearDrag(room, socket)
+				send(socket, { type: 'access', canEdit: editable })
+			}
 		}
 		if (players) broadcast(room, { type: 'players', players: roster(room) })
 	}
@@ -346,7 +409,24 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 	client.on(Events.GuildMemberUpdate, (_, member) => refreshGuild(member.guild))
 	client.on(Events.GuildMemberRemove, member => refreshGuild(member.guild))
 
+	const mapChanged: MapChanged = (guildId, id, map, imageChanged) => {
+		catalogRevision++
+		for (const room of rooms.values()) {
+			if (room.guild.id !== guildId) continue
+			if (room.board.map?.id === id) {
+				if (map) room.board.map = map
+				else {
+					room.board.reset(null)
+					room.drags.clear()
+					for (const [peer, session] of room.sockets) snapshot(peer, session)
+				}
+			}
+			broadcast(room, { type: 'catalog', id, map, imageChanged })
+		}
+	}
+
 	return {
+		mapChanged,
 		attach(server: Server) {
 			server.on('upgrade', (req, socket, head) => {
 				if (!enabled || req.url !== '/activity/socket' || req.headers.origin !== origin) return socket.destroy()

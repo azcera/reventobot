@@ -36,7 +36,7 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 
 test('tactics dashboard saves editor roles and uploads a named map with CSRF', async ({ page }) => {
 	let uploaded = false
-	const map = { id: '12345678-1234-1234-1234-123456789012', name: 'Порт', width: 800, height: 600, archived: false }
+	let map = { id: '12345678-1234-1234-1234-123456789012', name: 'Порт', width: 800, height: 600, archived: false, order: 0 }
 	const requests = await setup(page, 'tactics')
 	await page.route('**/api/tactics/maps**', async route => {
 		const request = route.request()
@@ -48,6 +48,21 @@ test('tactics dashboard saves editor roles and uploads a named map with CSRF', a
 			expect(request.postDataBuffer()).toEqual(Buffer.from('map-fixture'))
 			uploaded = true
 			return route.fulfill({ json: map })
+		}
+		if (url.pathname.endsWith('/edit')) {
+			expect(request.headers()['x-csrf-token']).toBe('test')
+			expect(request.postDataBuffer()).toEqual(Buffer.from('replacement'))
+			expect(url.searchParams.get('id')).toBe(map.id)
+			expect(url.searchParams.get('name')).toBe('Новый порт')
+			expect(url.searchParams.get('order')).toBe('15')
+			map = { ...map, name: 'Новый порт', order: 15 }
+			return route.fulfill({ json: map })
+		}
+		if (url.pathname.endsWith('/delete')) {
+			expect(request.headers()['x-csrf-token']).toBe('test')
+			expect(request.postDataJSON()).toEqual({ id: map.id })
+			uploaded = false
+			return route.fulfill({ json: { success: true } })
 		}
 		return route.fulfill({ json: { maps: uploaded ? [map] : [], next: null } })
 	})
@@ -62,6 +77,18 @@ test('tactics dashboard saves editor roles and uploads a named map with CSRF', a
 	await page.getByRole('button', { name: 'Добавить карту' }).click()
 	await expect(page.getByText('Карта добавлена.')).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Архивировать' })).toBeVisible()
+	await page.getByRole('button', { name: 'Редактировать', exact: true }).click()
+	await page.getByLabel('Новое название карты').fill('Новый порт')
+	await page.getByLabel('Порядок отображения (меньшие числа выше)').fill('15')
+	await page.getByLabel('Заменить изображение').setInputFiles({
+		name: 'replacement.png', mimeType: 'image/png', buffer: Buffer.from('replacement')
+	})
+	await page.getByRole('button', { name: 'Сохранить карту' }).click()
+	await expect(page.getByText('Новый порт · порядок 15')).toBeVisible()
+	await page.getByRole('button', { name: 'Удалить', exact: true }).click()
+	await page.getByRole('dialog').getByRole('button', { name: 'Удалить', exact: true }).click()
+	await expect(page.getByText('Карта удалена.')).toBeVisible()
+	await expect(page.getByText('Карты не найдены.')).toBeVisible()
 })
 
 test('variable history shows changed variable names instead of the internal action', async ({ page }) => {

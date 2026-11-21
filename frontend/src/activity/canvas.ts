@@ -2,6 +2,7 @@ import type { BoardObject, Point, Shape } from '../../../shared/tactics'
 
 type Position = (point: Point) => Point
 const size = 21
+const playerFont = '600 13px system-ui'
 
 function traceShape(context: CanvasRenderingContext2D, shape: Shape, x: number, y: number) {
 	if (shape === 'circle') context.arc(x, y, size, 0, Math.PI * 2)
@@ -52,6 +53,19 @@ export function paint(canvas: HTMLCanvasElement, objects: BoardObject[], selecte
 				for (let i = 1; i < object.points.length; i++) context.lineTo(...position(object.points[i]))
 				context.stroke()
 			}
+		} else if (object.type === 'arrow') {
+			const [ax, ay] = position(object.at)
+			const [bx, by] = position(object.to)
+			const angle = Math.atan2(by - ay, bx - ax)
+			const head = Math.min(Math.hypot(bx - ax, by - ay) * .4, 10 + object.width * 1.5)
+			context.lineWidth = object.width
+			context.strokeStyle = object.color
+			context.moveTo(ax, ay)
+			context.lineTo(bx, by)
+			context.moveTo(bx - head * Math.cos(angle - .55), by - head * Math.sin(angle - .55))
+			context.lineTo(bx, by)
+			context.lineTo(bx - head * Math.cos(angle + .55), by - head * Math.sin(angle + .55))
+			context.stroke()
 		} else {
 			const [x, y] = position(object.at)
 			if (object.type === 'shape') {
@@ -62,18 +76,18 @@ export function paint(canvas: HTMLCanvasElement, objects: BoardObject[], selecte
 				if (object.shape !== 'arrow') context.fill()
 				context.stroke()
 			} else {
-				context.font = '600 16px system-ui'
+				context.font = playerFont
 				context.textBaseline = 'middle'
 				context.textAlign = 'center'
-				const labelWidth = Math.min(300, context.measureText(object.label).width + 18)
-				context.roundRect(x - labelWidth / 2, y - 14, labelWidth, 28, 6)
+				const labelWidth = Math.min(255, context.measureText(object.label).width + 14)
+				context.roundRect(x - labelWidth / 2, y - 11, labelWidth, 22, 5)
 				context.fillStyle = '#101726'
 				context.strokeStyle = '#5eead4'
 				context.lineWidth = 2
 				context.fill()
 				context.stroke()
 				context.fillStyle = '#ffffff'
-				context.fillText(object.label, x, y, labelWidth - 12)
+				context.fillText(object.label, x, y, labelWidth - 10)
 			}
 		}
 		context.restore()
@@ -98,10 +112,13 @@ export function hit(objects: BoardObject[], point: Point, width: number, height:
 			if (object.points.some((p, j) =>
 				distance(target, position(p), position(object.points[Math.max(0, j - 1)])) <= Math.max(8, object.width)))
 				return object
+		} else if (object.type === 'arrow') {
+			if (distance(target, position(object.at), position(object.to)) <= Math.max(10, object.width))
+				return object
 		} else {
 			const [x, y] = position(object.at)
-			const toleranceX = object.type === 'player' ? Math.min(150, 12 + object.label.length * 5) : size + 4
-			if (Math.abs(target[0] - x) <= toleranceX && Math.abs(target[1] - y) <= size + 4)
+			const toleranceX = object.type === 'player' ? Math.min(128, 9 + object.label.length * 4.5) : size + 4
+			if (Math.abs(target[0] - x) <= toleranceX && Math.abs(target[1] - y) <= (object.type === 'player' ? 14 : size + 4))
 				return object
 		}
 	}
