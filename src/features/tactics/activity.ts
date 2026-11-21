@@ -92,7 +92,8 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 		return result
 	}
 
-	app.get('/activity', (_req, res) => res.redirect('/activity/'))
+	// Express otherwise matches both /activity and /activity/ and redirects the latter to itself.
+	app.get(/^\/activity$/, (_req, res) => res.redirect('/activity/'))
 	app.get('/activity/api/config', (_req, res) => {
 		res.set('Cache-Control', 'no-store')
 		if (!enabled) return res.status(503).json({ error: 'Доска тактик ещё не включена.' })

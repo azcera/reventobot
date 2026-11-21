@@ -114,6 +114,12 @@ test('Activity изолирует комнаты, проверяет права 
 	const address = server.address()
 	assert.ok(address && typeof address !== 'string')
 	const base = `http://127.0.0.1:${address.port}`
+	const redirect = await http(`${base}/activity`, { redirect: 'manual' })
+	assert.equal(redirect.status, 302)
+	assert.equal(redirect.headers.get('location'), '/activity/')
+	const entry = await http(`${base}/activity/?frame_id=test`, { redirect: 'manual' })
+	assert.equal(entry.headers.get('location'), null)
+	assert.match(entry.headers.get('content-security-policy') ?? '', /frame-ancestors https:\/\/discord\.com/)
 	const createSession = (user: string, instanceId: string) => http(`${base}/activity/api/session`, {
 		method: 'POST',
 		headers: { Origin: origin, Authorization: `Bearer ${user}`, 'Content-Type': 'application/json' },
