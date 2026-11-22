@@ -12,10 +12,8 @@ import { isMembershipMessage } from '../../services/familyMembership'
 import { getError } from '../../utils/errors'
 import { getUnusedArchiveLists } from './archiveCleanupInteractions'
 import { getArchivesLists } from './archivesList'
-import {
-	getUnansweredList,
-	invalidateUnanswered
-} from './archiveUnansweredList'
+import { getUnansweredList } from './archiveUnansweredList'
+import { invalidateArchiveHistory } from './unusedArchives'
 import pool = require('../../services/database')
 require('dotenv').config()
 
@@ -238,7 +236,7 @@ async function refreshLists(guild: Guild) {
 
 const scheduled = new WeakMap<Guild, ReturnType<typeof setTimeout>>()
 function scheduleArchiveListRefresh(guild: Guild, threadId: string) {
-	invalidateUnanswered(guild, threadId)
+	invalidateArchiveHistory(guild, threadId)
 	if (scheduled.has(guild)) return
 	const timer = setTimeout(() => {
 		scheduled.delete(guild)

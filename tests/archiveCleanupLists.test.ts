@@ -1,31 +1,59 @@
 import pool = require('../src/services/database')
+import { EventEmitter } from 'node:events'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ChannelType, Collection, ContainerBuilder, MessageFlags, SeparatorBuilder, TextDisplayBuilder, type Guild } from 'discord.js'
+import { ChannelType, Collection, ContainerBuilder, Events, MessageFlags, SeparatorBuilder, TextDisplayBuilder, type Client, type Guild } from 'discord.js'
 import { store } from '../src/dashboard/store'
 import * as unused from '../src/features/archive/archiveCleanupInteractions'
 import * as archives from '../src/features/archive/archivesList'
 import * as unanswered from '../src/features/archive/archiveUnansweredList'
 import { updateLists } from '../src/features/archive/updateLists'
+import onMessageDelete = require('../src/events/onMessageDelete')
 
-test('the unanswered list skips a missing author without logging or retrying in the same cache window', async t => {
+test('only the latest message from the current archive owner counts as unanswered', async t => {
 	t.mock.method(store, 'getSetting', () => 'parent')
 	const log = t.mock.method(console, 'error', () => {})
-	const fetchMember = t.mock.fn(async () => { throw Object.assign(new Error('Unknown Member'), { code: 10007 }) })
-	const message = { createdTimestamp: Date.now(), author: { id: 'departed' } }
-	const thread = { id: '1572939345772544064', lastMessageId: 'message',
-		messages: { fetch: async () => new Collection([['message', message]]) } }
+	const ownerId = '100000000000000001'
+	const bot = { id: 'bot', bot: true }
+	const client = { user: bot }
+	const owner = { id: ownerId }
+	const welcome = { id: 'welcome', content: `<@${ownerId}>, это твой личный канал-архив`,
+		author: bot, type: 0, attachments: new Collection(), components: [] }
+	const messages = new Collection<string, unknown>([['owner', { author: owner }], ['welcome', welcome]])
+	const members = new Collection([[ownerId, owner]])
+	const fetchHistory = t.mock.fn(async () => messages)
+	const thread = { id: '1572939345772544064', name: 'archive test 123',
+		lastMessageId: 'owner', client, messages: { fetch: fetchHistory } }
 	const parent = { type: ChannelType.GuildText, threads: {
-		fetchActive: async () => ({ threads: new Collection([[thread.id, thread]]) }) } }
-	const guild = { members: { fetch: fetchMember }, channels: { cache: new Collection([['parent', parent]]) } } as unknown as Guild
+		fetchActive: async () => ({ threads: new Collection() }),
+		fetchArchived: async ({ type }: { type: string }) => ({ hasMore: false,
+			threads: type === 'private' ? new Collection([[thread.id, thread]]) : new Collection() }) } }
+	const guild = { members: { fetch: async () => members, cache: members },
+		channels: { fetch: async () => parent } } as unknown as Guild
 	Object.assign(thread, { guild })
 
-	for (let i = 0; i < 2; i++) {
-		const list = await unanswered.getUnansweredList(guild)
-		assert.ok(list?.length)
-		assert.ok(!JSON.stringify(list.map(part => part.toJSON())).includes(thread.id))
-	}
-	assert.equal(fetchMember.mock.callCount(), 1)
+	const isUnanswered = async () => JSON.stringify(await unanswered.getUnansweredList(guild)).includes(thread.id)
+	assert.equal(await isUnanswered(), true)
+	assert.equal(await isUnanswered(), true)
+	assert.equal(fetchHistory.mock.callCount(), 1)
+	messages.clear()
+	messages.set('checker', { author: { id: 'checker' }, mentions: { everyone: true } })
+	messages.set('owner', { author: owner })
+	messages.set('welcome', welcome)
+	thread.lastMessageId = 'checker'
+	assert.equal(await isUnanswered(), false)
+	messages.delete('checker')
+	const clientEvents = new EventEmitter()
+	t.after(() => t.mock.timers.reset())
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	onMessageDelete(clientEvents as unknown as Client)
+	clientEvents.emit(Events.MessageDelete, {
+		inGuild: () => true, guild, channelId: thread.id,
+		channel: { isThread: () => true, parentId: 'parent' }
+	})
+	assert.equal(await isUnanswered(), true)
+	members.delete(ownerId)
+	assert.equal(await isUnanswered(), false)
 	assert.equal(log.mock.callCount(), 0)
 })
 

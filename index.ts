@@ -33,7 +33,7 @@ const client = new Client({
 		GatewayIntentBits.GuildMessages,
 		GatewayIntentBits.MessageContent
 	],
-	partials: [Partials.GuildMember, Partials.User]
+	partials: [Partials.GuildMember, Partials.User, Partials.Message]
 })
 
 client.commands = new Collection()

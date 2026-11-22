@@ -14,7 +14,6 @@ const PREFIX = '!'
 export = (client: import('discord.js').Client) => {
 	client.on(Events.MessageCreate, async message => {
 		if (!message.inGuild()) return
-		if (!message.author || message.author.bot) return
 
 		if (
 			message.channel.isThread() &&
@@ -22,6 +21,8 @@ export = (client: import('discord.js').Client) => {
 		) {
 			scheduleArchiveListRefresh(message.guild, message.channelId)
 		}
+
+		if (!message.author || message.author.bot) return
 
 		// PREFIX
 		if (!message.content.startsWith(PREFIX)) return

@@ -1,44 +1,20 @@
-import { Client, Events, PermissionFlagsBits } from 'discord.js'
+import { Events, type Client, type Message, type PartialMessage } from 'discord.js'
 import { store as dashboard } from '../dashboard/store'
-import { updateLists } from '../features/archive/updateLists'
+import { scheduleArchiveListRefresh } from '../features/archive/updateLists'
 
-require('dotenv').config()
-
-/**
- * Обработчик удаления сообщений
- * @param {Client} client
- */
-export = (client: import('discord.js').Client) => {
-	client.on(Events.MessageDelete, async message => {
-		if (!message.inGuild()) return
-		if (!message.author || message.author.bot) return
-
+export = (client: Client) => {
+	const refresh = (message: Message | PartialMessage) => {
 		if (
+			message.inGuild() &&
 			message.channel.isThread() &&
 			message.channel.parentId === dashboard.getSetting('PARENT_CHANNEL_ID')
 		) {
-			const member =
-				message.member ||
-				(await message.guild?.members
-					.fetch(message.author.id)
-					.catch(() => null))
-
-			const authorHasAdminRole =
-				member?.permissions.has(PermissionFlagsBits.Administrator) ||
-				member?.roles.cache.some(role =>
-					dashboard.roleIds('ADMIN_ROLES').includes(role.id)
-				)
-
-			const messageHasUserMention = message.mentions.users.size > 0
-			const messageHasRoleMention = message.mentions.roles.size > 0
-			const messageHasEveryone = message.mentions.everyone
-
-			const hasAnyMention =
-				messageHasUserMention || messageHasRoleMention || messageHasEveryone
-
-			if ((!message.author.bot && hasAnyMention) || !authorHasAdminRole) {
-				await updateLists(message.guild)
-			}
+			scheduleArchiveListRefresh(message.guild, message.channelId)
 		}
+	}
+	client.on(Events.MessageDelete, refresh)
+	client.on(Events.MessageBulkDelete, messages => {
+		const message = messages.first()
+		if (message) refresh(message)
 	})
 }
