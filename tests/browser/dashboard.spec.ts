@@ -43,6 +43,7 @@ test('tactics dashboard creates categories, edits, reorders and deletes maps and
 	let map = { id: '12345678-1234-1234-1234-123456789012', name: 'Порт', width: 800, height: 600, categoryId: category.id, tactics: [tactic, otherTactic] }
 	const other = { ...map, id: '12345678-1234-1234-1234-123456789013', name: 'Аэропорт', tactics: [] }
 	let maps: CatalogMap[] = [other]
+	let orderRequests = 0
 	const requests = await setup(page, 'tactics')
 	await page.route('**/api/tactics/**', async route => {
 		const request = route.request()
@@ -74,7 +75,10 @@ test('tactics dashboard creates categories, edits, reorders and deletes maps and
 			return route.fulfill({ json: map })
 		}
 		if (operation === 'maps/reorder') {
-			expect(request.postDataJSON()).toEqual({ categoryId: category.id, id: map.id, targetId: other.id, after: false })
+			orderRequests++
+			expect(request.postDataJSON()).toEqual({ orders: [{
+				categoryId: category.id, previous: [other.id, map.id], ids: [map.id, other.id]
+			}] })
 			maps = [map, other]
 		}
 		if (operation === 'presets/delete') {
@@ -119,9 +123,17 @@ test('tactics dashboard creates categories, edits, reorders and deletes maps and
 	await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
 	await page.mouse.down()
 	await page.mouse.move(target.x + target.width / 2, target.y + 5, { steps: 8 })
+	await expect(row.locator('[aria-hidden=true].pointer-events-none')).toBeVisible()
 	await page.mouse.up()
-	await expect(page.getByText('Порядок карт сохранён.')).toBeVisible()
 	await expect(page.getByRole('region', { name: 'Капт' }).locator('[data-tactics-map]').first()).toContainText('Новый порт')
+	expect(orderRequests).toBe(0)
+	await page.getByRole('button', { name: 'Сохранить порядок карт' }).click()
+	await expect(page.getByText('Порядок карт сохранён.')).toBeVisible()
+	expect(orderRequests).toBe(1)
+	await expect(page.getByText('Тактик нет', { exact: true })).toHaveCount(0)
+	await expect(page.getByRole('button', { name: 'Тактики карты «Аэропорт»' })).toHaveCount(0)
+	await expect(page.getByText('Обход', { exact: true })).toHaveCount(0)
+	await page.getByRole('button', { name: 'Тактики карты «Новый порт»' }).click()
 	await page.getByRole('button', { name: 'Удалить тактику «Обход»' }).click()
 	await page.getByRole('button', { name: 'Подтвердить удаление тактики' }).click()
 	await expect(page.getByText('Обход', { exact: true })).toHaveCount(0)

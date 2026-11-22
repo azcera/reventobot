@@ -1,3 +1,4 @@
+import '@fontsource-variable/inter'
 import { createRoot } from 'react-dom/client'
 import { ArrowUpRight, Circle, Eraser, Hand, Map as MapIcon, Minus, MousePointer2, Pencil, Plus, Redo2, RotateCcw, Save, Shapes, Square, Triangle, Undo2, Users } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -42,7 +43,6 @@ function Activity() {
 	const [maps, setMaps] = useState<MapPage>({ maps: [], next: null })
 	const [categories, setCategories] = useState<MapCategory[]>([])
 	const [categoryId, setCategoryId] = useState('')
-	const [search, setSearch] = useState('')
 	const [loadedMapQuery, setLoadedMapQuery] = useState('')
 	const [mapGeneration, setMapGeneration] = useState(0)
 	const [imageGeneration, setImageGeneration] = useState(0)
@@ -55,7 +55,9 @@ function Activity() {
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
 	const [panel, setPanel] = useState<'maps' | 'players' | null>('maps')
 	const [tool, setTool] = useState<keyof typeof tools>('brush')
+	const [panning, setPanning] = useState(false)
 	const [color, setColor] = useState(palette[0])
+	const [nicknameSize, setNicknameSize] = useState(13)
 	const [brush, setBrush] = useState<number>(brushWidths[1])
 	const [figuresOpen, setFiguresOpen] = useState(false)
 	const [placement, setPlacement] = useState<Placement | null>(null)
@@ -74,7 +76,7 @@ function Activity() {
 	const pointer = useRef<number | null>(null)
 	const editable = connected && canEdit && !!board.map
 	const mapId = board.map?.id
-	const mapQuery = new URLSearchParams({ categoryId, search: search.trim() }).toString()
+	const mapQuery = new URLSearchParams({ categoryId }).toString()
 
 	function update(next: Board) {
 		current.current = next
@@ -92,6 +94,7 @@ function Activity() {
 				if (message.board.epoch !== board.epoch) {
 					gesture.current = null
 					pointer.current = null
+					setPanning(false)
 					setSelected(null)
 					setPendingChange(null)
 				}
@@ -179,6 +182,7 @@ function Activity() {
 		if (editable) return
 		gesture.current = null
 		pointer.current = null
+		setPanning(false)
 		setPlacement(null)
 		setPreview(null)
 		pendingMove.current = null
@@ -224,16 +228,14 @@ function Activity() {
 	useEffect(() => {
 		if (!connected || !categoryId) return
 		const signal = new AbortController()
-		const timeout = window.setTimeout(() => {
-			void connection.current?.get(`maps?${mapQuery}`, signal.signal).then(async response => {
-				const page = await response.json() as MapPage
-				if (!signal.signal.aborted) {
-					setMaps(page)
-					setLoadedMapQuery(mapQuery)
-				}
-			}).catch(error => { if (!signal.signal.aborted) setNotice(error.message) })
-		}, 160)
-		return () => { signal.abort(); clearTimeout(timeout) }
+		void connection.current?.get(`maps?${mapQuery}`, signal.signal).then(async response => {
+			const page = await response.json() as MapPage
+			if (!signal.signal.aborted) {
+				setMaps(page)
+				setLoadedMapQuery(mapQuery)
+			}
+		}).catch(error => { if (!signal.signal.aborted) setNotice(error.message) })
+		return () => signal.abort()
 	}, [connected, categoryId, mapQuery, mapGeneration])
 
 	useEffect(() => {
@@ -277,11 +279,21 @@ function Activity() {
 	useEffect(() => {
 		const target = viewport.current
 		if (!target || !image) return
+		const element = target
 		function wheel(event: WheelEvent) {
 			const drawing = canvas.current
 			if (!drawing) return
 			event.preventDefault()
-			if (!event.deltaY || pointer.current !== null) return
+			if (pointer.current !== null) return
+			if (!event.ctrlKey) {
+				const step = event.deltaMode === 1 ? 16 : 1
+				element.scrollLeft += (event.deltaX || (event.shiftKey ? event.deltaY : 0)) *
+					(event.deltaMode === 2 ? element.clientWidth : step)
+				if (!event.shiftKey) element.scrollTop += event.deltaY *
+					(event.deltaMode === 2 ? element.clientHeight : step)
+				return
+			}
+			if (!event.deltaY) return
 			const next = Math.min(4, Math.max(1, zoom * (event.deltaY < 0 ? 1.18 : 1 / 1.18)))
 			if (next === zoom) return
 			const bounds = drawing.getBoundingClientRect()
@@ -330,12 +342,12 @@ function Activity() {
 				return moveObject(object, at)
 			})
 			if (preview && !objects.some(object => object.id === preview.id)) objects.push(preview)
-			paint(target!, objects, selected)
+			paint(target!, objects, selected, nicknameSize, color)
 			if (moving) frame = requestAnimationFrame(draw)
 		}
 		frame = requestAnimationFrame(draw)
 		return () => cancelAnimationFrame(frame)
-	}, [board.objects, preview, remoteDrags, selected, width, height, pixelScale, image])
+	}, [board.objects, preview, remoteDrags, selected, width, height, pixelScale, image, nicknameSize, color])
 
 	function send(message: ClientMessage) {
 		if (!connection.current?.send(message)) setNotice('Нет связи с доской.')
@@ -365,10 +377,12 @@ function Activity() {
 	}
 
 	function down(event: PointerEvent<HTMLCanvasElement>) {
-		if (pointer.current !== null || event.button !== 0) return
-		if ((!editable || tool === 'pan') && viewport.current) {
+		if (pointer.current !== null || (event.button !== 0 && event.button !== 1)) return
+		if ((event.button === 1 || !editable || tool === 'pan') && viewport.current) {
+			event.preventDefault()
 			gesture.current = { kind: 'pan', x: event.clientX, y: event.clientY,
 				left: viewport.current.scrollLeft, top: viewport.current.scrollTop }
+			setPanning(true)
 		} else {
 			const at = point(event)
 			if (placement) return place(placement, at)
@@ -383,7 +397,7 @@ function Activity() {
 				gesture.current = { kind: 'arrow', arrow }
 				setPreview(arrow)
 			} else {
-				const object = hit(current.current.objects, at, width, height)
+				const object = hit(event.currentTarget, current.current.objects, at, width, height, nicknameSize)
 				if (tool === 'erase') {
 					if (object) edit({ type: 'remove', id: object.id })
 					return
@@ -435,6 +449,7 @@ function Activity() {
 	function end(event: PointerEvent<HTMLCanvasElement>, canceled = false) {
 		if (pointer.current !== event.pointerId) return
 		const active = gesture.current
+		if (active?.kind === 'pan') setPanning(false)
 		if (editable && active?.kind === 'stroke') flush(active)
 		let holdPreview = false
 		if (editable && active?.kind === 'move' && active.moved) {
@@ -496,8 +511,6 @@ function Activity() {
 				{!categories.length && <option value=''>Нет категорий</option>}
 				{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}
 			</select>
-			<input type='search' aria-label='Поиск карты' placeholder='Найти карту' value={search} maxLength={100}
-				onChange={event => setSearch(event.target.value)} />
 			<div className='list'>
 				{categoryId && loadedMapQuery === mapQuery && maps.maps.map(map => <button key={map.id} disabled={!canEdit || !connected}
 					aria-current={map.id === mapId} onClick={() => { if (map.id !== mapId) switchBoard('map', map.id) }}>
@@ -572,7 +585,7 @@ function Activity() {
 						<img src={image} alt={board.map.name} draggable={false} onError={() => setImageError('Не удалось открыть изображение карты.')} />
 						<canvas ref={canvas} width={Math.max(1, Math.round(width * pixelScale))}
 							height={Math.max(1, Math.round(height * pixelScale))}
-							data-tool={placement ? 'place' : editable ? tool : 'pan'} aria-label='Зарисовки на карте'
+							data-tool={placement ? 'place' : editable ? tool : 'pan'} data-panning={panning} aria-label='Зарисовки на карте'
 							onPointerDown={down} onPointerMove={move} onPointerUp={end}
 							onPointerCancel={event => end(event, true)} onLostPointerCapture={event => end(event, true)}
 							onDragOver={event => { if (editable) event.preventDefault() }} onDrop={drop} />
@@ -616,6 +629,11 @@ function Activity() {
 		</div>
 		<aside className='players'>
 			<div className='aside-title'>Состав <span>{players.length}</span></div>
+			<label className='nickname-size' htmlFor='nickname-size'>
+				<span>Размер ников <output aria-hidden='true'>{nicknameSize}</output></span>
+				<input id='nickname-size' type='range' min={10} max={32} value={nicknameSize}
+					onChange={event => setNicknameSize(event.currentTarget.valueAsNumber)} />
+			</label>
 			<div className='list'>
 				{players.map(player => <button key={player.id} disabled={!editable} draggable={editable}
 					aria-pressed={!!placement && 'userId' in placement && placement.userId === player.id}

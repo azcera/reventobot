@@ -1,14 +1,18 @@
-import { Check, FolderPlus, GripVertical, ImagePlus, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, FolderPlus, GripVertical, ImagePlus, Pencil, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, PointerEvent } from 'react'
-import type { CatalogMap, MapCatalog, MapCategory, TacticInfo } from '../../../shared/tactics'
-import { Field, IconButton, Panel, useModal } from '../components/ui'
+import type { CatalogMap, MapCatalog, MapCategory, MapOrder, TacticInfo } from '../../../shared/tactics'
+import { ActionBar, Button, Field, IconButton, Panel, useModal } from '../components/ui'
 import type { Config, PageServices, Resources, Setter, SettingsDraft } from '../types'
 import { errorMessage } from '../types'
 import { OrderedChoices } from './Settings'
 
 type MapFields = { name: string; categoryId: string; file: File | null }
 type DropTarget = { id: string; after: boolean }
+
+function sameOrder(left: string[], right: string[]) {
+	return left.length === right.length && left.every((id, index) => id === right[index])
+}
 
 function FormActions({ close, label, icon = Check }: {
 	close(): void
@@ -92,6 +96,9 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 	const [generation, setGeneration] = useState(0)
 	const [dragging, setDragging] = useState<string | null>(null)
 	const [target, setTarget] = useState<DropTarget | null>(null)
+	const [orders, setOrders] = useState<MapOrder[]>([])
+	const [savingOrder, setSavingOrder] = useState(false)
+	const [openTactics, setOpenTactics] = useState<string | null>(null)
 	const drag = useRef<{ id: string; categoryId: string; pointerId: number } | null>(null)
 	const modal = useModal()
 	const refresh = () => setGeneration(value => value + 1)
@@ -99,7 +106,10 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 	useEffect(() => {
 		let active = true
 		void api('tactics/catalog').then(result => {
-			if (active) setCatalog(result)
+			if (!active) return
+			setCatalog(result)
+			setOrders(current => current.filter(order => sameOrder(order.previous,
+				result.maps.filter(map => map.categoryId === order.categoryId).map(map => map.id))))
 		}).catch(error => { if (active) notify(errorMessage(error), true) })
 		return () => { active = false }
 	}, [api, generation, notify])
@@ -160,10 +170,35 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 	}
 
 	function reorder(categoryId: string, id: string, drop: DropTarget) {
+		if (!catalog || savingOrder) return
+		const previous = catalog.maps.filter(map => map.categoryId === categoryId).map(map => map.id)
+		setOrders(current => {
+			const ids = [...(current.find(order => order.categoryId === categoryId)?.ids ?? previous)]
+			ids.splice(ids.indexOf(id), 1)
+			ids.splice(ids.indexOf(drop.id) + Number(drop.after), 0, id)
+			const others = current.filter(order => order.categoryId !== categoryId)
+			return sameOrder(previous, ids) ? others : [...others, { categoryId, previous, ids }]
+		})
+	}
+
+	function saveOrder() {
 		void run(async () => {
-			await api('tactics/maps/reorder', { categoryId, id, targetId: drop.id, after: drop.after })
-			refresh()
-			notify('Порядок карт сохранён.')
+			setSavingOrder(true)
+			try {
+				await api('tactics/maps/reorder', { orders })
+				setCatalog(current => {
+					if (!current) return current
+					const maps = new Map(current.maps.map(map => [map.id, map]))
+					const replacements = new Map(orders.flatMap(({ previous, ids }) =>
+						previous.map((id, index) => [id, maps.get(ids[index])] as const)))
+					return { ...current, maps: current.maps.map(map => replacements.get(map.id) ?? map) }
+				})
+				setOrders([])
+				refresh()
+				notify('Порядок карт сохранён.')
+			} finally {
+				setSavingOrder(false)
+			}
 		})
 	}
 
@@ -204,13 +239,19 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 			<IconButton icon={FolderPlus} label='Добавить категорию' onClick={createCategory} />
 		</div>}>
 			<div className='panel-body grid gap-5'>
+				{!!orders.length && <ActionBar>
+					<Button variant='primary' icon={Save} loading={savingOrder} onClick={saveOrder}>Сохранить порядок карт</Button>
+				</ActionBar>}
 				<Field label='Поиск по названию карты'>
 					<input type='search' value={search} maxLength={100} onChange={event => setSearch(event.target.value)} />
 				</Field>
 				{catalog?.categories.length === 0 && <p className='text-muted'>Добавьте категорию, чтобы загрузить первую карту.</p>}
 				{catalog?.categories.map(category => {
-					const maps = catalog.maps.filter(map => map.categoryId === category.id &&
-						map.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+					const categoryMaps = catalog.maps.filter(map => map.categoryId === category.id)
+					const ids = orders.find(order => order.categoryId === category.id)?.ids
+					const byId = new Map(categoryMaps.map(map => [map.id, map]))
+					const ordered = ids ? ids.map(id => byId.get(id)!) : categoryMaps
+					const maps = ordered.filter(map => map.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
 					return <section key={category.id} aria-label={category.name} className='rounded-xl border border-current/15 p-3 sm:p-4'>
 						<div className='mb-3 flex items-center justify-between gap-3'>
 							<h3 className='min-w-0 break-words font-semibold'>{category.name}</h3>
@@ -219,11 +260,13 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 						{!maps.length && <p className='text-sm text-muted'>{search ? 'Карты не найдены.' : 'В категории пока нет карт.'}</p>}
 						<div className='grid gap-2'>
 							{maps.map((map, index) => <div key={map.id} data-tactics-map={map.id} data-category={category.id}
-								className={`relative rounded-lg border border-current/10 p-2 ${dragging === map.id ? 'opacity-50' : ''}`}>
-								{target?.id === map.id && <div className={`pointer-events-none absolute inset-x-0 h-0.5 rounded bg-sky-400 ${target.after ? '-bottom-1' : '-top-1'}`} />}
+								className={`relative rounded-lg border p-2 ${target?.id === map.id ? 'border-brand/50 bg-brand-soft' : 'border-current/10'} ${dragging === map.id ? 'border-dashed opacity-50' : ''}`}>
+								{target?.id === map.id && <div aria-hidden='true' className={`pointer-events-none absolute inset-x-1 z-10 flex h-2 items-center ${target.after ? '-bottom-2' : '-top-2'}`}>
+									<span className='size-2 rounded-full bg-brand' /><span className='h-0.5 flex-1 bg-brand' /><span className='size-2 rounded-full bg-brand' />
+								</div>}
 								<div className='flex items-center gap-2'>
 									<IconButton icon={GripVertical} label={`Переместить карту «${map.name}»`} className='cursor-grab touch-none active:cursor-grabbing'
-										disabled={maps.length < 2} aria-keyshortcuts='ArrowUp ArrowDown'
+										disabled={savingOrder || maps.length < 2} aria-keyshortcuts='ArrowUp ArrowDown'
 										onPointerDown={event => {
 											if (event.button !== 0 || drag.current) return
 											drag.current = { id: map.id, categoryId: category.id, pointerId: event.pointerId }
@@ -242,6 +285,7 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 										}}
 										onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}
 										onKeyDown={event => {
+											if (event.key === 'Escape' && drag.current) cancelDrag()
 											if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
 											event.preventDefault()
 											const after = event.key === 'ArrowDown'
@@ -249,15 +293,19 @@ export function Tactics({ config, setConfig, resources, draft, setDraft, api, ru
 											if (neighbour) reorder(category.id, map.id, { id: neighbour.id, after })
 										}} />
 									<strong className='min-w-0 flex-1 break-words text-sm'>{map.name}</strong>
+									{!!map.tactics.length && <IconButton icon={ChevronDown} label={`Тактики карты «${map.name}»`}
+										aria-expanded={openTactics === map.id} aria-controls={openTactics === map.id ? `tactics-${map.id}` : undefined}
+										className={openTactics === map.id ? '[&_svg]:rotate-180' : undefined}
+										onClick={() => setOpenTactics(current => current === map.id ? null : map.id)} />}
 									<IconButton icon={Pencil} label={`Редактировать карту «${map.name}»`} onClick={() => editMap(category, map)} />
 									<IconButton icon={Trash2} label={`Удалить карту «${map.name}»`} onClick={() => remove(map)} />
 								</div>
-								{map.tactics.length ? <ul className='ml-3 mt-1 grid gap-1 border-l border-current/15 pl-3'>
+								{!!map.tactics.length && openTactics === map.id && <ul id={`tactics-${map.id}`} className='ml-3 mt-1 grid gap-1 border-l border-current/15 pl-3'>
 									{map.tactics.map(tactic => <li key={tactic.id} className='flex items-center justify-between gap-2 text-sm'>
 										<span className='min-w-0 break-words'>{tactic.name}</span>
 										<IconButton icon={Trash2} label={`Удалить тактику «${tactic.name}»`} onClick={() => remove(map, tactic)} />
 									</li>)}
-								</ul> : <p className='ml-11 text-xs text-muted'>Тактик нет</p>}
+								</ul>}
 							</div>)}
 						</div>
 					</section>

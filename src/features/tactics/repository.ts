@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg'
-import type { Board, BoardObject, CatalogMap, MapCategory, MapCatalog, MapInfo, MapPage, TacticInfo } from '../../../shared/tactics'
+import type { Board, BoardObject, CatalogMap, MapCategory, MapCatalog, MapInfo, MapOrder, MapPage, TacticInfo } from '../../../shared/tactics'
 
 export const mapUploadLimit = 12 * 1024 * 1024
 const mapColumns = 'id, name, width, height, category_id AS "categoryId"'
@@ -138,20 +138,37 @@ export function tacticsRepository(pool: Pool) {
 				return rows[0]
 			})
 		},
-		async reorder(guildId: string, categoryId: string, id: string, targetId: string, after: boolean) {
+		async reorder(guildId: string, orders: MapOrder[]) {
 			return transaction(async db => {
-				if (!await lockCategory(db, guildId, categoryId)) return false
-				const { rows } = await db.query<{ id: string }>(
-					'SELECT id FROM tactics_maps WHERE guild_id = $1 AND category_id = $2 ORDER BY sort_order, id', [guildId, categoryId])
-				const order = rows.map(row => row.id)
-				if (!order.includes(id) || !order.includes(targetId)) return false
-				order.splice(order.indexOf(id), 1)
-				order.splice(order.indexOf(targetId) + Number(after), 0, id)
+				const categories = orders.map(order => order.categoryId).sort()
+				for (const categoryId of categories)
+					if (!await lockCategory(db, guildId, categoryId)) return false
+				const { rows } = await db.query<{ id: string; categoryId: string }>(`
+					SELECT id, category_id AS "categoryId" FROM tactics_maps
+					WHERE guild_id = $1 AND category_id = ANY($2::uuid[])
+					ORDER BY category_id, sort_order, id FOR UPDATE`, [guildId, categories])
+				const current = new Map<string, string[]>()
+				for (const row of rows) {
+					const ids = current.get(row.categoryId) ?? []
+					ids.push(row.id)
+					current.set(row.categoryId, ids)
+				}
+				for (const { categoryId, previous, ids } of orders) {
+					const actual = current.get(categoryId)
+					if (actual?.length !== previous.length ||
+						(!previous.every((id, index) => id === actual[index]) && !ids.every((id, index) => id === actual[index])))
+						return false
+				}
 				await db.query(`
-					UPDATE tactics_maps m SET sort_order = positions.position::integer
-					FROM unnest($3::uuid[]) WITH ORDINALITY AS positions(id, position)
-					WHERE m.guild_id = $1 AND m.category_id = $2 AND m.id = positions.id
-						AND m.sort_order <> positions.position`, [guildId, categoryId, order])
+					UPDATE tactics_maps m SET sort_order = positions.position
+					FROM unnest($2::uuid[], $3::uuid[], $4::integer[]) AS positions(category_id, id, position)
+					WHERE m.guild_id = $1 AND m.category_id = positions.category_id AND m.id = positions.id
+						AND m.sort_order <> positions.position`, [
+					guildId,
+					orders.flatMap(({ categoryId, ids }) => ids.map(() => categoryId)),
+					orders.flatMap(({ ids }) => ids),
+					orders.flatMap(({ ids }) => ids.map((_, index) => index + 1))
+				])
 				return true
 			})
 		},

@@ -2,12 +2,21 @@ import express from 'express'
 import type { ErrorRequestHandler, Express } from 'express'
 import type { Pool } from 'pg'
 import sharp from 'sharp'
-import type { MapInfo } from '../../../shared/tactics'
+import type { MapInfo, MapOrder } from '../../../shared/tactics'
 import { store } from '../../dashboard/store'
 import { uuid } from './board'
 import { mapUploadLimit, tacticsRepository } from './repository'
 
 export type MapChanged = (guildId: string, change?: { id: string; map: MapInfo | null; imageChanged?: boolean } | { mapId: string }) => void
+
+function validMapOrder(value: unknown): value is MapOrder {
+	if (!value || typeof value !== 'object') return false
+	const { categoryId, previous, ids } = value as Partial<MapOrder>
+	if (!uuid(categoryId) || !Array.isArray(previous) || !Array.isArray(ids) ||
+		ids.length < 2 || ids.length !== previous.length || !previous.every(uuid) || !ids.every(uuid)) return false
+	const original = new Set(previous)
+	return original.size === ids.length && new Set(ids).size === ids.length && ids.every(id => original.has(id))
+}
 
 async function decodeMap(body: unknown) {
 	if (!Buffer.isBuffer(body) || !body.length)
@@ -75,12 +84,15 @@ export function registerTacticsDashboard(app: Express, pool: Pool, changed?: Map
 		res.json({ success: true })
 	})
 	router.post('/maps/reorder', async (req, res) => {
-		const { id, categoryId, targetId, after } = req.body ?? {}
-		if (!uuid(id) || !uuid(categoryId) || !uuid(targetId) || targetId === id || typeof after !== 'boolean')
-			return res.status(400).json({ error: 'Выберите две разные карты одной категории.' })
-		await store.audit(req.dashboardUser, 'tactics.map.reorder.request', id, { categoryId, targetId, after })
-		if (!await repository.reorder(req.guild.id, categoryId, id, targetId, after))
-			return res.status(409).json({ error: 'Состав категории изменился. Обновите каталог.' })
+		const { orders } = req.body ?? {}
+		if (!Array.isArray(orders) || !orders.length || !orders.every(validMapOrder) ||
+			new Set(orders.map(order => order.categoryId)).size !== orders.length)
+			return res.status(400).json({ error: 'Передайте порядок карт для каждой изменённой категории.' })
+		await store.audit(req.dashboardUser, 'tactics.map.reorder.request', orders[0].categoryId, {
+			orders: orders.map(({ categoryId, ids }) => ({ categoryId, ids }))
+		})
+		if (!await repository.reorder(req.guild.id, orders))
+			return res.status(409).json({ error: 'Каталог карт изменился. Обновите его и повторите перестановку.' })
 		changed?.(req.guild.id)
 		res.json({ success: true })
 	})

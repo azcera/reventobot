@@ -11,8 +11,39 @@ import type { MapInfo, ServerMessage } from '../shared/tactics'
 import { store } from '../src/dashboard/store'
 import { registerTacticsActivity } from '../src/features/tactics/activity'
 import { TacticsBoard } from '../src/features/tactics/board'
+import { tacticsRepository } from '../src/features/tactics/repository'
 
 const map: MapInfo = { id: randomUUID(), name: 'Порт', width: 800, height: 600, categoryId: randomUUID() }
+
+test('порядок карт сохраняется для всех категорий только после проверки текущего каталога', async () => {
+	const firstCategory = randomUUID()
+	const secondCategory = randomUUID()
+	const [a, b, c, d] = Array.from({ length: 4 }, () => randomUUID())
+	const updates: unknown[][] = []
+	let secondIds = [c, d, randomUUID()]
+	const repository = tacticsRepository({
+		connect: async () => ({
+			query: async (sql: string, params: unknown[]) => {
+				if (sql.includes('SELECT 1 FROM tactics_categories')) return { rowCount: 1 }
+				if (sql.includes('SELECT id, category_id')) return { rows: [
+					...[a, b].map(id => ({ id, categoryId: firstCategory })),
+					...secondIds.map(id => ({ id, categoryId: secondCategory }))
+				] }
+				if (sql.includes('UPDATE tactics_maps')) updates.push(params)
+			},
+			release() {}
+		})
+	} as unknown as Pool)
+	const orders = [
+		{ categoryId: firstCategory, previous: [a, b], ids: [b, a] },
+		{ categoryId: secondCategory, previous: [c, d], ids: [d, c] }
+	]
+	assert.equal(await repository.reorder('guild', orders), false)
+	assert.deepEqual(updates, [])
+	secondIds = [c, d]
+	assert.equal(await repository.reorder('guild', orders), true)
+	assert.deepEqual(updates, [['guild', [firstCategory, firstCategory, secondCategory, secondCategory], [b, a, d, c], [1, 2, 1, 2]]])
+})
 
 test('доска проверяет координаты и авторство штрихов, а метки берут ник из состава', () => {
 	const board = new TacticsBoard()

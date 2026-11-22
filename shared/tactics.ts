@@ -17,6 +17,7 @@ export type MapCategory = { id: string; name: string }
 export type MapInfo = { id: string; name: string; width: number; height: number; categoryId: string }
 export type CatalogMap = MapInfo & { tactics: TacticInfo[] }
 export type MapCatalog = { categories: MapCategory[]; maps: CatalogMap[] }
+export type MapOrder = { categoryId: string; previous: string[]; ids: string[] }
 export type MapPage = { maps: MapInfo[]; next: string | null }
 export type Player = { id: string; name: string }
 export type TacticInfo = { id: string; name: string }
