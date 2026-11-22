@@ -136,13 +136,6 @@ async function initDb() {
 	await pool.query(`ALTER TABLE settings_archive_messages
 		ADD COLUMN IF NOT EXISTS guild_id TEXT,
 		ADD COLUMN IF NOT EXISTS channel_id TEXT`)
-	await pool.query(`CREATE TABLE IF NOT EXISTS guild_member_identities (
-		guild_id TEXT NOT NULL,
-		discord_id TEXT NOT NULL,
-		game_static TEXT,
-		archive_thread_id TEXT UNIQUE,
-		PRIMARY KEY (guild_id, discord_id)
-	)`)
 
 	await pool.query(`CREATE TABLE IF NOT EXISTS telegram_capture_deliveries (
 		source TEXT PRIMARY KEY, marker INTEGER NOT NULL, notice JSONB NOT NULL, payload JSONB NOT NULL,

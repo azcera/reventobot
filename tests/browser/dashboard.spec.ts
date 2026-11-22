@@ -5,10 +5,6 @@ import type { SettingField } from '../../frontend/src/types'
 async function setup(page: Page, hash: string, source = 'Начало [ссылка](https://example.com) конец', templateVariables: Record<string, Record<string, string>> = {}) {
 	const config = { revision: 3, bindings: {}, templateVariables, templates: [{ key: 'promotion.document', group: 'Система повышения', label: 'Текст', type: 'text', components: true, maxLength: 16000, value: source, variables: [] }], settings: [{ key: 'INVITE_CATEGORY_ID', label: 'Категория заявок', type: 'channel', channelTypes: [4], value: '' }, { key: 'MAJESTIC_AUTO_KICK', label: 'Автоматическое исключение', type: 'boolean', value: true }] as SettingField[] }
 	config.settings.push({ key: 'ARCHIVE_AUTO_DELETE_EMPTY', label: 'Автоматически удалять пустые архивы при выходе участника с сервера', type: 'boolean', value: false })
-	config.settings.push(
-		{ key: 'ARCHIVE_MANAGE_ACCESS', label: 'Управлять доступом к приватным архивам по списку ролей', type: 'boolean', value: false },
-		{ key: 'ARCHIVE_VIEWER_ROLES', label: 'Роли просмотра архивов (старшие сверху)', type: 'roles', value: '' }
-	)
 	config.settings.push({ key: 'TACTICS_EDITOR_ROLES', label: 'Роли редакторов доски тактик', type: 'roles', value: '' })
 	config.settings.push(
 		{ key: 'CAPTURE_RANK_CHANNEL_ID', label: 'Канал рейтинга каптов', type: 'channel', channelTypes: [0], value: 'parent' },
@@ -21,12 +17,6 @@ async function setup(page: Page, hash: string, source = 'Начало [ссыл�
 		const path = new URL(route.request().url()).pathname.slice(5)
 		const body = route.request().postDataJSON()
 		requests.push({ path, body })
-		if (path === 'archive-access') {
-			const enabled = config.settings.find(field => field.key === 'ARCHIVE_MANAGE_ACCESS')?.value
-			return route.fulfill({ json: enabled
-				? { state: 'failed', checked: 1, total: 1, changed: 0, issues: [{ threadId: '42', message: 'Владелец не подтверждён.' }] }
-				: { state: 'off', checked: 0, total: 0, changed: 0, issues: [] } })
-		}
 		if (path === 'role-curators' && body?.curators) curators = body.curators
 		if (path === 'settings' && body?.values) {
 			for (const field of config.settings) if (Object.hasOwn(body.values, field.key)) field.value = body.values[field.key]
@@ -1055,24 +1045,6 @@ test('archive auto-delete setting is shown under archives and persists through s
 	await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
 	await expect.poll(() => requests.find(request => request.path === 'settings')?.body.values).toEqual({ ARCHIVE_AUTO_DELETE_EMPTY: true })
 	await expect(toggle).toBeChecked()
-})
-
-test('archive access settings preserve role order and show reconciliation errors', async ({ page }) => {
-	const requests = await setup(page, 'settings')
-	const archives = page.locator('details.panel').filter({ has: page.getByRole('heading', { name: 'Архивы', exact: true }) })
-	await archives.locator('summary').click()
-	await expect(archives.getByRole('status')).toHaveText('Сверка доступа выключена')
-	const role = archives.getByLabel('Роли просмотра архивов (старшие сверху)')
-	await role.selectOption('two')
-	await role.selectOption('one')
-	await archives.getByRole('switch', { name: 'Управлять доступом к приватным архивам по списку ролей' }).check()
-	await page.getByRole('button', { name: 'Сохранить настройки', exact: true }).click()
-	await expect.poll(() => requests.find(request => request.path === 'settings')?.body.values)
-		.toEqual({ ARCHIVE_MANAGE_ACCESS: true, ARCHIVE_VIEWER_ROLES: 'two,one' })
-	await archives.getByText('Ошибки (1)', { exact: true }).click()
-	await expect(archives.getByText('Ветка 42 — Владелец не подтверждён.')).toBeVisible()
-	await archives.getByRole('button', { name: 'Повторить сверку доступа' }).click()
-	await expect.poll(() => requests.some(request => request.path === 'archive-access' && request.body)).toBe(true)
 })
 
 test('settings switch thumb stays inside track and save centers on scroll', async ({ page }) => {

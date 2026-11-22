@@ -98,8 +98,7 @@ async function registerAdminApplicationCommands(
 		client.commands.set(name, {
 			data,
 			async execute(interaction: T.GuildInteraction) {
-				if ((name === 'Открыть архив' && store.getSetting('ARCHIVE_MANAGE_ACCESS')) ||
-					await authorize(interaction, store)) {
+				if (await authorize(interaction, store)) {
 					return (
 						require('../features/archive/archiveContextCommands') as typeof import('../features/archive/archiveContextCommands')
 					).handleArchiveCommand(

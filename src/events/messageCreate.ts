@@ -14,16 +14,14 @@ const PREFIX = '!'
 export = (client: import('discord.js').Client) => {
 	client.on(Events.MessageCreate, async message => {
 		if (!message.inGuild()) return
+		if (!message.author || message.author.bot) return
 
 		if (
-			!message.system &&
 			message.channel.isThread() &&
 			message.channel.parentId === dashboard.getSetting('PARENT_CHANNEL_ID')
 		) {
-			scheduleArchiveListRefresh(message.guild, message.channelId, message)
+			scheduleArchiveListRefresh(message.guild, message.channelId)
 		}
-
-		if (!message.author || message.author.bot) return
 
 		// PREFIX
 		if (!message.content.startsWith(PREFIX)) return

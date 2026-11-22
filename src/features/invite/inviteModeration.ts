@@ -25,6 +25,7 @@ import {
 import { createArchiveChannel } from '../../utils/channelUtils'
 import { getError } from '../../utils/errors'
 import { parseDisplayName } from '../../utils/parseDisplayName'
+import { findMemberArchive } from '../archive/archiveSearch'
 import { finishApplicationChannel } from './inviteUtils'
 import db = require('../../services/database.js')
 
@@ -199,14 +200,16 @@ async function processModerationButton(
 					throw new Error(
 						'Не удалось определить имя и статик для создания архива.'
 					)
-				await createArchiveChannel(interaction.guild, {
+				if (!(await findMemberArchive(interaction.guild, parsed))) {
+					await createArchiveChannel(interaction.guild, {
 						channelName: [
 							'archive',
 							parsed.memberName.toLowerCase(),
 							parsed.memberStatic
 						].join(' '),
 						member: targetMember
-				})
+					})
+				}
 			}
 
 			const targetUser = await interaction.client.users

@@ -5,7 +5,6 @@ import { store } from '../src/dashboard/store'
 import { cleanupUnusedEmptyArchives, deleteEmptyArchive, fetchArchiveThreads, getUnusedArchives, inspectEmptyArchive } from '../src/features/archive/unusedArchives'
 import { getUnusedArchiveLists, handleArchiveCleanup } from '../src/features/archive/archiveCleanupInteractions'
 import { loadDiscordMembers } from '../src/services/discordMembers'
-import * as identities from '../src/services/memberIdentity'
 
 const botId = '100000000000000001', ownerId = '100000000000000002', parentId = '100000000000000003'
 const threadId = '100000000000000004', otherId = '100000000000000005'
@@ -39,7 +38,6 @@ function fixture(history: Message[] = [welcome()]) {
 
 function mockSettings(t: TestContext) {
 	t.mock.method(store, 'getSetting', (key: string) => key === 'PARENT_CHANNEL_ID' ? parentId : key === 'ARCHIVE_AUTO_DELETE_EMPTY' ? true : key === 'ROLE_PREFIXES' ? [] : '')
-	t.mock.method(identities, 'getMemberArchives', async () => [{ discord_id: ownerId, game_static: '123', archive_thread_id: threadId }])
 }
 
 test('unused archives consider every member and paginate public and private archives', async t => {
@@ -126,16 +124,13 @@ test('cleanup defaults to preview and preserves archives belonging to present us
 	assert.deepEqual((await cleanupUnusedEmptyArchives(current.guild, true)).deleted, [])
 })
 
-test('unused archive report distinguishes bot-only and participant history and checks the owner ID', async t => {
+test('unused archive list includes a selection button even when no role matches', async t => {
 	mockSettings(t)
-	const f = fixture([message('2', MessageType.Default, botId, 'Other bot message'), welcome()])
-	const report = async (guild: Guild) => JSON.stringify(await getUnusedArchiveLists(guild))
-	assert.match(await report(f.guild), /Без сообщений участников — 1/)
-	assert.match(await report(f.guild), /archive_cleanup_open_empty_0/)
-	const populated = fixture([message('2', MessageType.Default, ownerId, 'Откат'), welcome()])
-	assert.match(await report(populated.guild), /С сообщениями участников — 1/)
-	populated.addMember(ownerId, 'Новый ник | 456')
-	assert.match(await report(populated.guild), /С сообщениями участников — 0/)
+	const f = fixture()
+	const list = await getUnusedArchiveLists(f.guild)
+	assert.equal(list.length, 1)
+	assert.match(JSON.stringify(list[0].toJSON()), /Неиспользуемые архивные ветки — 1/)
+	assert.match(JSON.stringify(list[0].toJSON()), /archive_cleanup_open_0/)
 })
 
 test('fresh member loads share requests and retry gateway rate limits', async t => {
@@ -160,16 +155,14 @@ test('fresh member loads share requests and retry gateway rate limits', async t 
 
 test('manual selection is local, authorized, recoverable, and rechecks roster before deleting', async t => {
 	mockSettings(t)
-	for (const mode of ['delete', 'returned', 'unauthorized', 'other-actor', 'select-all', 'fetch-failed', 'new-message'] as const) {
-		const saved = message('2', MessageType.Default, ownerId, 'Saved history')
-		const f = fixture(mode === 'new-message' ? [welcome()] : [saved, welcome()])
+	for (const mode of ['delete', 'returned', 'unauthorized', 'other-actor', 'select-all', 'fetch-failed'] as const) {
+		const f = fixture([message('2', MessageType.Default, ownerId, 'Saved history'), welcome()])
 		const fetchMembers = t.mock.method(f.guild.members, 'fetch', f.guild.members.fetch)
 		t.mock.method(store, 'audit', async (...args: unknown[]) => { f.audits.push(args) })
 		const replies: any[] = [], edits: any[] = []
 		const interaction = { guild: f.guild, guildId: f.guild.id, user: { id: otherId },
 			member: { permissions: { has: (permission: bigint) => mode !== 'unauthorized' && permission === PermissionFlagsBits.Administrator }, roles: { cache: new Collection() } },
-			customId: mode === 'new-message' ? 'archive_cleanup_open_empty_0' : 'archive_cleanup_open_withMessages_0',
-			isButton: () => true, isStringSelectMenu: () => false,
+			customId: 'archive_cleanup_open_0', isButton: () => true, isStringSelectMenu: () => false,
 			deferReply: async () => {}, deferUpdate: async () => {}, reply: async (payload: any) => replies.push(payload),
 			editReply: async (payload: any) => edits.push(payload) }
 		await handleArchiveCleanup(interaction as any)
@@ -188,8 +181,7 @@ test('manual selection is local, authorized, recoverable, and rechecks roster be
 			assert.equal(fetchMembers.mock.callCount(), 1)
 		}
 		const deleteId = edits[1].components[1].toJSON().components[0].custom_id
-		if (mode === 'returned') f.addMember(ownerId, 'Новый ник | 456')
-		if (mode === 'new-message') f.history.unshift(saved)
+		if (mode === 'returned') f.addMember()
 		if (mode === 'other-actor') interaction.user = { id: ownerId }
 		if (mode === 'fetch-failed') {
 			fetchMembers.mock.mockImplementationOnce(async () => { throw new Error('Discord unavailable') })
@@ -206,6 +198,6 @@ test('manual selection is local, authorized, recoverable, and rechecks roster be
 		const shouldDelete = mode === 'delete' || mode === 'select-all' || mode === 'fetch-failed'
 		assert.equal(f.deleted.length, shouldDelete ? 1 : 0, mode)
 		if (shouldDelete) assert.equal(f.audits.length, 2)
-		if (mode === 'delete') assert.equal(fetchMembers.mock.callCount(), 3, 'fresh roster and owner check before deletion')
+		if (mode === 'delete') assert.equal(fetchMembers.mock.callCount(), 2, 'one fresh roster before deletion')
 	}
 })

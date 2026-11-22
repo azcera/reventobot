@@ -1,7 +1,5 @@
 import { Events, GuildMember } from 'discord.js'
 import { store as dashboard } from '../dashboard/store'
-import { getRegisteredArchive } from '../features/archive/archiveSearch'
-import { getMemberIdentity, saveMemberStatic } from '../services/memberIdentity'
 import { adminPrefix, stripRolePrefix } from '../utils/adminPrefix'
 import { getError } from '../utils/errors'
 import { parseDisplayName } from '../utils/parseDisplayName'
@@ -69,13 +67,26 @@ let handleNameEdit = async (
 	].join(' ')
 
 	const guild = newMember.guild
-	if (!dashboard.ready) return
-	const identity = await getMemberIdentity(guild.id, newMember.id)
-	if (identity?.game_static !== parsedNew.memberStatic)
-		await saveMemberStatic(guild.id, newMember.id, parsedNew.memberStatic)
-	if (!identity?.archive_thread_id || !dashboard.getSetting('PARENT_CHANNEL_ID')) return
-	const existingThread = await getRegisteredArchive(guild, identity.archive_thread_id)
-	if (!existingThread?.isThread()) return
+	const parentId = dashboard.getSetting('PARENT_CHANNEL_ID')
+
+	// Ищем ветку, у которой в названии есть такой же static (цифры)
+	const existingThread = guild.channels.cache.find(channel => {
+		if (!channel.isThread()) return false
+		if (channel.parentId !== parentId) return false
+
+		// Название вида "archive что-то 300911"
+		const parts = channel.name.toLowerCase().split(' ')
+		const threadStatic = parts[parts.length - 1] // последнее слово = цифры
+
+		return threadStatic === parsedNew.memberStatic.toLowerCase()
+	})
+
+	if (!existingThread) {
+		console.log(
+			`[NameEdit] Ветка с static "${parsedNew.memberStatic}" не найдена`
+		)
+		return
+	}
 
 	// Если название уже правильное — ничего не делаем
 	if (existingThread.name === newThreadName) {

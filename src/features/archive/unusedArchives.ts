@@ -9,11 +9,8 @@ import {
 } from 'discord.js'
 import { store } from '../../dashboard/store'
 import { loadDiscordMembers } from '../../services/discordMembers'
-import { getMemberArchives, getMemberIdentity, linkMemberArchive, withMemberArchiveLock } from '../../services/memberIdentity'
 import type { RawComponent } from '../../types'
 import { parseDisplayName } from '../../utils/parseDisplayName'
-
-const archiveNamePattern = /^archive .+ \d+$/
 
 function archiveName(member: GuildMember) {
 	const parsed = parseDisplayName(member.displayName)
@@ -30,8 +27,7 @@ function isArchiveUsed(name: string, members: Iterable<GuildMember>) {
 
 async function fetchArchiveThreads(
 	guild: Guild,
-	parentId = store.getSetting('PARENT_CHANNEL_ID'),
-	includeRenamed = false
+	parentId = store.getSetting('PARENT_CHANNEL_ID')
 ) {
 	const parent = await guild.channels.fetch(parentId)
 	if (parent?.type !== ChannelType.GuildText)
@@ -59,33 +55,7 @@ async function fetchArchiveThreads(
 			before = new Date(oldest)
 		}
 	}
-	return includeRenamed ? threads : threads.filter(thread => archiveNamePattern.test(thread.name))
-}
-
-const inventories = new WeakMap<Guild, {
-	parentId: string
-	expires: number
-	threads: ReturnType<typeof fetchArchiveThreads>
-}>()
-
-function invalidateArchiveInventory(guild: Guild) {
-	inventories.delete(guild)
-}
-
-function getArchiveThreads(guild: Guild) {
-	const parentId = store.getSetting('PARENT_CHANNEL_ID')
-	const cached = inventories.get(guild)
-	if (cached?.parentId === parentId && cached.expires > Date.now()) return cached.threads
-	const threads = fetchArchiveThreads(guild, parentId, true).catch(error => {
-		if (inventories.get(guild)?.threads === threads) invalidateArchiveInventory(guild)
-		throw error
-	})
-	inventories.set(guild, { parentId, expires: Date.now() + 60000, threads })
-	return threads
-}
-
-function isArchiveThread(thread: ThreadChannel, owners: Map<string, string>) {
-	return owners.has(thread.id) || archiveNamePattern.test(thread.name)
+	return threads.filter(thread => /^archive .+ \d+$/.test(thread.name))
 }
 
 async function getUnusedArchives(guild: Guild, fresh = false) {
@@ -128,186 +98,6 @@ function welcomeOwner(message: Message, botId: string) {
 			)
 			.find(Boolean) || null
 	)
-}
-
-async function readArchiveHistory(thread: ThreadChannel) {
-	let before: string | undefined
-	let latestId: string | undefined
-	let lastAuthorId: string | undefined
-	let foundMessage = false
-	const owners = new Set<string>()
-	let hasMessages = false
-	for (;;) {
-		const messages = await thread.messages.fetch({
-			limit: 100,
-			before,
-			cache: false
-		})
-		if (!before) latestId = messages.first()?.id
-		if (!foundMessage) {
-			const last = messages.find(message => !message.system)
-			if (last) {
-				foundMessage = true
-				if (!last.author.bot) lastAuthorId = last.author.id
-			}
-		}
-		for (const message of messages.values()) {
-			const owner = welcomeOwner(message, thread.client.user.id)
-			if (owner) owners.add(owner)
-			if (message.author.id !== thread.client.user.id && !message.system)
-				hasMessages = true
-		}
-		if (messages.size < 100) break
-		const next = messages.last()!.id
-		if (next === before) throw new Error('Не удалось прочитать историю архива.')
-		before = next
-	}
-	return { ownerId: owners.size === 1 ? [...owners][0] : null, hasMessages, lastAuthorId, latestId }
-}
-
-type CachedHistory = {
-	lastMessageId: string | null
-	history: ReturnType<typeof readArchiveHistory>
-}
-const histories = new WeakMap<Guild, Map<string, CachedHistory>>()
-
-function invalidateArchiveHistory(guild: Guild, threadId: string) {
-	histories.get(guild)?.delete(threadId)
-	lastAuthors.get(guild)?.delete(threadId)
-}
-
-function getArchiveHistory(thread: ThreadChannel) {
-	const cache = histories.get(thread.guild) ?? new Map<string, CachedHistory>()
-	histories.set(thread.guild, cache)
-	const previous = cache.get(thread.id)
-	if (previous && previous.lastMessageId === thread.lastMessageId)
-		return previous.history
-	const history = readArchiveHistory(thread).catch(error => {
-		if (cache.get(thread.id)?.history === history) cache.delete(thread.id)
-		throw error
-	})
-	cache.set(thread.id, { lastMessageId: thread.lastMessageId, history })
-	return history
-}
-
-const lastAuthors = new WeakMap<Guild, Map<string, {
-	id: string | null
-	author: Promise<string | undefined>
-}>>()
-
-function rememberLastArchiveAuthor(guild: Guild, message: Message) {
-	if (message.system) return
-	const cache = lastAuthors.get(guild) ?? new Map()
-	lastAuthors.set(guild, cache)
-	cache.set(message.channelId, { id: message.id, author: Promise.resolve(message.author.bot ? undefined : message.author.id) })
-}
-
-async function fetchLastArchiveAuthor(thread: ThreadChannel) {
-	let before: string | undefined
-	for (;;) {
-		const limit = before ? 100 : 1
-		const messages = await thread.messages.fetch({ limit, before, cache: false })
-		const last = messages.find(message => !message.system)
-		if (last) return last.author.bot ? undefined : last.author.id
-		if (messages.size < limit) return undefined
-		const next = messages.lastKey()
-		if (!next || next === before) throw new Error('Не удалось прочитать последнее сообщение архива.')
-		before = next
-	}
-}
-
-async function getLastArchiveAuthor(thread: ThreadChannel) {
-	const history = histories.get(thread.guild)?.get(thread.id)
-	if (history && history.lastMessageId === thread.lastMessageId)
-		return (await history.history).lastAuthorId
-	const cache = lastAuthors.get(thread.guild) ?? new Map()
-	lastAuthors.set(thread.guild, cache)
-	const previous = cache.get(thread.id)
-	if (previous && previous.id === thread.lastMessageId) return previous.author
-	const author = fetchLastArchiveAuthor(thread).catch(error => {
-		if (cache.get(thread.id)?.author === author) cache.delete(thread.id)
-		throw error
-	})
-	cache.set(thread.id, { id: thread.lastMessageId, author })
-	return author
-}
-
-// Discover legacy owners from the bot's welcome. Names and statics are editable.
-async function loadArchiveOwners(guild: Guild, threads: Collection<string, ThreadChannel>) {
-	const records = await getMemberArchives(guild.id)
-	const owners = new Map(records.map(row => [row.archive_thread_id!, row.discord_id]))
-	const registered = new Set(owners.values())
-	const unlinked = [...threads.values()].filter(thread => !owners.has(thread.id) && archiveNamePattern.test(thread.name))
-	const candidates = new Map<string, ThreadChannel[]>()
-	for (let offset = 0; offset < unlinked.length; offset += 6) {
-		const page = unlinked.slice(offset, offset + 6)
-		const results = await Promise.allSettled(page.map(getArchiveHistory))
-		for (const [index, result] of results.entries()) {
-			if (result.status === 'rejected') {
-				console.error('[Archives] Не удалось определить владельца', page[index].id, result.reason)
-				continue
-			}
-			const { ownerId } = result.value
-			if (!ownerId || registered.has(ownerId)) continue
-			const matches = candidates.get(ownerId) ?? []
-			matches.push(page[index])
-			candidates.set(ownerId, matches)
-		}
-	}
-	for (const [ownerId, matches] of candidates) {
-		if (matches.length !== 1) continue
-		const [thread] = matches
-		const gameStatic = thread.name.match(/ (\d+)$/)?.[1] ?? null
-		const linked = await withMemberArchiveLock(guild.id, ownerId, async db => {
-			const current = await getMemberIdentity(guild.id, ownerId, db)
-			if (current?.archive_thread_id) return current.archive_thread_id === thread.id
-			return linkMemberArchive(guild.id, ownerId, thread.id, gameStatic, db)
-		})
-		if (linked) owners.set(thread.id, ownerId)
-	}
-	return owners
-}
-
-const ownerLoads = new WeakMap<Collection<string, ThreadChannel>, ReturnType<typeof loadArchiveOwners>>()
-
-function getArchiveOwners(guild: Guild, threads: Collection<string, ThreadChannel>) {
-	let pending = ownerLoads.get(threads)
-	if (!pending) {
-		pending = loadArchiveOwners(guild, threads).finally(() => ownerLoads.delete(threads))
-		ownerLoads.set(threads, pending)
-	}
-	return pending
-}
-
-async function getDepartedArchives(guild: Guild, threads?: Collection<string, ThreadChannel>, owners?: Map<string, string>) {
-	const members = await loadDiscordMembers(guild)
-	threads ??= await getArchiveThreads(guild)
-	owners ??= await getArchiveOwners(guild, threads)
-	const cache = histories.get(guild)
-	if (cache) for (const id of cache.keys()) if (!threads.has(id)) cache.delete(id)
-	const empty: ThreadChannel[] = []
-	const withMessages: ThreadChannel[] = []
-	const archives = [...threads.values()].filter(thread => {
-		const ownerId = owners.get(thread.id)
-		return ownerId && !members.has(ownerId)
-	}).sort(
-		(a, b) => a.name.localeCompare(b.name, 'ru') || a.id.localeCompare(b.id)
-	)
-	for (let offset = 0; offset < archives.length; offset += 6) {
-		const page = archives.slice(offset, offset + 6)
-		const results = await Promise.allSettled(page.map(getArchiveHistory))
-		for (const [index, result] of results.entries()) {
-			const thread = page[index]
-			if (result.status === 'rejected') {
-				console.error('[Archives] Не удалось прочитать историю ветки', thread.id, result.reason)
-				continue
-			}
-			const { hasMessages } = result.value
-			const list = hasMessages ? withMessages : empty
-			list.push(thread)
-		}
-	}
-	return { empty, withMessages }
 }
 
 // The initial member-add notice is generated by Discord before the welcome.
@@ -445,18 +235,7 @@ export {
 	cleanupUnusedEmptyArchives,
 	deleteEmptyArchive,
 	fetchArchiveThreads,
-	getArchiveHistory,
-	getArchiveOwners,
-	getArchiveThreads,
-	getLastArchiveAuthor,
-	getDepartedArchives,
 	getUnusedArchives,
 	inspectEmptyArchive,
-	invalidateArchiveHistory,
-	invalidateArchiveInventory,
-	isArchiveThread,
-	isArchiveUsed,
-	memberIsPresent,
-	readArchiveHistory,
-	rememberLastArchiveAuthor
+	isArchiveUsed
 }

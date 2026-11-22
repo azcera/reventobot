@@ -15,13 +15,7 @@ import { randomUUID } from 'node:crypto'
 import { store } from '../../dashboard/store'
 import { authorize } from '../../services/adminApplicationCommands'
 import { loadDiscordMembers } from '../../services/discordMembers'
-import { getMemberArchives } from '../../services/memberIdentity'
-import {
-	getDepartedArchives,
-	type getArchiveThreads,
-	memberIsPresent,
-	readArchiveHistory
-} from './unusedArchives'
+import { getUnusedArchives, isArchiveUsed } from './unusedArchives'
 
 const PREFIX = 'archive_cleanup_'
 const sessions = new Map<
@@ -30,7 +24,6 @@ const sessions = new Map<
 		actorId: string
 		guildId: string
 		threads: ThreadChannel[]
-		emptyOnly: boolean
 		selected: string[]
 		createdAt: number
 	}
@@ -48,34 +41,29 @@ function selectionContent(threads: ThreadChannel[], selected: string[] = []) {
 	)
 }
 
-async function getUnusedArchiveLists(guild: Guild, threads?: Awaited<ReturnType<typeof getArchiveThreads>>, owners?: Map<string, string>) {
-	const { empty, withMessages } = await getDepartedArchives(guild, threads, owners)
+async function getUnusedArchiveLists(guild: Guild) {
+	const threads = await getUnusedArchives(guild)
 	const containers: ContainerBuilder[] = []
-	for (let offset = 0; offset < Math.max(1, empty.length, withMessages.length); offset += 25) {
-		const container = new ContainerBuilder()
-		for (const { key, title, threads } of [
-			{ key: 'empty', title: 'Без сообщений участников', threads: empty },
-			{ key: 'withMessages', title: 'С сообщениями участников', threads: withMessages }
-		]) {
-			const page = threads.slice(offset, offset + 25)
-			if (offset && !page.length) continue
-			const text =
-				`# Архивы ушедших владельцев. ${title} — ${threads.length}\n` +
-				(page.map((thread, index) => `${offset + index + 1}. <#${thread.id}>`)
-					.join('\n') || 'Список пуст.')
-			container
+	for (let offset = 0; offset < Math.max(1, threads.length); offset += 25) {
+		const page = threads.slice(offset, offset + 25)
+		const text =
+			`# Неиспользуемые архивные ветки — ${threads.length}\n` +
+			(page
+				.map((thread, index) => `${offset + index + 1}. <#${thread.id}>`)
+				.join('\n') || 'Список пуст.')
+		containers.push(
+			new ContainerBuilder()
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
 				.addActionRowComponents(
 					new ActionRowBuilder<ButtonBuilder>().addComponents(
 						new ButtonBuilder()
-							.setCustomId(`${PREFIX}open_${key}_${offset / 25}`)
+							.setCustomId(`${PREFIX}open_${offset / 25}`)
 							.setLabel('Выбрать ветки для удаления')
 							.setStyle(ButtonStyle.Danger)
 							.setDisabled(!page.length)
 					)
 				)
-		}
-		containers.push(container)
+		)
 	}
 	return containers
 }
@@ -131,12 +119,10 @@ async function handleArchiveCleanup(
 	const action = interaction.customId.slice(PREFIX.length)
 	if (interaction.isButton() && action.startsWith('open_')) {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-		const page = action.match(/^open_(empty|withMessages)_(\d+)$/)
-		const offset = Number(page?.[2]) * 25
-		if (!page || !Number.isSafeInteger(offset))
-			return interaction.editReply('Откройте обновлённый список веток.')
-		const groups = await getDepartedArchives(interaction.guild)
-		const threads = (page[1] === 'empty' ? groups.empty : groups.withMessages).slice(
+		const offset = Number(action.slice(5)) * 25
+		if (!Number.isSafeInteger(offset) || offset < 0)
+			return interaction.editReply('Некорректный список.')
+		const threads = (await getUnusedArchives(interaction.guild)).slice(
 			offset,
 			offset + 25
 		)
@@ -149,7 +135,6 @@ async function handleArchiveCleanup(
 			actorId: interaction.user.id,
 			guildId: interaction.guildId,
 			threads,
-			emptyOnly: page[1] === 'empty',
 			selected: [],
 			createdAt: Date.now()
 		})
@@ -207,12 +192,9 @@ async function handleArchiveCleanup(
 			content: `Проверяю состав сервера и удаляю выбранные ветки (${selected.length})…`,
 			components: []
 		})
-		let owners: Map<string | null, string>
+		let unused: ThreadChannel[]
 		try {
-			const members = await loadDiscordMembers(interaction.guild, { force: true })
-			const records = await getMemberArchives(interaction.guild.id)
-			owners = new Map(records.filter(row => !members.has(row.discord_id))
-				.map(row => [row.archive_thread_id, row.discord_id]))
+			unused = await getUnusedArchives(interaction.guild, true)
 		} catch (error) {
 			sessions.set(token, session)
 			console.error(
@@ -229,9 +211,8 @@ async function handleArchiveCleanup(
 		let deleted = 0,
 			failed = 0
 		for (const id of selected) {
-			const thread = session.threads.find(thread => thread.id === id)
-			const ownerId = owners.get(id)
-			if (!thread || !ownerId) continue
+			const thread = unused.find(thread => thread.id === id)
+			if (!thread) continue
 			try {
 				await store.audit(
 					{ id: interaction.user.id },
@@ -245,15 +226,12 @@ async function handleArchiveCleanup(
 				})
 				if (
 					!current?.isThread() ||
-					current.parentId !== store.getSetting('PARENT_CHANNEL_ID')
+					current.parentId !== store.getSetting('PARENT_CHANNEL_ID') ||
+					!/^archive .+ \d+$/.test(current.name)
 				)
 					continue
-				if (session.emptyOnly) {
-					const { hasMessages, latestId } = await readArchiveHistory(current)
-					if (hasMessages || await memberIsPresent(interaction.guild, ownerId)) continue
-					const latest = await current.messages.fetch({ limit: 1, cache: false })
-					if (latest.first()?.id !== latestId) continue
-				} else if (await memberIsPresent(interaction.guild, ownerId)) continue
+				const members = await loadDiscordMembers(interaction.guild)
+				if (isArchiveUsed(current.name, members.values())) continue
 				await current.delete(
 					`Неиспользуемый архив: удаление выбрал ${interaction.user.id}`
 				)

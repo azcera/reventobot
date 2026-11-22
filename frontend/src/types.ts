@@ -261,7 +261,6 @@ export interface ApiRoutes {
 	'send-container': { success: boolean; error?: string; logError?: string }
 	'edit-container': ApiRoutes['send-container'] & { source: SourceMessage }
 	logout: { success: boolean }
-	'archive-access': import('../../shared/archiveAccess').ArchiveAccessStatus
 }
 export type Api = {
 	(path: `tactics/maps/upload?${string}`, body: Blob): Promise<import('../../shared/tactics').MapInfo>

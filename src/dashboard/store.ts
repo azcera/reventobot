@@ -155,12 +155,6 @@ const settingDefinitions: Record<string, SettingDefinition> = {
 	MAIN_ROLE_ID: { label: 'Роль после принятия заявки', type: 'role' },
 	AUTO_ROLE: { label: 'Роль участников для архивов', type: 'role' },
 	ARCHIVE_GROUP_ROLES: { label: 'Группы ролей в архивах', type: 'roles' },
-	ARCHIVE_VIEWER_ROLES: { label: 'Роли просмотра архивов (старшие сверху)', type: 'roles' },
-	ARCHIVE_MANAGE_ACCESS: {
-		label: 'Управлять доступом к приватным архивам по списку ролей',
-		type: 'boolean',
-		default: false
-	},
 	ARCHIVE_AUTO_DELETE_EMPTY: {
 		label: 'Автоматически удалять пустые архивы при выходе участника с сервера',
 		type: 'boolean',
@@ -222,7 +216,6 @@ function createStore(env = process.env) {
 					| 'MAJESTIC_AUTO_NICKNAMES'
 					| 'MAJESTIC_AUTO_KICK'
 					| 'ARCHIVE_AUTO_DELETE_EMPTY'
-					| 'ARCHIVE_MANAGE_ACCESS'
 					| 'DASHBOARD_ALLOW_MENTIONS'
 			? boolean
 			: string

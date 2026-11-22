@@ -1,34 +1,54 @@
-import { ButtonInteraction, MessageFlags, RESTJSONErrorCodes, type Guild } from 'discord.js'
+import { ButtonInteraction, MessageFlags } from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
-import { getMemberIdentity, unlinkMemberArchive } from '../../services/memberIdentity'
 import { getError } from '../../utils/errors'
-import { getArchiveOwners, getArchiveThreads } from './unusedArchives'
+import { parseDisplayName } from '../../utils/parseDisplayName'
 
-async function getRegisteredArchive(guild: Guild, threadId: string) {
-	const channel = guild.channels.cache.get(threadId) ?? await guild.channels.fetch(threadId).catch(error => {
-		if (Number(getError(error).code) === RESTJSONErrorCodes.UnknownChannel) return null
-		throw error
-	})
-	if (!channel) return null
-	if (!channel.isThread() || channel.parentId !== dashboard.getSetting('PARENT_CHANNEL_ID'))
-		throw new Error('Привязанный архив находится вне настроенного канала.')
-	return channel
-}
-
-async function findArchiveByOwner(guild: Guild, userId: string, signal?: AbortSignal) {
-	const record = await getMemberIdentity(guild.id, userId)
+async function findMemberArchive(
+	guild: import('discord.js').Guild,
+	parsed: NonNullable<ReturnType<typeof parseDisplayName>>,
+	signal?: AbortSignal
+) {
+	const parentId = dashboard.getSetting('PARENT_CHANNEL_ID')
+	const name = [
+		'archive',
+		parsed.memberName.toLowerCase(),
+		parsed.memberStatic
+	].join(' ')
+	const matches = (channel: import('discord.js').GuildBasedChannel | null) =>
+		!!channel?.isThread() &&
+		channel.parentId === parentId &&
+		channel.name === name
+	const cached = guild.channels.cache.find(matches)
+	if (cached) return cached
+	const parent =
+		guild.channels.cache.get(parentId) || (await guild.channels.fetch(parentId))
 	signal?.throwIfAborted()
-	if (record?.archive_thread_id) {
-		const thread = await getRegisteredArchive(guild, record.archive_thread_id)
+	if (!parent || !('threads' in parent))
+		throw new Error('Родительский канал архивов не настроен.')
+	const active = await parent.threads.fetchActive()
+	signal?.throwIfAborted()
+	const found = active.threads.find(matches)
+	if (found) return found
+	let before
+	do {
+		const page = await parent.threads.fetchArchived({
+			type: 'private',
+			fetchAll: true,
+			limit: 100,
+			before
+		})
 		signal?.throwIfAborted()
-		if (thread) return thread
-		await unlinkMemberArchive(guild.id, record.archive_thread_id)
-	}
-	const threads = await getArchiveThreads(guild)
-	signal?.throwIfAborted()
-	const owners = await getArchiveOwners(guild, threads)
-	signal?.throwIfAborted()
-	return threads.find(thread => owners.get(thread.id) === userId) ?? null
+		const archived = page.threads.find(matches)
+		if (archived) return archived
+		if (!page.hasMore) return null
+		const next = Math.min(
+			...page.threads.map(thread => thread.archiveTimestamp ?? Infinity)
+		)
+		if (!Number.isFinite(next) || (before !== undefined && next >= before)) {
+			throw new Error('Не удалось продолжить поиск архивов.')
+		}
+		before = next
+	} while (true)
 }
 
 /**
@@ -46,8 +66,16 @@ async function findArchive(
 		const member = interaction.member
 		const guild = interaction.guild
 
+		const parsed = parseDisplayName(member.displayName)
+
+		if (!parsed) {
+			return await interaction.editReply({
+				content: `❌ Не удалось найти архив: ваш никнейм на сервере имеет неверный формат.`
+			})
+		}
+
 		const searchingChannel = await Promise.race([
-			findArchiveByOwner(guild, member.id, controller.signal),
+			findMemberArchive(guild, parsed, controller.signal),
 			new Promise<never>((_, reject) => {
 				timeout = setTimeout(() => {
 					controller.abort()
@@ -81,4 +109,4 @@ async function findArchive(
 	}
 }
 
-export { findArchive, findArchiveByOwner, getRegisteredArchive }
+export { findArchive, findMemberArchive }
