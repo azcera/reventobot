@@ -1,15 +1,15 @@
 import '@fontsource-variable/inter'
 import { createRoot } from 'react-dom/client'
-import { ArrowUpRight, Circle, Eraser, Hand, Map as MapIcon, Minus, MousePointer2, Pencil, Plus, Redo2, RotateCcw, Save, Shapes, Square, Triangle, Undo2, Users } from 'lucide-react'
+import { ArrowUpRight, Circle, CircleHelp, Eraser, Hand, Map as MapIcon, Minus, MousePointer2, Pencil, PencilOff, Plus, Redo2, RotateCcw, Save, Shapes, Square, Triangle, Undo2, Users } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { DragEvent, PointerEvent } from 'react'
-import { brushWidths, moveObject, shapes } from '../../../shared/tactics'
-import type { Arrow, Board, BoardObject, ClientMessage, Edit, MapCategory, MapPage, Player, Point, ServerMessage, Shape, Stroke, TacticInfo } from '../../../shared/tactics'
+import { brushWidths, defaultPlayerColor, moveObject, shapes } from '../../../shared/tactics'
+import type { Arrow, Board, BoardAccess, BoardObject, ClientMessage, Edit, EditorCursor, MapCategory, MapPage, Player, Point, ServerMessage, Shape, Stroke, TacticInfo } from '../../../shared/tactics'
 import { hit, paint } from './canvas'
 import { connectActivity } from './connection'
 import './style.css'
 
-const palette = ['#ff414b', '#fb912e', '#ffe258', '#4ade80', '#38d6ff', '#bd8cff', '#ffffff', '#111827']
+const palette = [defaultPlayerColor, '#fb912e', '#ffe258', '#4ade80', '#38d6ff', '#bd8cff', '#ffffff', '#111827']
 const figures = {
 	circle: { icon: Circle, label: 'Круг' },
 	rectangle: { icon: Square, label: 'Прямоугольник' },
@@ -26,16 +26,44 @@ const tools = {
 type Placement = { shape: Shape } | { userId: string }
 type Gesture =
 	| { kind: 'stroke'; stroke: Stroke; sent: number; last: number }
-	| { kind: 'arrow'; arrow: Arrow }
+	| { kind: 'arrow'; arrow: Arrow; last: number }
 	| { kind: 'move'; object: Exclude<BoardObject, Stroke>; grab: Point; last: number; moved: boolean }
 	| { kind: 'pan'; x: number; y: number; left: number; top: number }
 const initialBoard: Board = { map: null, epoch: 0, revision: 0, dirty: false, objects: [] }
+
+function ActivityHelp({ dialog, canEdit, canModerate }: {
+	dialog: React.RefObject<HTMLDialogElement | null>; canEdit: boolean; canModerate: boolean
+}) {
+	return <dialog ref={dialog} className='activity-help' aria-labelledby='activity-help-title'>
+		<h2 id='activity-help-title'>Как пользоваться доской</h2>
+		<p>Режим «{canEdit ? 'Редактирование' : 'Просмотр'}»</p>
+		<ul>
+			<li>Крутите колёсико над картой или используйте кнопки + и − для изменения масштаба.</li>
+			<li>{canEdit ? 'Перетаскивайте карту инструментом «Рука» или средней кнопкой мыши.' : 'Перетаскивайте карту мышью или пальцем. Редакторы выбирают карту и обновляют тактику для всех.'}</li>
+			<li>В панели «Состав» меняйте размер ников. Кнопка с курсором вверху показывает, кто редактирует доску. Метка остаётся в точке последнего действия каждого редактора.</li>
+			{canEdit && <>
+				<li>Выберите карту слева. Над картой можно загрузить сохранённую тактику или сохранить текущую.</li>
+				<li>Слева доступны кисть, стрелка, фигуры, ластик и инструмент выбора. Перетаскивайте фигуры и ники на карту или выберите их и нажмите на нужное место.</li>
+				<li>Задайте цвет обводки перед добавлением ника. Чтобы перекрасить уже размещённый ник, нажмите на него инструментом выбора и поменяйте цвет в палитре.</li>
+				<li>Отменяйте свои действия кнопкой «Отменить» или Ctrl+Z. Для повтора используйте Ctrl+Shift+Z или Ctrl+Y.</li>
+				{canModerate && <li>В панели «Состав» можно запретить или вернуть редактирование участнику с ролью ниже вашей. Запрет действует в текущем сеансе и применяется к участникам без права «Администратор».</li>}
+			</>}
+		</ul>
+		<form method='dialog'><button>Закрыть</button></form>
+	</dialog>
+}
 
 function Activity() {
 	const [board, setBoard] = useState(initialBoard)
 	const current = useRef(initialBoard)
 	const [players, setPlayers] = useState<Player[]>([])
-	const [canEdit, setCanEdit] = useState(false)
+	const [access, setAccess] = useState<BoardAccess>({ canEdit: false })
+	const { canEdit } = access
+	const [selfId, setSelfId] = useState<string>()
+	const [cursors, setCursors] = useState(new Map<string, EditorCursor>())
+	const [showCursors, setShowCursors] = useState<boolean>()
+	const cursorsVisible = showCursors ?? access.isAdmin ?? false
+	const help = useRef<HTMLDialogElement>(null)
 	const [connected, setConnected] = useState(false)
 	const [status, setStatus] = useState('Запуск доски…')
 	const [notice, setNotice] = useState('')
@@ -84,6 +112,9 @@ function Activity() {
 	}
 
 	useEffect(() => {
+		function updateAccess({ canEdit, isAdmin, restricted, moderation }: BoardAccess) {
+			setAccess({ canEdit, isAdmin, restricted, moderation })
+		}
 		function clearPreview() {
 			pendingMove.current = null
 			setPreview(null)
@@ -102,9 +133,15 @@ function Activity() {
 				setRemoteDrags({})
 				animated.current.clear()
 				update(message.board)
-				setCanEdit(message.canEdit)
+				updateAccess(message)
+				setSelfId(message.selfId)
+				setCursors(new Map(message.cursors?.map(cursor => [cursor.id, cursor])))
 				setPlayers(message.players)
-			} else if (message.type === 'access') setCanEdit(message.canEdit)
+			} else if (message.type === 'access') updateAccess(message)
+			else if (message.type === 'cursor') {
+				if (message.epoch === board.epoch)
+					setCursors(current => new Map(current).set(message.cursor.id, message.cursor))
+			}
 			else if (message.type === 'players') setPlayers(message.players)
 			else if (message.type === 'error') setNotice(message.message)
 			else if (message.type === 'history') setHistory({ undo: message.undo, redo: message.redo })
@@ -170,6 +207,7 @@ function Activity() {
 			if (!ready) {
 				setHistory({ undo: false, redo: false })
 				setRemoteDrags({})
+				setCursors(new Map())
 				animated.current.clear()
 			}
 		})
@@ -195,7 +233,7 @@ function Activity() {
 		if (!editable) return
 		function key(event: KeyboardEvent) {
 			if (!(event.ctrlKey || event.metaKey) || event.altKey || event.defaultPrevented ||
-				(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]'))) return
+				(event.target instanceof Element && event.target.closest('input, textarea, select, dialog, [contenteditable]'))) return
 			const letter = event.code === 'KeyZ' ? 'z' : event.code === 'KeyY' ? 'y' : event.key.toLowerCase()
 			if (letter !== 'z' && letter !== 'y') return
 			event.preventDefault()
@@ -279,20 +317,11 @@ function Activity() {
 	useEffect(() => {
 		const target = viewport.current
 		if (!target || !image) return
-		const element = target
 		function wheel(event: WheelEvent) {
 			const drawing = canvas.current
 			if (!drawing) return
 			event.preventDefault()
 			if (pointer.current !== null) return
-			if (!event.ctrlKey) {
-				const step = event.deltaMode === 1 ? 16 : 1
-				element.scrollLeft += (event.deltaX || (event.shiftKey ? event.deltaY : 0)) *
-					(event.deltaMode === 2 ? element.clientWidth : step)
-				if (!event.shiftKey) element.scrollTop += event.deltaY *
-					(event.deltaMode === 2 ? element.clientHeight : step)
-				return
-			}
 			if (!event.deltaY) return
 			const next = Math.min(4, Math.max(1, zoom * (event.deltaY < 0 ? 1.18 : 1 / 1.18)))
 			if (next === zoom) return
@@ -342,19 +371,26 @@ function Activity() {
 				return moveObject(object, at)
 			})
 			if (preview && !objects.some(object => object.id === preview.id)) objects.push(preview)
-			paint(target!, objects, selected, nicknameSize, color)
+			paint(target!, objects, selected, nicknameSize)
 			if (moving) frame = requestAnimationFrame(draw)
 		}
 		frame = requestAnimationFrame(draw)
 		return () => cancelAnimationFrame(frame)
-	}, [board.objects, preview, remoteDrags, selected, width, height, pixelScale, image, nicknameSize, color])
+	}, [board.objects, preview, remoteDrags, selected, width, height, pixelScale, image, nicknameSize])
 
 	function send(message: ClientMessage) {
 		if (!connection.current?.send(message)) setNotice('Нет связи с доской.')
 	}
 
-	function edit(operation: Edit) {
-		send({ ...operation, epoch: current.current.epoch })
+	function edit(operation: Edit, cursor?: Point) {
+		send({ ...operation, cursor, epoch: current.current.epoch })
+	}
+
+	function changeColor(value: string) {
+		setColor(value)
+		const object = tool === 'select' && !placement && current.current.objects.find(item => item.id === selected)
+		if (object && object.type === 'player' && color !== value)
+			edit({ type: 'playerColor', id: object.id, color: value })
 	}
 
 	function place(item: Placement, at: Point) {
@@ -365,7 +401,8 @@ function Activity() {
 		}
 		const id = crypto.randomUUID()
 		if ('shape' in item) edit({ type: 'shape', id, shape: item.shape, at, color })
-		else edit({ type: 'player', id, userId: item.userId, at })
+		else edit({ type: 'player', id, userId: item.userId, at, color })
+		setSelected(null)
 		setPlacement(null)
 		setTool('select')
 	}
@@ -394,15 +431,17 @@ function Activity() {
 				setPreview(stroke)
 			} else if (tool === 'arrow') {
 				const arrow: Arrow = { type: 'arrow', id: crypto.randomUUID(), at, to: at, color, width: brush }
-				gesture.current = { kind: 'arrow', arrow }
+				gesture.current = { kind: 'arrow', arrow, last: performance.now() }
+				send({ type: 'cursor', at, epoch: current.current.epoch })
 				setPreview(arrow)
 			} else {
 				const object = hit(event.currentTarget, current.current.objects, at, width, height, nicknameSize)
 				if (tool === 'erase') {
-					if (object) edit({ type: 'remove', id: object.id })
+					if (object) edit({ type: 'remove', id: object.id }, at)
 					return
 				}
 				setSelected(object?.id ?? null)
+				if (object?.type === 'player') setColor(object.color ?? defaultPlayerColor)
 				if (!object || object.type === 'stroke') return
 				gesture.current = { kind: 'move', object, grab: [object.at[0] - at[0], object.at[1] - at[1]], last: 0, moved: false }
 			}
@@ -430,10 +469,15 @@ function Activity() {
 			setPreview(moveObject(active.object, at))
 			if (performance.now() - active.last >= 32) {
 				active.last = performance.now()
-				send({ type: 'drag', id: active.object.id, at, epoch: current.current.epoch })
+				send({ type: 'drag', id: active.object.id, at, cursor: point(event), epoch: current.current.epoch })
 			}
 		} else if (editable && active?.kind === 'arrow') {
-			setPreview({ ...active.arrow, to: point(event) })
+			const to = point(event)
+			setPreview({ ...active.arrow, to })
+			if (performance.now() - active.last >= 32) {
+				active.last = performance.now()
+				send({ type: 'cursor', at: to, epoch: current.current.epoch })
+			}
 		} else if (editable && active?.kind === 'stroke') {
 			active.stroke.points.push(point(event))
 			setPreview({ ...active.stroke })
@@ -459,7 +503,7 @@ function Activity() {
 				pendingMove.current = active.object.id
 				holdPreview = true
 				setPreview(moveObject(active.object, at))
-				edit({ type: 'move', id: active.object.id, at })
+				edit({ type: 'move', id: active.object.id, at }, point(event))
 			}
 		}
 		if (editable && !canceled && active?.kind === 'arrow') {
@@ -497,10 +541,17 @@ function Activity() {
 			<button className='panel-toggle' onClick={() => show('maps')} aria-label='Карты'><MapIcon size={18} /></button>
 			<strong>Доска тактик</strong>
 			<span className='map-title'>{board.map?.name}</span>
-			<span className='connection' data-live={connected}>{connected ? (canEdit ? 'Редактирование' : 'Просмотр') : status}</span>
+			<span className='connection' data-live={connected} title={access.restricted ? 'Модератор запретил редактирование' : undefined}>
+				{connected ? (canEdit ? 'Редактирование' : 'Просмотр') : status}
+			</span>
 			{!connected && <button onClick={() => void connection.current?.start()}>Подключиться</button>}
 			<button className='panel-toggle' onClick={() => show('players')} aria-label='Состав'><Users size={18} /></button>
+			<button className='header-icon' aria-label='Курсоры редакторов' title='Курсоры редакторов'
+				aria-pressed={cursorsVisible} onClick={() => setShowCursors(!cursorsVisible)}><MousePointer2 size={18} /></button>
+			<button className='header-icon' aria-label='Руководство' title='Руководство'
+				onClick={() => help.current?.showModal()}><CircleHelp size={18} /></button>
 		</header>
+		<ActivityHelp dialog={help} canEdit={canEdit} canModerate={!!access.moderation?.length} />
 		<aside className='maps'>
 			<div className='aside-title'>Карты <button title='Обновить карты' onClick={() => {
 				setMapGeneration(value => value + 1)
@@ -531,7 +582,7 @@ function Activity() {
 		<div className='editor'>
 			{editable && <div className='toolbar' aria-label='Инструменты'>
 				{Object.entries(tools).map(([id, { icon: Icon, label }]) => <button key={id} title={label} aria-label={label}
-					aria-pressed={!placement && tool === id} onClick={() => { setTool(id as keyof typeof tools); setPlacement(null) }}>
+					aria-pressed={!placement && tool === id} onClick={() => { setTool(id as keyof typeof tools); setPlacement(null); setSelected(null) }}>
 					<Icon size={18} />
 				</button>)}
 				<div className='figure-menu'>
@@ -558,11 +609,11 @@ function Activity() {
 						<span style={{ width: 5 + index * 5, height: 5 + index * 5 }} />
 					</button>)}
 				</div>
-				<div className='colors' aria-label='Цвет кисти'>
+				<div className='colors' aria-label='Цвет кисти и обводки'>
 					{palette.map(value => <button key={value} style={{ background: value }} title={value} aria-label={`Цвет ${value}`}
-						aria-pressed={color === value} onClick={() => setColor(value)} />)}
+						aria-pressed={color === value} onClick={() => changeColor(value)} />)}
 					<input type='color' title='Произвольный цвет' aria-label='Произвольный цвет' value={color}
-						onChange={event => setColor(event.target.value)} />
+						onChange={event => changeColor(event.target.value)} />
 				</div>
 				<button title='Отменить (Ctrl+Z)' aria-label='Отменить действие' disabled={!history.undo}
 					onClick={() => send({ type: 'undo', epoch: current.current.epoch })}><Undo2 size={18} /></button>
@@ -589,6 +640,11 @@ function Activity() {
 							onPointerDown={down} onPointerMove={move} onPointerUp={end}
 							onPointerCancel={event => end(event, true)} onLostPointerCapture={event => end(event, true)}
 							onDragOver={event => { if (editable) event.preventDefault() }} onDrop={drop} />
+						{cursorsVisible && [...cursors.values()].filter(cursor => cursor.id !== selfId).map(({ id, name, at: [x, y] }) =>
+							<div key={id} className='editor-cursor' style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
+								data-flip-x={x > .7} data-flip-y={y > .85}>
+								<MousePointer2 size={16} aria-hidden='true' /><span>{name}</span>
+							</div>)}
 					</div> : <div className='empty'>
 						<MapIcon size={34} />
 						<p>{imageError || (board.map ? 'Загрузка карты…' : canEdit ? 'Выберите карту слева' : 'Ожидаем выбора карты редактором')}</p>
@@ -631,14 +687,26 @@ function Activity() {
 			<div className='aside-title'>Состав <span>{players.length}</span></div>
 			<label className='nickname-size' htmlFor='nickname-size'>
 				<span>Размер ников <output aria-hidden='true'>{nicknameSize}</output></span>
-				<input id='nickname-size' type='range' min={10} max={32} value={nicknameSize}
+				<input id='nickname-size' type='range' min={5} max={20} value={nicknameSize}
 					onChange={event => setNicknameSize(event.currentTarget.valueAsNumber)} />
 			</label>
 			<div className='list'>
-				{players.map(player => <button key={player.id} disabled={!editable} draggable={editable}
-					aria-pressed={!!placement && 'userId' in placement && placement.userId === player.id}
-					onDragStart={event => event.dataTransfer.setData('application/x-revento-player', player.id)}
-					onClick={() => { setPlacement({ userId: player.id }); setPanel(null) }}>{player.name}</button>)}
+				{players.map(player => {
+					const moderation = connected ? access.moderation?.find(entry => entry.id === player.id) : undefined
+					const label = moderation?.restricted ? 'Вернуть редактирование' : 'Запретить рисовать'
+					const ModerationIcon = moderation?.restricted ? Pencil : PencilOff
+					return <div key={player.id} className='player-row'>
+						<button disabled={!editable} draggable={editable}
+							aria-pressed={!!placement && 'userId' in placement && placement.userId === player.id}
+							onDragStart={event => event.dataTransfer.setData('application/x-revento-player', player.id)}
+							onClick={() => { setPlacement({ userId: player.id }); setPanel(null) }}>{player.name}</button>
+						{moderation && <button aria-label={`${label} — ${player.name}`} title={label}
+							aria-pressed={moderation.restricted}
+							onClick={() => send({ type: 'restrict', userId: player.id, restricted: !moderation.restricted })}>
+							<ModerationIcon size={14} aria-hidden='true' />
+						</button>}
+					</div>
+				})}
 			</div>
 			{connected && !players.length && <p>Голосовой канал пуст.</p>}
 		</aside>

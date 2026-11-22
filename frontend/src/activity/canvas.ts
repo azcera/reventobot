@@ -1,4 +1,5 @@
 import type { BoardObject, Point, Shape } from '../../../shared/tactics'
+import { defaultPlayerColor } from '../../../shared/tactics'
 
 type Position = (point: Point) => Point
 const size = 21
@@ -25,7 +26,7 @@ function traceShape(context: CanvasRenderingContext2D, shape: Shape, x: number, 
 	}
 }
 
-export function paint(canvas: HTMLCanvasElement, objects: BoardObject[], selected: string | null, fontSize: number, color: string) {
+export function paint(canvas: HTMLCanvasElement, objects: BoardObject[], selected: string | null, fontSize: number) {
 	const context = canvas.getContext('2d')
 	if (!context) return
 	const scale = Math.min(canvas.width, canvas.height) / 850
@@ -84,7 +85,7 @@ export function paint(canvas: HTMLCanvasElement, objects: BoardObject[], selecte
 				context.textAlign = 'center'
 				context.roundRect(x - label.width / 2, y - label.height / 2, label.width, label.height, 5)
 				context.fillStyle = '#10121b'
-				context.strokeStyle = color
+				context.strokeStyle = object.color ?? defaultPlayerColor
 				context.lineWidth = 2
 				context.fill()
 				context.stroke()

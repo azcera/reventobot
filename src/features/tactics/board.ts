@@ -1,4 +1,4 @@
-import { brushWidths, moveObject, shapes } from '../../../shared/tactics'
+import { brushWidths, defaultPlayerColor, moveObject, shapes } from '../../../shared/tactics'
 import type { Board, BoardChange, BoardObject, MapInfo, Player, Point, Shape } from '../../../shared/tactics'
 
 export const uuid = (value: unknown): value is string =>
@@ -107,6 +107,8 @@ export class TacticsBoard {
 		}
 		if (type === 'move' && existing && existing.type !== 'stroke' && point(at))
 			return this.put(moveObject(existing, at))
+		if (type === 'playerColor' && existing?.type === 'player' && color(input.color))
+			return this.put({ ...existing, color: input.color })
 		if (type === 'points' && existing?.type === 'stroke' && this.strokeOwners.get(id) === userId) {
 			const { points } = input
 			if (!Array.isArray(points) || !points.length || points.length > 64 || !points.every(point))
@@ -127,9 +129,9 @@ export class TacticsBoard {
 		if (type === 'arrow' && color(input.color) && point(at) && point(input.to) &&
 			(at[0] !== input.to[0] || at[1] !== input.to[1]) && brushWidths.some(width => width === input.width))
 			return this.put({ type, id, at, to: input.to, color: input.color, width: Number(input.width) })
-		if (type === 'player' && point(at)) {
+		if (type === 'player' && point(at) && (input.color === undefined || color(input.color))) {
 			const player = players.find(item => item.id === input.userId)
-			if (player) return this.put({ type, id, at, userId: player.id, label: player.name })
+			if (player) return this.put({ type, id, at, userId: player.id, label: player.name, color: input.color ?? defaultPlayerColor })
 		}
 		throw new Error('Некорректное действие или участник покинул канал.')
 	}

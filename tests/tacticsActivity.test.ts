@@ -57,12 +57,16 @@ test('доска проверяет координаты и авторство �
 	assert.throws(() => board.edit(points, 'other', []), /существует/)
 	assert.deepEqual(board.edit(points, 'editor', []), { type: 'points', id, points: [[.4, .6]] })
 	const playerId = randomUUID()
-	const place = { type: 'player', id: playerId, userId: 'player', at: [0.5, 0.5], epoch: 1, label: 'Подмена' }
+	const place = { type: 'player', id: playerId, userId: 'player', at: [0.5, 0.5], epoch: 1, label: 'Подмена', color: '#123abc' }
 	assert.throws(() => board.edit(place, 'editor', []), /покинул канал/)
 	assert.deepEqual(board.edit(place, 'editor', [{ id: 'player', name: 'Игрок' }]), {
-		type: 'put', object: { type: 'player', id: playerId, at: [0.5, 0.5], userId: 'player', label: 'Игрок' }
+		type: 'put', object: { type: 'player', id: playerId, at: [0.5, 0.5], userId: 'player', label: 'Игрок', color: '#123abc' }
 	})
+	const secondId = randomUUID()
+	board.edit({ ...place, id: secondId, color: '#ffffff' }, 'editor', [{ id: 'player', name: 'Игрок' }])
 	board.edit({ type: 'move', id: playerId, at: [0.8, 0.3], epoch: 1 }, 'editor', [])
+	board.edit({ type: 'playerColor', id: secondId, epoch: 1, color: '#4ade80' }, 'editor', [])
+	assert.deepEqual(board.snapshot().objects.slice(1).map(object => object.color), ['#123abc', '#4ade80'])
 	const saved = JSON.parse(JSON.stringify(board.snapshot().objects))
 	board.reset(map, saved)
 	assert.equal(board.dirty, false)
@@ -85,14 +89,19 @@ test('Activity изолирует комнаты, проверяет права 
 			else process.env[key] = value
 		}
 	})
-	const member = (displayName: string, admin: boolean, editor: boolean) => ({
+	type Role = { position: number }
+	const member = (displayName: string, admin: boolean, editor: boolean, position = 0) => ({
 		guild: { id: guildId }, displayName, permissions: { has: () => admin },
-		roles: { cache: new Set(editor ? ['editor-role'] : []) }
+		roles: { cache: new Set(editor ? ['editor-role'] : []), highest: {
+			position, comparePositionTo: (other: Role) => position - other.position
+		} }
 	})
 	const members = {
-		editor: member('Редактор', false, true),
+		editor: member('[𝐑𝐞𝐜] Редактор | 123 / неактив', false, true, 1),
+		moderator: member('Модератор', false, true, 2),
 		viewer: member('Зритель', false, false),
 		admin: member('Администратор', true, false),
+		immune: member('Иммунитет', true, false),
 		other: member('На связи', false, false)
 	}
 	const states = new Map(Object.entries(members).map(([id, member]) => [id, {
@@ -110,7 +119,7 @@ test('Activity изолирует комнаты, проверяет права 
 			return {
 				application_id: appId, instance_id: id,
 				location: { guild_id: guildId, channel_id: id === 'room-a' ? 'voice-a' : 'voice-b' },
-				users: id === 'room-a' ? ['editor', 'viewer'] : ['admin']
+				users: id === 'room-a' ? ['editor', 'moderator', 'viewer', 'immune'] : ['admin']
 			}
 		} }
 	})
@@ -172,7 +181,7 @@ test('Activity изолирует комнаты, проверяет права 
 		})
 		await once(socket, 'open')
 		const send = (message: object) => socket.send(JSON.stringify(message))
-		send({ type: 'auth', token: sessionToken, version: 2 })
+		send({ type: 'auth', token: sessionToken, version: 3 })
 		async function read<T extends ServerMessage['type']>(type: T) {
 			for (;;) {
 				const index = messages.findIndex(message => message.type === type)
@@ -183,19 +192,36 @@ test('Activity изолирует комнаты, проверяет права 
 		return { socket, send, read }
 	}
 	const editor = await join('editor', 'room-a')
+	const moderator = await join('moderator', 'room-a')
 	const viewer = await join('viewer', 'room-a')
 	const admin = await join('admin', 'room-b')
 	assert.equal((await editor.read('snapshot')).canEdit, true)
+	assert.deepEqual((await moderator.read('snapshot')).moderation, [{ id: 'editor', restricted: false }])
 	const spectator = await viewer.read('snapshot')
 	assert.equal(spectator.canEdit, false)
 	assert.ok(spectator.players.some(player => player.name === 'На связи'))
-	assert.equal((await admin.read('snapshot')).board.map, null)
+	assert.equal(spectator.players.find(player => player.id === 'editor')?.name, 'Редактор')
+	const adminSnapshot = await admin.read('snapshot')
+	assert.equal(adminSnapshot.board.map, null)
+	assert.equal(adminSnapshot.isAdmin, true)
 	editor.send({ type: 'map', id: map.id, revision: 0 })
 	assert.equal((await editor.read('snapshot')).board.map?.id, map.id)
 	const { board } = await viewer.read('snapshot')
 	assert.equal(board.map?.id, map.id)
 	const strokeId = randomUUID()
 	const start = { type: 'stroke', epoch: board.epoch, id: strokeId, color: '#ff0000', width: 3, point: [.5, .5] }
+	editor.send({ type: 'restrict', userId: 'moderator', restricted: true })
+	assert.match((await editor.read('error')).message, /Нет прав/)
+	await editor.read('snapshot')
+	moderator.send({ type: 'restrict', userId: 'immune', restricted: true })
+	assert.match((await moderator.read('error')).message, /Нет прав/)
+	moderator.send({ type: 'restrict', userId: 'editor', restricted: true })
+	assert.deepEqual(await editor.read('access'), { type: 'access', canEdit: false, restricted: true, isAdmin: false, moderation: [] })
+	editor.send(start)
+	assert.match((await editor.read('error')).message, /запретил/)
+	await editor.read('snapshot')
+	moderator.send({ type: 'restrict', userId: 'editor', restricted: false })
+	assert.equal((await editor.read('access')).canEdit, true)
 	viewer.send(start)
 	assert.match((await viewer.read('error')).message, /просмотр/)
 	await viewer.read('snapshot')
@@ -204,6 +230,8 @@ test('Activity изолирует комнаты, проверяет права 
 	assert.equal((await viewer.read('change')).change.type, 'put')
 	const appended = await viewer.read('change')
 	assert.deepEqual(appended.change, { type: 'points', id: strokeId, points: [[.7, .8]] })
+	assert.deepEqual((await viewer.read('cursor')).cursor, { id: 'editor', name: 'Редактор', at: [.5, .5] })
+	assert.deepEqual((await viewer.read('cursor')).cursor.at, [.7, .8])
 	editor.send({ type: 'undo', epoch: board.epoch })
 	assert.deepEqual((await viewer.read('change')).change, { type: 'remove', id: strokeId })
 	editor.send({ type: 'redo', epoch: board.epoch })

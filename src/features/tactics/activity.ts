@@ -2,14 +2,16 @@ import { randomBytes } from 'node:crypto'
 import type { Server } from 'node:http'
 import path from 'node:path'
 import { ChannelType, Events, PermissionFlagsBits } from 'discord.js'
-import type { Client, Guild } from 'discord.js'
+import type { Client, Guild, GuildMember } from 'discord.js'
 import express from 'express'
 import type { Express, Request } from 'express'
 import type { Pool } from 'pg'
 import { WebSocket, WebSocketServer } from 'ws'
-import type { BoardObject, Player, ServerMessage } from '../../../shared/tactics'
+import { defaultPlayerColor } from '../../../shared/tactics'
+import type { BoardAccess, BoardObject, EditorCursor, Player, Point, ServerMessage } from '../../../shared/tactics'
 import { PUBLIC_PATH } from '../../config/path'
 import { store } from '../../dashboard/store'
+import { stripRolePrefix } from '../../utils/adminPrefix'
 import { point, TacticsBoard, uuid } from './board'
 import type { MapChanged } from './dashboard'
 import { tacticsRepository } from './repository'
@@ -30,6 +32,8 @@ type Room = {
 	idleSince: number
 	sockets: Map<WebSocket, Session>
 	drags: Map<WebSocket, { id: string; epoch: number }>
+	restricted: Set<string>
+	cursors: Map<string, EditorCursor>
 }
 type Instance = {
 	application_id: string
@@ -38,7 +42,7 @@ type Instance = {
 	users: string[]
 }
 
-const currentClients = new WeakSet<WebSocket>()
+const clientVersions = new WeakMap<WebSocket, number>()
 const lastHistory = new WeakMap<WebSocket, number>()
 
 function legacyObject(object: BoardObject): BoardObject {
@@ -49,7 +53,8 @@ function legacyObject(object: BoardObject): BoardObject {
 
 function send(socket: WebSocket, message: ServerMessage) {
 	if (socket.readyState !== WebSocket.OPEN) return
-	if (!currentClients.has(socket)) {
+	if (message.type === 'cursor' && clientVersions.get(socket) !== 3) return
+	if (!clientVersions.has(socket)) {
 		if (message.type === 'history' || message.type === 'drag' || message.type === 'catalog' || message.type === 'tactics') return
 		if (message.type === 'snapshot')
 			message = { ...message, board: { ...message.board, objects: message.board.objects.map(legacyObject) } }
@@ -61,7 +66,7 @@ function send(socket: WebSocket, message: ServerMessage) {
 }
 
 function sendHistory(socket: WebSocket, session: Session) {
-	if (!currentClients.has(socket)) return
+	if (!clientVersions.has(socket)) return
 	const history = session.room.board.historyState(session.userId)
 	const flags = Number(history.undo) | (Number(history.redo) << 1)
 	if (lastHistory.get(socket) === flags) return
@@ -73,10 +78,14 @@ function broadcast(room: Room, message: ServerMessage) {
 	for (const socket of room.sockets.keys()) send(socket, message)
 }
 
+function nameOnly(value: string) {
+	return stripRolePrefix(value, store.getSetting('ROLE_PREFIXES')).split(/[|/]/, 1)[0].trim()
+}
+
 function roster(room: Room): Player[] {
 	return [...room.guild.voiceStates.cache.values()]
 		.filter(state => state.channelId === room.channelId)
-		.map(state => ({ id: state.id, name: state.member?.displayName ?? state.id }))
+		.map(state => ({ id: state.id, name: nameOnly(state.member?.displayName ?? '') || state.member?.user?.username || state.id }))
 		.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }
 
@@ -87,16 +96,51 @@ function canEnter(session: Session) {
 		room.guild.voiceStates.cache.get(userId)?.channelId === room.channelId
 }
 
-function canEdit(session: Session) {
-	const member = session.room.guild.members.cache.get(session.userId)
-	return !!member && store.ready && (member.permissions.has(PermissionFlagsBits.Administrator) ||
+const admin = (member?: GuildMember) => !!member?.permissions.has(PermissionFlagsBits.Administrator)
+
+function editor(member?: GuildMember) {
+	return !!member && store.ready && (admin(member) ||
 		store.roleIds('TACTICS_EDITOR_ROLES').some(id => id !== member.guild.id && member.roles.cache.has(id)))
+}
+
+function canEdit({ room, userId }: Session) {
+	const member = room.guild.members.cache.get(userId)
+	return editor(member) && (!room.restricted.has(userId) || admin(member))
+}
+
+function canRestrict(session: Session, targetId: string) {
+	const { room, userId } = session
+	if (targetId === userId || !room.participants.has(targetId) ||
+		room.guild.voiceStates.cache.get(targetId)?.channelId !== room.channelId) return false
+	const member = room.guild.members.cache.get(userId)
+	const target = room.guild.members.cache.get(targetId)
+	return !!member && !!target && !admin(target) && editor(target) &&
+		member.roles.highest.comparePositionTo(target.roles.highest) > 0
+}
+
+function access(session: Session): BoardAccess {
+	const { room, userId } = session
+	const isAdmin = admin(room.guild.members.cache.get(userId))
+	const canEditBoard = canEdit(session)
+	return {
+		canEdit: canEditBoard, isAdmin, restricted: !isAdmin && room.restricted.has(userId),
+		moderation: canEditBoard ? [...room.participants].filter(id => canRestrict(session, id))
+			.map(id => ({ id, restricted: room.restricted.has(id) })) : []
+	}
+}
+
+function updateCursor(session: Session, at: Point) {
+	const { room, userId } = session
+	const member = room.guild.members.cache.get(userId)
+	const cursor = { id: userId, name: nameOnly(member?.displayName ?? '') || member?.user?.username || userId, at }
+	room.cursors.set(userId, cursor)
+	broadcast(room, { type: 'cursor', epoch: room.board.epoch, cursor })
 }
 
 function snapshot(socket: WebSocket, session: Session) {
 	send(socket, {
 		type: 'snapshot', board: session.room.board.snapshot(), players: roster(session.room),
-		canEdit: canEdit(session)
+		selfId: session.userId, cursors: [...session.room.cursors.values()], ...access(session)
 	})
 	sendHistory(socket, session)
 }
@@ -198,7 +242,8 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 			if (!room) {
 				room = {
 					id: instanceId, guild, channelId, board: new TacticsBoard(),
-					participants: new Set(), verified: 0, idleSince: Date.now(), sockets: new Map(), drags: new Map()
+					participants: new Set(), verified: 0, idleSince: Date.now(), sockets: new Map(), drags: new Map(),
+					restricted: new Set(), cursors: new Map()
 				}
 				rooms.set(instanceId, room)
 			}
@@ -269,7 +314,20 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 		const { board, guild } = room
 		if (!canEnter(session)) return socket.close(4001, 'Activity access expired')
 		if (input.type === 'sync') return snapshot(socket, session)
-		if (!canEdit(session)) throw new Error('Доступен только просмотр.')
+		if (!canEdit(session)) throw new Error(room.restricted.has(userId)
+			? 'Модератор запретил вам редактирование доски.' : 'Доступен только просмотр.')
+		if (input.type === 'restrict') {
+			if (typeof input.userId !== 'string' || typeof input.restricted !== 'boolean' || !canRestrict(session, input.userId))
+				throw new Error('Нет прав менять доступ этого участника.')
+			if (input.restricted) room.restricted.add(input.userId)
+			else room.restricted.delete(input.userId)
+			refreshRoom(room, false)
+			return
+		}
+		if (input.type === 'cursor') {
+			if (board.map && input.epoch === board.epoch && point(input.at)) updateCursor(session, input.at)
+			return
+		}
 		if (input.type === 'drag') {
 			if (input.epoch !== board.epoch || !uuid(input.id)) return
 			if (input.at === null) return clearDrag(room, socket)
@@ -279,6 +337,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 			for (const peer of room.sockets.keys()) {
 				if (peer !== socket) send(peer, { type: 'drag', id: input.id, at: input.at, epoch: board.epoch })
 			}
+			updateCursor(session, point(input.cursor) ? input.cursor : input.at)
 			return
 		}
 		if (input.type === 'map' || input.type === 'load' || input.type === 'save') {
@@ -307,8 +366,10 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 			if (!map) throw new Error('Карта недоступна.')
 			if (catalogRevision !== mapRevision) throw new Error('Список карт изменился. Повторите действие.')
 			check()
-			board.reset(map, preset?.snapshot.objects)
+			board.reset(map, preset?.snapshot.objects.map(object => object.type === 'player' && !object.color
+				? { ...object, label: nameOnly(object.label) || object.userId, color: defaultPlayerColor } : object))
 			room.drags.clear()
+			room.cursors.clear()
 			for (const [peer, peerSession] of room.sockets) snapshot(peer, peerSession)
 			return
 		}
@@ -317,6 +378,13 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 			: board.edit(input, userId, input.type === 'player' ? roster(room) : [])
 		if (input.type === 'move') clearDrag(room, socket, false)
 		broadcast(room, { type: 'change', change, revision: board.revision, epoch: board.epoch })
+		let cursorAt = point(input.cursor) ? input.cursor : undefined
+		if (!cursorAt && change.type === 'points') cursorAt = change.points.at(-1)
+		if (!cursorAt && change.type === 'put') {
+			const { object } = change
+			cursorAt = object.type === 'stroke' ? object.points.at(-1) : object.type === 'arrow' ? object.to : object.at
+		}
+		if (cursorAt) updateCursor(session, cursorAt)
 		for (const [peer, peerSession] of room.sockets) sendHistory(peer, peerSession)
 	}
 
@@ -341,7 +409,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 					const current = input.type === 'auth' && sessions.get(input.token)
 					if (!current || !canEnter(current)) return socket.close(4001, 'Authentication required')
 					session = current
-					if (input.version === 2) currentClients.add(socket)
+					if (input.version === 2 || input.version === 3) clientVersions.set(socket, input.version)
 					clearTimeout(authTimeout)
 					current.room.sockets.set(socket, current)
 					snapshot(socket, current)
@@ -373,9 +441,9 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 		for (const [socket, session] of room.sockets) {
 			if (!canEnter(session)) socket.close(4001, 'Activity access expired')
 			else {
-				const editable = canEdit(session)
-				if (!editable) clearDrag(room, socket)
-				send(socket, { type: 'access', canEdit: editable })
+				const permissions = access(session)
+				if (!permissions.canEdit) clearDrag(room, socket)
+				send(socket, { type: 'access', ...permissions })
 			}
 		}
 		if (players) broadcast(room, { type: 'players', players: roster(room) })
@@ -431,6 +499,7 @@ export function registerTacticsActivity(app: Express, client: Client, pool: Pool
 				else {
 					room.board.reset(null)
 					room.drags.clear()
+					room.cursors.clear()
 					for (const [peer, session] of room.sockets) snapshot(peer, session)
 				}
 			}

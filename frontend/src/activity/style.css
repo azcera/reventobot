@@ -52,6 +52,7 @@ header strong { font-size: 16px; white-space: nowrap; }
 .map-title { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .connection { margin-left: auto; color: var(--muted); text-align: right; }
 .connection[data-live=true] { color: var(--accent); }
+.header-icon { flex: 0 0 auto; padding: 6px; }
 .panel-toggle { display: none; }
 aside {
 	display: flex;
@@ -72,6 +73,8 @@ aside {
 .list button { justify-content: space-between; flex: 0 0 auto; text-align: left; overflow-wrap: anywhere; }
 .list button[draggable=true] { cursor: grab; }
 .list small { color: var(--muted); }
+.player-row { display: flex; gap: 4px; }
+.player-row button:first-child { flex: 1; min-width: 0; }
 .editor { min-width: 0; min-height: 0; display: flex; gap: 7px; }
 .board-area { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .tactics-picker { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
@@ -116,6 +119,25 @@ aside {
 .scene { position: relative; display: block; flex: 0 0 auto; margin: auto; }
 .scene img, .scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .scene canvas { touch-action: none; user-select: none; }
+.editor-cursor { position: absolute; pointer-events: none; color: var(--accent); }
+.editor-cursor svg { display: block; fill: var(--input); }
+.editor-cursor span {
+	position: absolute;
+	top: 13px;
+	left: 12px;
+	max-width: min(150px, 35vw);
+	padding: 2px 5px;
+	border: 1px solid var(--accent);
+	border-radius: 5px;
+	background: var(--input);
+	color: #fff;
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.editor-cursor[data-flip-x=true] span { left: auto; right: 10px; }
+.editor-cursor[data-flip-y=true] span { top: auto; bottom: 14px; }
 canvas[data-tool=brush], canvas[data-tool=arrow], canvas[data-tool=place], canvas[data-tool=erase] { cursor: crosshair; }
 canvas[data-tool=pan] { cursor: grab; }
 canvas[data-panning=true] { cursor: grabbing; }
@@ -136,6 +158,19 @@ canvas[data-panning=true] { cursor: grabbing; }
 .board-dialog { z-index: 1; bottom: 62px; }
 .board-dialog input { width: 100%; margin: 4px 0; }
 .board-dialog button { margin: 4px 6px 0 0; }
+.activity-help {
+	width: min(560px, calc(100% - 24px));
+	max-height: calc(100% - 24px);
+	padding: 18px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--panel);
+	color: inherit;
+}
+.activity-help::backdrop { background: #06070bbf; }
+.activity-help h2 { margin: 0 0 6px; font-size: 18px; }
+.activity-help ul { padding-left: 20px; }
+.activity-help li + li { margin-top: 6px; }
 
 @media (max-width: 780px) {
 	.activity { grid-template-columns: minmax(0, 1fr); position: relative; }
