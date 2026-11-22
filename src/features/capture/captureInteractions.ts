@@ -301,8 +301,9 @@ async function submitInlineEditTimeModal(
 				content: '❌ Сбор завершён или больше недоступен.'
 			})
 
+		let delivered: boolean
 		try {
-			await captureManager.updateCollectionTime(
+			delivered = await captureManager.updateCollectionTime(
 				messageId,
 				channelId,
 				interaction.client
@@ -316,7 +317,9 @@ async function submitInlineEditTimeModal(
 		}
 
 		await interaction.editReply({
-			content: `✅ Время капта успешно изменено на: ${newDiscordTimestamp}`
+			content: delivered
+				? `✅ Время капта успешно изменено на: ${newDiscordTimestamp}`
+				: '❌ Сообщение сбора больше недоступно.'
 		})
 	} catch (caught) {
 		const error = getError(caught)

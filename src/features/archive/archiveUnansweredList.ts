@@ -3,6 +3,7 @@ import {
 	Guild,
 	MessageType,
 	PermissionFlagsBits,
+	RESTJSONErrorCodes,
 	SeparatorBuilder,
 	TextDisplayBuilder,
 	type ThreadChannel
@@ -30,7 +31,13 @@ async function needsAnswer(thread: ThreadChannel) {
 	const last = messages.first()
 	if (!last || Date.now() - last.createdTimestamp > SEVEN_DAYS) return false
 	const author =
-		last.member ?? (await thread.guild.members.fetch(last.author.id))
+		last.member ??
+		(await thread.guild.members.fetch(last.author.id).catch(error => {
+			if (Number(getError(error).code) === RESTJSONErrorCodes.UnknownMember)
+				return null
+			throw error
+		}))
+	if (!author) return false
 	const repliedUserId =
 		last.type === MessageType.Reply ? last.mentions.repliedUser?.id : undefined
 	const hasMention =

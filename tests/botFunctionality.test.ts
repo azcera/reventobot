@@ -110,6 +110,28 @@ test('closure worker recovers stored collections after restart and rechecks move
 	assert.deepEqual(disableCaptureControls([{ type: 2, custom_id: 'unrelated' }]), [{ type: 2, custom_id: 'unrelated' }])
 })
 
+test('capture refresh retries temporary Discord errors and clears the refresh for a missing message', async t => {
+	const row = { message_id: 'message', channel_id: 'channel', discord_timestamp: timestamp(Date.now()), controls_closed: false, message_refresh_pending: true, message_revision: '1' }
+	databaseRow = row
+	queries.length = 0
+	t.after(() => { databaseRow = undefined })
+	const log = t.mock.method(console, 'error', () => {})
+	const fetchMessage = t.mock.fn(async () => { throw new Error('Discord unavailable') })
+	const client = { channels: { fetch: async () => ({ isTextBased: () => true, messages: { fetch: fetchMessage } }) } } as unknown as Client
+	const refreshCleared = () => queries.some(sql => sql.includes('SET message_refresh_pending = FALSE'))
+	const pool = { query: async () => ({ rows: refreshCleared() ? [] : [row] }) } as unknown as Pool
+	const service = createCaptureExpiry({ client, pool, store })
+
+	await service.tick()
+	assert.equal(refreshCleared(), false)
+	fetchMessage.mock.mockImplementation(async () => { throw Object.assign(new Error('Unknown Message'), { code: 10008 }) })
+	await service.tick()
+	assert.equal(refreshCleared(), true)
+	await service.tick()
+	assert.equal(fetchMessage.mock.callCount(), 2)
+	assert.equal(log.mock.callCount(), 1)
+})
+
 test('arbitrary dashboard tags are accepted, parsed and replaced without stacking', async () => {
 	const roleId = '123456789012345678'
 	const prefixes = [{ roleId, prefix: 'TAG >' }]

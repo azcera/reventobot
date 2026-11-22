@@ -43,6 +43,7 @@ import {
 	ButtonStyle,
 	MessageFlags,
 	PermissionFlagsBits,
+	RESTJSONErrorCodes,
 	TextDisplayBuilder
 } from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
@@ -464,19 +465,27 @@ async function updateCollectionTime(
 	channelId: string,
 	client: import('discord.js').Client
 ) {
-	await enqueueCaptureEdit(messageId, async () => {
+	return enqueueCaptureEdit(messageId, async () => {
 		const { rows } = await pool.query(
 			'SELECT * FROM active_captures WHERE message_id = $1',
 			[messageId]
 		)
 		const row = rows[0]
-		if (!row) return
+		if (!row) return false
 		const channel = await client.channels.fetch(channelId)
 		if (!channel?.isTextBased())
 			throw new Error('Канал регистрации недоступен.')
-		const message = await channel.messages.fetch(messageId)
-		await message.edit(renderCapture(row, message.guild ?? undefined))
+		try {
+			const message = await channel.messages.fetch(messageId)
+			await message.edit(renderCapture(row, message.guild ?? undefined))
+		} catch (error) {
+			if (Number(getError(error).code) !== RESTJSONErrorCodes.UnknownMessage)
+				throw error
+			await confirmCaptureRefresh(messageId, row.message_revision)
+			return false
+		}
 		await confirmCaptureRefresh(messageId, row.message_revision)
+		return true
 	})
 }
 

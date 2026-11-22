@@ -8,6 +8,27 @@ import * as archives from '../src/features/archive/archivesList'
 import * as unanswered from '../src/features/archive/archiveUnansweredList'
 import { updateLists } from '../src/features/archive/updateLists'
 
+test('the unanswered list skips a missing author without logging or retrying in the same cache window', async t => {
+	t.mock.method(store, 'getSetting', () => 'parent')
+	const log = t.mock.method(console, 'error', () => {})
+	const fetchMember = t.mock.fn(async () => { throw Object.assign(new Error('Unknown Member'), { code: 10007 }) })
+	const message = { createdTimestamp: Date.now(), author: { id: 'departed' } }
+	const thread = { id: '1572939345772544064', lastMessageId: 'message',
+		messages: { fetch: async () => new Collection([['message', message]]) } }
+	const parent = { type: ChannelType.GuildText, threads: {
+		fetchActive: async () => ({ threads: new Collection([[thread.id, thread]]) }) } }
+	const guild = { members: { fetch: fetchMember }, channels: { cache: new Collection([['parent', parent]]) } } as unknown as Guild
+	Object.assign(thread, { guild })
+
+	for (let i = 0; i < 2; i++) {
+		const list = await unanswered.getUnansweredList(guild)
+		assert.ok(list?.length)
+		assert.ok(!JSON.stringify(list.map(part => part.toJSON())).includes(thread.id))
+	}
+	assert.equal(fetchMember.mock.callCount(), 1)
+	assert.equal(log.mock.callCount(), 0)
+})
+
 test('archive updates reuse old pages, remove duplicates, and publish new pages silently', async t => {
 	const container = (text: string) => new ContainerBuilder()
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
