@@ -15,10 +15,10 @@ import { randomUUID } from 'node:crypto'
 import { store } from '../../dashboard/store'
 import { authorize } from '../../services/adminApplicationCommands'
 import { loadDiscordMembers } from '../../services/discordMembers'
+import { getMemberArchives } from '../../services/memberIdentity'
 import {
 	getDepartedArchives,
-	getUnusedArchives,
-	isArchiveUsed,
+	type getArchiveThreads,
 	memberIsPresent,
 	readArchiveHistory
 } from './unusedArchives'
@@ -48,8 +48,8 @@ function selectionContent(threads: ThreadChannel[], selected: string[] = []) {
 	)
 }
 
-async function getUnusedArchiveLists(guild: Guild) {
-	const { empty, withMessages } = await getDepartedArchives(guild)
+async function getUnusedArchiveLists(guild: Guild, threads?: Awaited<ReturnType<typeof getArchiveThreads>>, owners?: Map<string, string>) {
+	const { empty, withMessages } = await getDepartedArchives(guild, threads, owners)
 	const containers: ContainerBuilder[] = []
 	for (let offset = 0; offset < Math.max(1, empty.length, withMessages.length); offset += 25) {
 		const container = new ContainerBuilder()
@@ -207,9 +207,12 @@ async function handleArchiveCleanup(
 			content: `Проверяю состав сервера и удаляю выбранные ветки (${selected.length})…`,
 			components: []
 		})
-		let unused: ThreadChannel[]
+		let owners: Map<string | null, string>
 		try {
-			unused = await getUnusedArchives(interaction.guild, true)
+			const members = await loadDiscordMembers(interaction.guild, { force: true })
+			const records = await getMemberArchives(interaction.guild.id)
+			owners = new Map(records.filter(row => !members.has(row.discord_id))
+				.map(row => [row.archive_thread_id, row.discord_id]))
 		} catch (error) {
 			sessions.set(token, session)
 			console.error(
@@ -226,8 +229,9 @@ async function handleArchiveCleanup(
 		let deleted = 0,
 			failed = 0
 		for (const id of selected) {
-			const thread = unused.find(thread => thread.id === id)
-			if (!thread) continue
+			const thread = session.threads.find(thread => thread.id === id)
+			const ownerId = owners.get(id)
+			if (!thread || !ownerId) continue
 			try {
 				await store.audit(
 					{ id: interaction.user.id },
@@ -241,19 +245,15 @@ async function handleArchiveCleanup(
 				})
 				if (
 					!current?.isThread() ||
-					current.parentId !== store.getSetting('PARENT_CHANNEL_ID') ||
-					!/^archive .+ \d+$/.test(current.name)
+					current.parentId !== store.getSetting('PARENT_CHANNEL_ID')
 				)
 					continue
-				const members = await loadDiscordMembers(interaction.guild)
-				if (isArchiveUsed(current.name, members.values())) continue
-				const { ownerId, hasMessages, latestId } = await readArchiveHistory(current)
-				if (!ownerId || (session.emptyOnly && hasMessages)) continue
-				if (await memberIsPresent(interaction.guild, ownerId)) continue
 				if (session.emptyOnly) {
+					const { hasMessages, latestId } = await readArchiveHistory(current)
+					if (hasMessages || await memberIsPresent(interaction.guild, ownerId)) continue
 					const latest = await current.messages.fetch({ limit: 1, cache: false })
 					if (latest.first()?.id !== latestId) continue
-				}
+				} else if (await memberIsPresent(interaction.guild, ownerId)) continue
 				await current.delete(
 					`Неиспользуемый архив: удаление выбрал ${interaction.user.id}`
 				)

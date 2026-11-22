@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Collection, MessageFlags, type ButtonInteraction } from 'discord.js'
+import { ChannelType, Collection, MessageFlags, type ButtonInteraction } from 'discord.js'
 import { store, settingDefinitions } from '../src/dashboard/store'
 
 const queries: { sql: string; values: unknown[] }[] = []
@@ -13,6 +13,7 @@ require.cache[databasePath] = { exports: {
 	async query(sql: string, values: unknown[]) {
 		queries.push({ sql, values })
 		if (databaseError) throw databaseError
+		if (sql.includes('FROM guild_member_identities')) return { rows: [{ discord_id: 'candidate', archive_thread_id: 'archive', game_static: '123' }] }
 		if (sql.includes("status = 'rejected', guild_id")) return { rows: rejectRows }
 		if (sql.startsWith('INSERT') || sql.includes('RETURNING user_id') || sql.startsWith('SELECT user_id')) return { rows: [{ user_id: 'candidate' }] }
 		return { rows: applicationRows }
@@ -29,6 +30,7 @@ test('accepted applications close five seconds after confirmation without additi
 	t.mock.method(store, 'getSetting', (key: string) => {
 		if (key === 'FAMILY_ADDITIONAL_ROLES') throw new Error('Retired setting must not be read')
 		if (key === 'MAIN_ROLE_ID') return 'main-role'
+		if (key === 'PARENT_CHANNEL_ID') return 'archive-parent'
 		return originalGetSetting(key)
 	})
 	assert.equal(Object.hasOwn(settingDefinitions, 'FAMILY_ADDITIONAL_ROLES'), false)
@@ -44,10 +46,11 @@ test('accepted applications close five seconds after confirmation without additi
 			customId: 'invite_accept_candidate', user: { id: 'moderator' },
 			member: { roles: { cache: new Collection() }, permissions: { has: () => true } },
 			guild: {
-				id: 'guild', name: 'Test', channels: { async fetch() { return { delete: async () => { deleted = true } } }, cache: new Collection([['archive', {
-					id: 'archive', name: 'archive tony 123', parentId: store.getSetting('PARENT_CHANNEL_ID'), isThread: () => true
-				}]]) },
-				members: { async fetch() { return memberPresent ? { displayName: 'Tony | 123', roles: { async add(id: string) { roles.push(id) } } } : null } }
+				id: 'guild', name: 'Test', channels: { async fetch() { return { delete: async () => { deleted = true } } }, cache: new Collection<string, unknown>([
+					['archive-parent', { type: ChannelType.GuildText }],
+					['archive', { id: 'archive', name: 'archive tony 123', parentId: 'archive-parent', archived: true, isThread: () => true }]
+				]) },
+				members: { async fetch() { return memberPresent ? { id: 'candidate', displayName: 'Tony | 123', roles: { async add(id: string) { roles.push(id) } } } : null } }
 			},
 			client: { users: { async fetch() { return null } } },
 			channel: { async delete() { deleted = true } },

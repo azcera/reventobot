@@ -7,8 +7,10 @@ import {
 	TextDisplayBuilder
 } from 'discord.js'
 import { createArchiveChannel } from '../../utils/channelUtils'
+import { store } from '../../dashboard/store'
 import { parseDisplayName } from '../../utils/parseDisplayName'
-import { findMemberArchive } from './archiveSearch'
+import { canViewArchive } from './archiveAccess'
+import { findArchiveByOwner } from './archiveSearch'
 
 const pending = new Set()
 
@@ -60,21 +62,23 @@ async function handleArchiveCommand(
 	let key
 	try {
 		const member = await interaction.guild.members.fetch(interaction.targetId)
-		const parsed = parseDisplayName(member.displayName)
-		if (!parsed)
-			return await notice(
-				'❌ Ник участника не по форме. Ожидается: Name | Static.'
-			)
-		const lockKey = `${interaction.guild.id}:${parsed.memberStatic}`
+		const create = interaction.commandName === 'Создать архив'
+		const managed = store.getSetting('ARCHIVE_MANAGE_ACCESS')
+		const canView = !managed || canViewArchive(interaction.member, member, store.roleIds('ARCHIVE_VIEWER_ROLES'))
+		if (!create && !canView)
+			return await notice('❌ У вашей роли нет доступа к этому архиву.')
+		const lockKey = `${interaction.guild.id}:${member.id}`
 		if (pending.has(lockKey))
 			return await notice(
 				'⏳ Архив этого участника уже обрабатывается. Повторите позже.'
 			)
 		key = lockKey
 		pending.add(key)
-		const archive = await findMemberArchive(interaction.guild, parsed)
-		if (interaction.commandName === 'Создать архив') {
-			if (archive) return await notice(`❌ Архив уже создан: <#${archive.id}>.`)
+		const archive = await findArchiveByOwner(interaction.guild, member.id)
+		if (create) {
+			if (archive) return await notice(canView ? `❌ Архив уже создан: <#${archive.id}>.` : '❌ Архив уже создан.')
+			const parsed = parseDisplayName(member.displayName)
+			if (!parsed) return await notice('❌ Ник участника не по форме. Ожидается: Name | Static.')
 			await acknowledge()
 			return await createArchiveChannel(interaction, {
 				channelName: [
@@ -88,8 +92,10 @@ async function handleArchiveCommand(
 		if (!archive || !archive.isThread())
 			return await notice('❌ Для этого участника архив не найден.')
 		await acknowledge()
-		if (archive.archived) await archive.setArchived(false)
-		await archive.members.add(interaction.user.id)
+		if (!managed) {
+			if (archive.archived) await archive.setArchived(false)
+			await archive.members.add(interaction.user.id)
+		}
 		await interaction.editReply({
 			content: `Архив участника: <#${archive.id}>`,
 			components: [

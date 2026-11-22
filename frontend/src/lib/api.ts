@@ -164,6 +164,12 @@ function validResponse(path: string, value: unknown): boolean {
 			number(value.revision) &&
 			array(value.curators, roleCurator)
 		)
+	if (path === 'archive-access')
+		return record(value) && text(value.state) &&
+			['off', 'queued', 'running', 'complete', 'failed'].includes(value.state) &&
+			['checked', 'total', 'changed'].every(key => number(value[key])) &&
+			array(value.issues, issue => record(issue) && text(issue.message) &&
+				(issue.threadId === undefined || text(issue.threadId)))
 	if (path === 'capture-presets')
 		return (
 			record(value) &&

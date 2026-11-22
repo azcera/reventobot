@@ -2,6 +2,10 @@ import { ChannelType, MessageFlags } from 'discord.js'
 import { getNavigationContainer } from '../commands/admin/navigationBuilder'
 import * as navigation from '../dashboard/navigationMessages'
 import { store as dashboard } from '../dashboard/store'
+import { findArchiveByOwner, getRegisteredArchive } from '../features/archive/archiveSearch'
+import { scheduleArchiveAccess } from '../features/archive/archiveAccess'
+import { getArchiveThreads, invalidateArchiveInventory } from '../features/archive/unusedArchives'
+import { getMemberIdentity, linkMemberArchive, withMemberArchiveLock } from '../services/memberIdentity'
 import { editReplyWithAutoDelete, replyWithAutoDelete } from './autoDelete'
 require('dotenv').config()
 
@@ -55,18 +59,42 @@ async function createArchiveChannel(
 		)
 	}
 
-	// 2. Создаем приватную ветку внутри этого канала
-	const newThread = await parentChannel.threads.create({
-		name: channelName,
-		autoArchiveDuration: 1440,
-		type: ChannelType.PrivateThread,
-		reason: `Приватная ветка для ${member.user.tag}`
+	const createOrReuse = () => withMemberArchiveLock(guild.id, member.id, async db => {
+		const record = await getMemberIdentity(guild.id, member.id, db)
+		if (record?.archive_thread_id) {
+			const thread = await getRegisteredArchive(guild, record.archive_thread_id)
+			if (!thread) throw new Error('Привязанный архив недоступен. Повторите поиск.')
+			return { thread, created: false }
+		}
+		const gameStatic = channelName.match(/ (\d+)$/)?.[1]
+		if (!gameStatic) throw new Error('Для создания архива укажите игровой статик.')
+		if ((await getArchiveThreads(guild)).some(thread => thread.name.endsWith(` ${gameStatic}`)))
+			throw new Error('Найден архив с этим статиком. Сначала проверьте его владельца.')
+		const thread = await parentChannel.threads.create({
+			name: channelName,
+			autoArchiveDuration: 1440,
+			invitable: !dashboard.getSetting('ARCHIVE_MANAGE_ACCESS'),
+			type: ChannelType.PrivateThread,
+			reason: `Приватная ветка для ${member.user.tag}`
+		})
+		if (!await linkMemberArchive(guild.id, member.id, thread.id, gameStatic, db))
+			throw new Error('Владельцу уже привязан архив.')
+		return { thread, created: true }
 	})
+	const existing = await findArchiveByOwner(guild, member.id)
+	const { thread: newThread, created } = existing
+		? { thread: existing, created: false }
+		: await createOrReuse()
+	if (created) {
+		invalidateArchiveInventory(guild)
+		scheduleArchiveAccess(guild)
+	}
 
-	await newThread.members.add(member.id).catch(() => {})
+	if (!newThread.archived && !newThread.members.cache.has(member.id))
+		await newThread.members.add(member.id)
 
 	// 4. Отправляем приветственное сообщение
-	await newThread
+	if (created) await newThread
 		.send({
 			allowedMentions: { users: [member.id] },
 			flags: MessageFlags.IsComponentsV2 as const,
@@ -103,7 +131,7 @@ async function createArchiveChannel(
 					})
 
 		await send({
-			content: `✅ Приватная ветка создана успешно — ${newThread}`
+				content: created ? `✅ Приватная ветка создана — ${newThread}` : `Архив участника — ${newThread}`
 		})
 	}
 

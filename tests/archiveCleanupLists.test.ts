@@ -7,6 +7,7 @@ import { store } from '../src/dashboard/store'
 import * as unused from '../src/features/archive/archiveCleanupInteractions'
 import * as archives from '../src/features/archive/archivesList'
 import * as unanswered from '../src/features/archive/archiveUnansweredList'
+import * as archiveThreads from '../src/features/archive/unusedArchives'
 import { updateLists } from '../src/features/archive/updateLists'
 import onMessageDelete = require('../src/events/onMessageDelete')
 
@@ -32,7 +33,9 @@ test('only the latest message from the current archive owner counts as unanswere
 		channels: { fetch: async () => parent } } as unknown as Guild
 	Object.assign(thread, { guild })
 
-	const isUnanswered = async () => JSON.stringify(await unanswered.getUnansweredList(guild)).includes(thread.id)
+	const threads = new Collection([[thread.id, thread as unknown as import('discord.js').ThreadChannel]])
+	const owners = new Map([[thread.id, ownerId]])
+	const isUnanswered = async () => JSON.stringify(await unanswered.getUnansweredList(guild, threads, owners)).includes(thread.id)
 	assert.equal(await isUnanswered(), true)
 	assert.equal(await isUnanswered(), true)
 	assert.equal(fetchHistory.mock.callCount(), 1)
@@ -66,6 +69,8 @@ test('archive updates reuse old pages, remove duplicates, and publish new pages 
 	let release: () => void = () => {}
 	const barrier = new Promise<void>(resolve => { release = resolve })
 	t.mock.method(store, 'getSetting', () => 'configured')
+	t.mock.method(archiveThreads, 'getArchiveThreads', async () => new Collection())
+	t.mock.method(archiveThreads, 'getArchiveOwners', async () => new Map())
 	t.mock.method(unused, 'getUnusedArchiveLists', async () => {
 		runs++; concurrent++; maximum = Math.max(maximum, concurrent)
 		if (runs === 1) await barrier
@@ -121,8 +126,7 @@ test('archive updates reuse old pages, remove duplicates, and publish new pages 
 	assert.equal(runs, 2)
 	assert.equal(maximum, 1)
 	assert.equal(historyReads, 1)
-	assert.equal(edited.length, 4)
-	assert.equal(edited.filter(payload => payload.components[0].toJSON().components[0].content === 'unused').length, 2)
+	assert.deepEqual(edited.map(payload => payload.components[0].toJSON().components[0].content), ['unused'])
 	assert.deepEqual(sent.map(payload => payload.components[0].toJSON().components[0].content), ['unanswered'])
 	assert.equal(sent[0].flags, MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications)
 	assert.ok(registry.some(row => row.message_id === 'legacy' && row.type === 'all' && row.part === 1))

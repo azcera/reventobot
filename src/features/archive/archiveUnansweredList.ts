@@ -8,20 +8,21 @@ import { store as dashboard } from '../../dashboard/store'
 import { ContainerBuilder } from '../../services/markdownContainer'
 import { loadDiscordMembers } from '../../services/discordMembers'
 import { getError } from '../../utils/errors'
-import { fetchArchiveThreads, getArchiveHistory } from './unusedArchives'
+import { getArchiveOwners, getArchiveThreads, getLastArchiveAuthor } from './unusedArchives'
 require('dotenv').config()
 
-async function getUnansweredList(guild: Guild) {
+async function getUnansweredList(guild: Guild, threads?: Awaited<ReturnType<typeof getArchiveThreads>>, owners?: Map<string, string>) {
 	const members = await loadDiscordMembers(guild)
-	const threads = await fetchArchiveThreads(guild)
+	threads ??= await getArchiveThreads(guild)
+	owners ??= await getArchiveOwners(guild, threads)
 	const unansweredList: ThreadChannel[] = []
 	const archives = [...threads.values()]
 	for (let offset = 0; offset < archives.length; offset += 6) {
 		await Promise.all(
 			archives.slice(offset, offset + 6).map(async thread => {
 				try {
-					const { ownerId, lastAuthorId } = await getArchiveHistory(thread)
-					if (ownerId && lastAuthorId === ownerId && members.has(ownerId))
+					const ownerId = owners.get(thread.id)
+					if (ownerId && members.has(ownerId) && await getLastArchiveAuthor(thread) === ownerId)
 						unansweredList.push(thread)
 				} catch (error) {
 					console.error(

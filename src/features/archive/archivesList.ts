@@ -9,7 +9,7 @@ import { store as dashboard } from '../../dashboard/store'
 import { loadDiscordMembers } from '../../services/discordMembers'
 import { ContainerBuilder } from '../../services/markdownContainer'
 import { parseDisplayName } from '../../utils/parseDisplayName'
-import { fetchArchiveThreads } from './unusedArchives'
+import { getArchiveOwners, getArchiveThreads } from './unusedArchives'
 
 require('dotenv').config()
 
@@ -17,7 +17,7 @@ require('dotenv').config()
  * Создает сообщение со списком всех участников и их архивов
  * @param {Guild} guild
  */
-async function getArchivesLists(guild: import('discord.js').Guild) {
+async function getArchivesLists(guild: Guild, threads?: Awaited<ReturnType<typeof getArchiveThreads>>, owners?: Map<string, string>) {
 	if (
 		!dashboard.roleIds('ARCHIVE_GROUP_ROLES').length ||
 		!dashboard.getSetting('AUTO_ROLE')
@@ -57,12 +57,9 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 		}
 	)
 
-	const threads = await fetchArchiveThreads(guild)
-	const guildChannels = new Map(
-		[...threads.values()]
-			.reverse()
-			.map(thread => [thread.name.toLowerCase(), thread])
-	)
+	threads ??= await getArchiveThreads(guild)
+	owners ??= await getArchiveOwners(guild, threads)
+	const guildChannels = new Map([...threads.values()].map(thread => [owners.get(thread.id), thread]))
 
 	filteredMembers.forEach((member: import('discord.js').GuildMember) => {
 		const sortedMemberRoles = member.roles.cache.sort(
@@ -77,25 +74,13 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 
 		const parsedDisplayName = parseDisplayName(member.displayName)
 
-		let archiveChannel = null
+		const archiveChannel = guildChannels.get(member.id) ?? null
 		let staticId = Infinity
-		let hasValidArchive = false
+		const hasValidArchive = !!archiveChannel
 		let isInvalidNick = !parsedDisplayName || !parsedDisplayName.memberName
 
-		if (parsedDisplayName && !isInvalidNick) {
-			archiveChannel =
-				guildChannels.get(
-					`archive ${parsedDisplayName.memberName.toLowerCase()} ${parsedDisplayName.memberStatic}`
-				) || null
-
-			if (archiveChannel) {
-				hasValidArchive = true
-				const match = archiveChannel.name.match(/(\d+)\s*$/)
-				staticId = match ? Number(match[1]) : Infinity
-			} else if (parsedDisplayName.memberStatic) {
-				staticId = Number(parsedDisplayName.memberStatic) || Infinity
-			}
-		}
+		if (parsedDisplayName?.memberStatic) staticId = Number(parsedDisplayName.memberStatic) || Infinity
+		else if (archiveChannel) staticId = Number(archiveChannel.name.match(/(\d+)\s*$/)?.[1] ?? Infinity)
 
 		groupings[highestMatchingRole.id].push({
 			member,
@@ -156,7 +141,7 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 			const lines = section.items.map(
 				(item, index) =>
 					`${index + 1}. <@${item.member.id}>` +
-					(item.archiveChannel && !item.isInvalidNick
+					(item.archiveChannel
 						? ` → <#${item.archiveChannel.id}>`
 						: '')
 			)

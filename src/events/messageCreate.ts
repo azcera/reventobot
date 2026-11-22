@@ -16,10 +16,11 @@ export = (client: import('discord.js').Client) => {
 		if (!message.inGuild()) return
 
 		if (
+			!message.system &&
 			message.channel.isThread() &&
 			message.channel.parentId === dashboard.getSetting('PARENT_CHANNEL_ID')
 		) {
-			scheduleArchiveListRefresh(message.guild, message.channelId)
+			scheduleArchiveListRefresh(message.guild, message.channelId, message)
 		}
 
 		if (!message.author || message.author.bot) return

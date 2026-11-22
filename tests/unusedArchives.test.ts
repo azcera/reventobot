@@ -5,6 +5,7 @@ import { store } from '../src/dashboard/store'
 import { cleanupUnusedEmptyArchives, deleteEmptyArchive, fetchArchiveThreads, getUnusedArchives, inspectEmptyArchive } from '../src/features/archive/unusedArchives'
 import { getUnusedArchiveLists, handleArchiveCleanup } from '../src/features/archive/archiveCleanupInteractions'
 import { loadDiscordMembers } from '../src/services/discordMembers'
+import * as identities from '../src/services/memberIdentity'
 
 const botId = '100000000000000001', ownerId = '100000000000000002', parentId = '100000000000000003'
 const threadId = '100000000000000004', otherId = '100000000000000005'
@@ -38,6 +39,7 @@ function fixture(history: Message[] = [welcome()]) {
 
 function mockSettings(t: TestContext) {
 	t.mock.method(store, 'getSetting', (key: string) => key === 'PARENT_CHANNEL_ID' ? parentId : key === 'ARCHIVE_AUTO_DELETE_EMPTY' ? true : key === 'ROLE_PREFIXES' ? [] : '')
+	t.mock.method(identities, 'getMemberArchives', async () => [{ discord_id: ownerId, game_static: '123', archive_thread_id: threadId }])
 }
 
 test('unused archives consider every member and paginate public and private archives', async t => {

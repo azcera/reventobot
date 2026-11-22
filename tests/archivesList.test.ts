@@ -22,7 +22,7 @@ function fixture(count: number, roleCount = 1) {
 	const guild = { members: { cache: members, fetch: async () => members }, roles: { cache: roles },
 		channels: { fetch: async () => ({ type: ChannelType.GuildText, threads: { fetchActive: async () => ({ threads }),
 			fetchArchived: async () => ({ threads: new Collection() }) } }) } } as unknown as Guild
-	return { guild, members, roles }
+	return { guild, members, roles, threads, owners: new Map([...threads.keys()].map(id => [id, id])) }
 }
 
 test('archive lists include moderators with role prefixes and preserve membership filters', async t => {
@@ -38,7 +38,7 @@ test('archive lists include moderators with role prefixes and preserve membershi
 	members[6].roles.cache.delete(f.roles.first()!.id)
 	t.mock.method(store, 'getSetting', (key: string) => key === 'AUTO_ROLE' ? 'auto' : key === 'ROLE_PREFIXES' ? [{ roleId: 'admin', prefix: '[Mod]' }] : '')
 	t.mock.method(store, 'roleIds', (key: string) => key === 'ARCHIVE_GROUP_ROLES' ? [...f.roles.keys()] : key === 'ADMIN_ROLES' ? ['admin'] : [])
-	const result = await getArchivesLists(f.guild)
+	const result = await getArchivesLists(f.guild, f.threads, f.owners)
 	assert.ok(result)
 	const text = result.parts.flatMap(part => part.toJSON().components.flatMap(component =>
 		component.type === 10 ? [component.content] : [])).join('\n')
@@ -56,7 +56,7 @@ test('archive lookup accepts hash prefixes even when absent from dashboard setti
 			Object.assign(f.members.first()!, { displayName: `${prefix} Siriel | 1` })
 			t.mock.method(store, 'getSetting', (key: string) => key === 'AUTO_ROLE' ? 'auto' : key === 'ROLE_PREFIXES' ? prefixes : '')
 			t.mock.method(store, 'roleIds', (key: string) => key === 'ARCHIVE_GROUP_ROLES' ? [...f.roles.keys()] : [])
-			const result = await getArchivesLists(f.guild)
+			const result = await getArchivesLists(f.guild, f.threads, f.owners)
 			assert.ok(result)
 			const text = JSON.stringify(result.parts.map(part => part.toJSON()))
 			assert.ok(text.includes('<@100000000000000000> → <#100000000000000000>'), prefix)
@@ -73,7 +73,7 @@ test('archive sections omit repeated statuses and split large roles without losi
 	for (const [count, roleCount] of [[3, 1], [900, 1], [60, 60], [180, 3]]) {
 		const f = fixture(count, roleCount)
 		t.mock.method(store, 'roleIds', (key: string) => key === 'ARCHIVE_GROUP_ROLES' ? [...f.roles.keys()] : [])
-		const result = await getArchivesLists(f.guild)
+		const result = await getArchivesLists(f.guild, f.threads, f.owners)
 		assert.ok(result)
 		const texts = result.parts.flatMap(part => part.toJSON().components.flatMap(component =>
 			component.type === 10 ? [component.content] : []))

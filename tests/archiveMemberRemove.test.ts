@@ -1,8 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Collection, Events, type Client } from 'discord.js'
+import { Events, type Client } from 'discord.js'
 import { store } from '../src/dashboard/store'
 import * as cleanup from '../src/features/archive/unusedArchives'
+import * as search from '../src/features/archive/archiveSearch'
 import * as lists from '../src/features/archive/updateLists'
 import register = require('../src/events/guildMemberRemove')
 
@@ -11,9 +12,9 @@ test('member departure respects the dashboard switch and deletes only the depart
 	let enabled = false, refreshed = 0, scanned = 0
 	const deleted: string[][] = []
 	t.mock.method(store, 'getSetting', (key: string) => key === 'PARENT_CHANNEL_ID' ? 'parent' : enabled)
-	t.mock.method(cleanup, 'fetchArchiveThreads', async () => {
+	t.mock.method(search, 'findArchiveByOwner', async () => {
 		scanned++
-		return new Collection([['thread', { id: 'thread' }]])
+		return { id: 'thread', isThread: () => true }
 	})
 	t.mock.method(cleanup, 'deleteEmptyArchive', async (thread: { id: string }, owner: string) => { deleted.push([thread.id, owner]); return true })
 	t.mock.method(lists, 'updateLists', async () => { refreshed++ })

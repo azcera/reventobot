@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import type * as Pg from 'pg'
 import { registerTacticsDashboard } from '../features/tactics/dashboard'
 import type { MapChanged } from '../features/tactics/dashboard'
+import { getArchiveAccessStatus, scheduleArchiveAccess } from '../features/archive/archiveAccess'
 import {
 	replaceTemplateVariables,
 	templateVariableName
@@ -232,6 +233,8 @@ async function validateSettings(
 				.filter(Boolean)
 			if (!['roles', 'channels'].includes(field.type) && ids.length > 1)
 				throw problem(400, 'Выберите одно значение.')
+			if (key === 'ARCHIVE_VIEWER_ROLES' && (ids.includes(guild.id) || new Set(ids).size !== ids.length))
+				throw problem(400, 'Выберите разные роли просмотра архивов без @everyone.')
 			for (const id of ids) {
 				if (!/^\d{17,20}$/.test(id))
 					throw problem(400, 'Некорректный Discord ID.')
@@ -577,6 +580,8 @@ function registerDashboard(
 				if (section === 'templates') validateTemplates(values)
 				else await validateSettings(values, req.guild)
 				await store.save(section, values, revision, req.dashboardUser)
+				if (section === 'settings' && ['ARCHIVE_MANAGE_ACCESS', 'ARCHIVE_VIEWER_ROLES', 'PARENT_CHANNEL_ID']
+					.some(key => Object.hasOwn(values, key))) scheduleArchiveAccess(req.guild, true)
 				const syncResults: T.SyncResult[] =
 					section === 'templates'
 						? await permanent.syncMessages(
@@ -609,6 +614,13 @@ function registerDashboard(
 				respondError(res, error)
 			}
 		})
+	app.get('/api/archive-access', (req: E.Request, res: E.Response) => {
+		res.json(getArchiveAccessStatus(req.guild))
+	})
+	app.post('/api/archive-access', (req: E.Request, res: E.Response) => {
+		scheduleArchiveAccess(req.guild, true)
+		res.json(getArchiveAccessStatus(req.guild))
+	})
 	const prefixSyncs = new Set()
 	app.post(
 		'/api/role-prefixes/sync',

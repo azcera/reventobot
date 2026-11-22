@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import type { ArchiveAccessStatus } from '../../../shared/archiveAccess'
 import {
 	ActionBar,
 	Button,
@@ -19,6 +20,49 @@ import type {
 } from '../types'
 import { errorMessage } from '../types'
 import { CaptureRanking } from './CaptureRanking'
+
+function ArchiveAccessProgress({ api, run }: Pick<PageServices, 'api' | 'run'>) {
+	const [status, setStatus] = useState<ArchiveAccessStatus>()
+	const [error, setError] = useState('')
+	useEffect(() => {
+		let active = true
+		const refresh = async () => {
+			try {
+				const result = await api('archive-access')
+				if (active) {
+					setStatus(result)
+					setError('')
+				}
+			} catch (caught) {
+				if (active) setError(errorMessage(caught))
+			}
+		}
+		void refresh()
+		const interval = setInterval(refresh, 3000)
+		return () => { active = false; clearInterval(interval) }
+	}, [api])
+	const labels = {
+		off: 'Сверка доступа выключена', queued: 'Сверка доступа в очереди',
+		running: 'Сверка доступа выполняется', complete: 'Сверка доступа завершена',
+		failed: 'Сверка доступа завершилась с ошибками'
+	}
+	return <div className='callout'>
+		<p role='status'>{error || (status ? labels[status.state] : 'Загружаю состояние сверки')}</p>
+		{status && status.state !== 'off' && <>
+			<p>Проверено {status.checked} из {status.total}. Изменено {status.changed}.</p>
+			{status.issues.length > 0 && <details>
+				<summary>Ошибки ({status.issues.length})</summary>
+				<ul>{status.issues.map(({ threadId, message }, index) => (
+					<li key={threadId ?? index}>{threadId && `Ветка ${threadId} — `}{message}</li>
+				))}</ul>
+			</details>}
+			<Button type='button' icon={RefreshCw} disabled={status.state === 'queued' || status.state === 'running'}
+				onClick={() => run(async () => setStatus(await api('archive-access', {})))}>
+				Повторить сверку доступа
+			</Button>
+		</>}
+	</div>
+}
 
 function MoveActions({
 	index,
@@ -284,8 +328,11 @@ export function Settings({
 		if (!Object.keys(values).length)
 			return notify('Нет изменений для сохранения.')
 		run(async () => {
-			setConfig(await api('settings', { revision: config.revision, values }))
-			notify('Настройки сохранены и применены.')
+			const saved = await api('settings', { revision: config.revision, values })
+			setConfig(saved)
+			const syncQueued = saved.settings.some(field => field.key === 'ARCHIVE_MANAGE_ACCESS' && field.value === true) &&
+				['ARCHIVE_MANAGE_ACCESS', 'ARCHIVE_VIEWER_ROLES', 'PARENT_CHANNEL_ID'].some(key => Object.hasOwn(values, key))
+			notify(syncQueued ? 'Настройки сохранены. Сверка доступа в очереди.' : 'Настройки сохранены и применены.')
 		})
 	}
 	async function syncPrefixes(field: SettingField) {
@@ -325,6 +372,7 @@ export function Settings({
 	)
 	const missing = fieldsForPage.filter(
 		field =>
+			field.key !== 'ARCHIVE_VIEWER_ROLES' &&
 			['channel', 'channels', 'role', 'roles'].includes(field.type) &&
 			!String(field.value ?? '').trim()
 	)
@@ -439,6 +487,7 @@ export function Settings({
 						<div
 							className={`panel-body grid gap-6 ${title === 'Каналы' ? 'lg:grid-cols-2' : ''}`}
 						>
+						{title === 'Архивы' && (expanded[title] || search.trim()) && <ArchiveAccessProgress api={api} run={run} />}
 							{fields.map(field =>
 								field.type === 'rolePrefixes' ? (
 									<RolePrefixes

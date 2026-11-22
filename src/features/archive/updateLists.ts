@@ -13,7 +13,7 @@ import { getError } from '../../utils/errors'
 import { getUnusedArchiveLists } from './archiveCleanupInteractions'
 import { getArchivesLists } from './archivesList'
 import { getUnansweredList } from './archiveUnansweredList'
-import { invalidateArchiveHistory } from './unusedArchives'
+import { getArchiveOwners, getArchiveThreads, invalidateArchiveHistory, rememberLastArchiveAuthor } from './unusedArchives'
 import pool = require('../../services/database')
 require('dotenv').config()
 
@@ -23,6 +23,7 @@ require('dotenv').config()
  */
 const updates = new WeakMap<Guild, { pending: Promise<void>; rerun: boolean }>()
 const reconciledChannels = new WeakSet<TextChannel>()
+const verifiedPages = new WeakMap<TextChannel, Map<string, { signature: string; expires: number }>>()
 
 function listSignature(components: APIMessageComponent[]) {
 	// Discord adds component IDs and default fields to messages fetched from history.
@@ -83,10 +84,12 @@ async function refreshLists(guild: Guild) {
 		)
 		return
 	}
+	const threads = await getArchiveThreads(guild)
+	const owners = await getArchiveOwners(guild, threads)
 	const pages = [
-		{ type: 'unused', items: await getUnusedArchiveLists(guild) },
-		{ type: 'all', items: (await getArchivesLists(guild))?.parts || [] },
-		{ type: 'unanswered', items: (await getUnansweredList(guild)) || [] }
+		{ type: 'unused', items: await getUnusedArchiveLists(guild, threads, owners) },
+		{ type: 'all', items: (await getArchivesLists(guild, threads, owners))?.parts || [] },
+		{ type: 'unanswered', items: await getUnansweredList(guild, threads, owners) }
 	] as const
 	const containers = pages.flatMap(({ type, items }) =>
 		items.map((container, index) => ({ type, part: index + 1, container }))
@@ -126,6 +129,9 @@ async function refreshLists(guild: Guild) {
 	const pending = new Map(
 		containers.map(page => [`${page.type}:${page.part}`, page])
 	)
+	const verified = verifiedPages.get(adminChannel) ?? new Map<string, { signature: string; expires: number }>()
+	verifiedPages.set(adminChannel, verified)
+	const verify = (id: string, signature: string) => verified.set(id, { signature, expires: Date.now() + 60000 })
 	const reconcile = !reconciledChannels.has(adminChannel)
 	const signatures = new Map<string, string[]>()
 	const remember = (signature: string, key: string) => {
@@ -154,6 +160,15 @@ async function refreshLists(guild: Guild) {
 		)
 	}
 	for (const row of rows) {
+		const key = `${row.type}:${row.part}`
+		const page = pending.get(key)
+		const signature = page && listSignature([page.container.toJSON()])
+		const recent = verified.get(row.message_id)
+		if (row.channel_id && recent && recent.expires > Date.now() && recent.signature === signature) {
+			pending.delete(key)
+			retained.add(row.message_id)
+			continue
+		}
 		const message = await adminChannel.messages
 			.fetch({ message: row.message_id, force: true, cache: false })
 			.catch(error => {
@@ -161,29 +176,28 @@ async function refreshLists(guild: Guild) {
 				throw error
 			})
 		if (!message && !row.channel_id) continue
-		const key = `${row.type}:${row.part}`
-		const page = pending.get(key)
 		const owned = message && ownsMessage(message)
 		// Legacy IDs only identify their original page. Leave ambiguous duplicates in place.
 		if (owned && !row.channel_id && !page) continue
-		if (owned && page) {
+		if (owned && page && signature) {
+			const previous = messageSignature(message)
 			if (reconcile && row.channel_id) {
-				const signature = messageSignature(message)
-				if (signature) remember(signature, key)
+				if (previous) remember(previous, key)
 			}
-			await message.edit({
-				components: [page.container],
-				allowedMentions: { parse: [] }
+			if (signature !== previous) await message.edit({
+				components: [page.container], allowedMentions: { parse: [] }
 			})
-			await pool.query(
+			if (!row.channel_id) await pool.query(
 				'UPDATE settings_archive_messages SET guild_id = $2, channel_id = $3 WHERE message_id = $1',
 				[message.id, guild.id, adminChannel.id]
 			)
 			pending.delete(key)
 			retained.add(message.id)
+			verify(message.id, signature)
 			continue
 		}
 		if (owned) await message.delete()
+		verified.delete(row.message_id)
 		await pool.query(
 			'DELETE FROM settings_archive_messages WHERE message_id = $1',
 			[row.message_id]
@@ -199,12 +213,14 @@ async function refreshLists(guild: Guild) {
 			for (const message of messages.values()) {
 				if (retained.has(message.id) || !ownsMessage(message)) continue
 				const signature = messageSignature(message)
-				const keys = signature && signatures.get(signature)
+				if (!signature) continue
+				const keys = signatures.get(signature)
 				if (!keys) continue
 				const key = keys.find(key => pending.has(key))
 				const page = key && pending.get(key)
 				if (key && page) {
 					await register(message, page)
+					verify(message.id, signature)
 					pending.delete(key)
 				} else {
 					await message.delete()
@@ -227,6 +243,7 @@ async function refreshLists(guild: Guild) {
 		})
 		try {
 			await register(message, { type, part })
+			verify(message.id, listSignature([container.toJSON()]))
 		} catch (error) {
 			await message.delete().catch(console.error)
 			throw error
@@ -235,8 +252,9 @@ async function refreshLists(guild: Guild) {
 }
 
 const scheduled = new WeakMap<Guild, ReturnType<typeof setTimeout>>()
-function scheduleArchiveListRefresh(guild: Guild, threadId: string) {
-	invalidateArchiveHistory(guild, threadId)
+function scheduleArchiveListRefresh(guild: Guild, threadId?: string, message?: Message) {
+	if (threadId) invalidateArchiveHistory(guild, threadId)
+	if (message) rememberLastArchiveAuthor(guild, message)
 	if (scheduled.has(guild)) return
 	const timer = setTimeout(() => {
 		scheduled.delete(guild)
