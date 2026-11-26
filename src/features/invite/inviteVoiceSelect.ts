@@ -1,4 +1,9 @@
-import { MessageFlags, TextDisplayBuilder } from 'discord.js'
+import {
+	MessageFlags,
+	TextDisplayBuilder,
+	type ButtonInteraction,
+	type StringSelectMenuInteraction
+} from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
 import {
 	buildContainer,
@@ -11,7 +16,7 @@ import { getError } from '../../utils/errors'
 import db = require('../../services/database')
 
 async function handleVoiceSelect(
-	interaction: import('discord.js').StringSelectMenuInteraction<'cached'>
+	interaction: StringSelectMenuInteraction<'cached'>
 ) {
 	// Ответом на выбор комнаты управляет только этот обработчик.
 	try {
@@ -40,8 +45,20 @@ async function handleVoiceSelect(
 			content: '❌ Заявка не найдена (возможно, она уже была обработана).'
 		})
 	}
-	const appData = res.rows[0]
+	return sendInterviewInvite(interaction, targetUserId, voiceChannelId, res.rows[0])
+}
 
+async function sendInterviewInvite(
+	interaction: ButtonInteraction<'cached'> | StringSelectMenuInteraction<'cached'>,
+	targetUserId: string,
+	voiceChannelId: string,
+	appData: {
+		full_name: string
+		age: number
+		about_and_expectations: string
+		previous_experience: string
+	}
+) {
 	// Отправляем сообщение в канал заявки (НЕ эфемерное, чтобы все видели)
 	await interaction
 		.channel!.send({
@@ -90,4 +107,4 @@ async function handleVoiceSelect(
 	})
 }
 
-export { handleVoiceSelect }
+export { handleVoiceSelect, sendInterviewInvite }

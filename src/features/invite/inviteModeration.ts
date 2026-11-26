@@ -4,6 +4,7 @@ import {
 	LabelBuilder,
 	MessageFlags,
 	ModalBuilder,
+	PermissionFlagsBits,
 	StringSelectMenuBuilder,
 	StringSelectMenuOptionBuilder,
 	TextDisplayBuilder,
@@ -27,6 +28,7 @@ import { getError } from '../../utils/errors'
 import { parseDisplayName } from '../../utils/parseDisplayName'
 import { findMemberArchive } from '../archive/archiveSearch'
 import { finishApplicationChannel } from './inviteUtils'
+import { sendInterviewInvite } from './inviteVoiceSelect'
 import db = require('../../services/database.js')
 
 const acceptingApplications = new Set<string>()
@@ -282,8 +284,15 @@ async function processModerationButton(
 	if (actionType === 'interview') {
 		// The action was acknowledged before database access.
 
+		const everyone = interaction.guild.roles.everyone
 		const voiceChannels = interaction.guild.channels.cache.filter(
-			c => c.type === ChannelType.GuildVoice && c.name.includes('📞')
+			channel =>
+				channel.type === ChannelType.GuildVoice &&
+				channel.name.includes('📞') &&
+				channel.permissionsFor(everyone).has([
+					PermissionFlagsBits.ViewChannel,
+					PermissionFlagsBits.Connect
+				])
 		)
 
 		if (voiceChannels.size === 0) {
@@ -313,6 +322,16 @@ async function processModerationButton(
 				flags: MessageFlags.IsComponentsV2 as const
 			})
 			.catch(console.error)
+
+		const voiceChannel = voiceChannels.first()
+		if (voiceChannels.size === 1 && voiceChannel) {
+			return sendInterviewInvite(
+				interaction,
+				targetUserId,
+				voiceChannel.id,
+				appData
+			)
+		}
 
 		// 2. Показываем меню выбора канала
 		const selectMenu = new StringSelectMenuBuilder()

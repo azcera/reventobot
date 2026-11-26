@@ -1,6 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Collection, MessageFlags, type ButtonInteraction } from 'discord.js'
+import {
+	ChannelType,
+	Collection,
+	MessageFlags,
+	PermissionFlagsBits,
+	PermissionsBitField,
+	type ButtonInteraction,
+	type InteractionEditReplyOptions,
+	type MessageCreateOptions
+} from 'discord.js'
 import { store, settingDefinitions } from '../src/dashboard/store'
 
 const queries: { sql: string; values: unknown[] }[] = []
@@ -22,6 +31,73 @@ const { handleModerationButton } = require('../src/features/invite/inviteModerat
 const submitRejectModal = require('../src/features/invite/inviteModalHandler') as typeof import('../src/features/invite/inviteModalHandler')
 if (previousDatabase) require.cache[databasePath] = previousDatabase
 else delete require.cache[databasePath]
+
+test('interview uses only public phone rooms and skips the menu for one room', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	const everyone = { id: 'guild' }
+	const { ViewChannel, Connect } = PermissionFlagsBits
+	const room = (id: string, name: string, permissions: bigint[]) => ({
+		id, name, type: ChannelType.GuildVoice,
+		permissionsFor(role: unknown) {
+			assert.equal(role, everyone)
+			return new PermissionsBitField(permissions)
+		}
+	})
+	const channels = new Collection([
+		['hidden', room('hidden', '📞 Hidden', [Connect])],
+		['locked', room('locked', '📞 Locked', [ViewChannel])],
+		['general', room('general', 'General', [ViewChannel, Connect])]
+	])
+	const replies: InteractionEditReplyOptions[] = []
+	const messages: MessageCreateOptions[] = []
+	const dmMessages: MessageCreateOptions[] = []
+	let collectors = 0
+	const interaction = {
+		customId: 'invite_interview_candidate', guildId: 'guild', channelId: 'application-channel',
+		user: { id: 'moderator' },
+		member: { roles: { cache: new Collection() }, permissions: { has: () => true } },
+		guild: { name: 'Test', roles: { everyone }, channels: { cache: channels } },
+		client: { users: { async fetch() {
+			return { async send(payload: MessageCreateOptions) { dmMessages.push(payload) } }
+		} } },
+		message: { async edit() {} },
+		channel: {
+			async send(payload: MessageCreateOptions) { messages.push(payload) },
+			createMessageComponentCollector() {
+				collectors++
+				return { on() {} }
+			}
+		},
+		async deferReply() {},
+		async editReply(payload: InteractionEditReplyOptions) { replies.push(payload) }
+	} as unknown as ButtonInteraction<'cached'>
+
+	await handleModerationButton(interaction)
+	assert.match(replies.pop()?.content ?? '', /Нет подходящих/)
+	assert.equal(messages.length, 0)
+	assert.equal(collectors, 0)
+
+	channels.set('public', room('public', '📞 Public', [ViewChannel, Connect]))
+	await handleModerationButton(interaction)
+	assert.match(replies.pop()?.content ?? '', /успешно вызван/)
+	assert.equal(collectors, 0)
+	assert.equal(messages.length, 1)
+	assert.match(messages[0].content ?? '', /<#public>/)
+	assert.equal(dmMessages.length, 1)
+	assert.match(JSON.stringify(dmMessages[0]), /<#public>/)
+
+	channels.set('second', room('second', '📞 Second', [ViewChannel, Connect]))
+	await handleModerationButton(interaction)
+	assert.match(replies[0].content ?? '', /Выберите комнату/)
+	assert.deepEqual(
+		JSON.parse(JSON.stringify(replies[0].components))[0].components[0].options.map(
+			(option: { value: string }) => option.value
+		),
+		['public', 'second']
+	)
+	assert.equal(collectors, 1)
+	assert.equal(messages.length, 1)
+})
 
 test('accepted applications close five seconds after confirmation without additional-role menus', async t => {
 	t.mock.timers.enable({ apis: ['setTimeout'] })
