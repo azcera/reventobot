@@ -32,7 +32,7 @@ const submitRejectModal = require('../src/features/invite/inviteModalHandler') a
 if (previousDatabase) require.cache[databasePath] = previousDatabase
 else delete require.cache[databasePath]
 
-test('interview uses only public phone rooms and skips the menu for one room', async t => {
+test('interview uses only public voice rooms and skips the menu for one room', async t => {
 	t.mock.timers.enable({ apis: ['setTimeout'] })
 	const everyone = { id: 'guild' }
 	const { ViewChannel, Connect } = PermissionFlagsBits
@@ -45,8 +45,7 @@ test('interview uses only public phone rooms and skips the menu for one room', a
 	})
 	const channels = new Collection([
 		['hidden', room('hidden', '📞 Hidden', [Connect])],
-		['locked', room('locked', '📞 Locked', [ViewChannel])],
-		['general', room('general', 'General', [ViewChannel, Connect])]
+		['locked', room('locked', '📞 Locked', [ViewChannel])]
 	])
 	const replies: InteractionEditReplyOptions[] = []
 	const messages: MessageCreateOptions[] = []
@@ -77,7 +76,7 @@ test('interview uses only public phone rooms and skips the menu for one room', a
 	assert.equal(messages.length, 0)
 	assert.equal(collectors, 0)
 
-	channels.set('public', room('public', '📞 Public', [ViewChannel, Connect]))
+	channels.set('public', room('public', 'General', [ViewChannel, Connect]))
 	await handleModerationButton(interaction)
 	assert.match(replies.pop()?.content ?? '', /успешно вызван/)
 	assert.equal(collectors, 0)

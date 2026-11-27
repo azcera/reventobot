@@ -288,7 +288,6 @@ async function processModerationButton(
 		const voiceChannels = interaction.guild.channels.cache.filter(
 			channel =>
 				channel.type === ChannelType.GuildVoice &&
-				channel.name.includes('📞') &&
 				channel.permissionsFor(everyone).has([
 					PermissionFlagsBits.ViewChannel,
 					PermissionFlagsBits.Connect
