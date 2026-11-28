@@ -5,6 +5,9 @@ import { store } from '../src/dashboard/store'
 import { getArchivesLists } from '../src/features/archive/archivesList'
 import { parseDisplayName } from '../src/utils/parseDisplayName'
 
+const guildId = '300000000000000000'
+const archiveUrl = `https://discord.com/channels/${guildId}/100000000000000000`
+
 function fixture(count: number, roleCount = 1) {
 	const roles = new Collection<string, Role>(Array.from({ length: roleCount }, (_, i) => {
 		const id = String(200000000000000000n + BigInt(i))
@@ -19,7 +22,7 @@ function fixture(count: number, roleCount = 1) {
 			roles: { cache: new Collection([[role.id, role], ['auto', { id: 'auto', position: -1 } as Role]]) } } as GuildMember)
 		if (i % 3 === 0) threads.set(id, { id, name: `archive siriel ${i + 1}` } as ThreadChannel)
 	}
-	const guild = { members: { cache: members, fetch: async () => members }, roles: { cache: roles },
+	const guild = { id: guildId, members: { cache: members, fetch: async () => members }, roles: { cache: roles },
 		channels: { fetch: async () => ({ type: ChannelType.GuildText, threads: { fetchActive: async () => ({ threads }),
 			fetchArchived: async () => ({ threads: new Collection() }) } }) } } as unknown as Guild
 	return { guild, members, roles }
@@ -42,11 +45,12 @@ test('archive lists include moderators with role prefixes and preserve membershi
 	assert.ok(result)
 	const text = result.parts.flatMap(part => part.toJSON().components.flatMap(component =>
 		component.type === 10 ? [component.content] : [])).join('\n')
-	assert.match(text, /### Архивы\n1\. <@100000000000000000> → <#100000000000000000>/)
-	assert.match(text, /### Нет архива\n1\. <@100000000000000001>/)
-	assert.match(text, /### Некорректный никнейм\n1\. <@100000000000000002>/)
-	for (const member of members.slice(0, 4)) assert.equal(text.split(`<@${member.id}>`).length - 1, 1)
-	for (const member of members.slice(4)) assert.ok(!text.includes(`<@${member.id}>`))
+	assert.ok(text.includes(`### Архивы\n1. [\\[Mod\\] Siriel | 1](https://discord.com/users/100000000000000000) → [archive siriel 1](${archiveUrl})`))
+	assert.match(text, /### Нет архива\n1\. \[.*\]\(https:\/\/discord\.com\/users\/100000000000000001\)/)
+	assert.match(text, /### Некорректный никнейм\n1\. \[Daler\]\(https:\/\/discord\.com\/users\/100000000000000002\)/)
+	assert.doesNotMatch(text, /<[@#]\d+>/)
+	for (const member of members.slice(0, 4)) assert.equal(text.split(`/users/${member.id})`).length - 1, 1)
+	for (const member of members.slice(4)) assert.ok(!text.includes(`/users/${member.id})`))
 })
 
 test('archive lookup accepts hash prefixes even when absent from dashboard settings', async t => {
@@ -59,7 +63,7 @@ test('archive lookup accepts hash prefixes even when absent from dashboard setti
 			const result = await getArchivesLists(f.guild)
 			assert.ok(result)
 			const text = JSON.stringify(result.parts.map(part => part.toJSON()))
-			assert.ok(text.includes('<@100000000000000000> → <#100000000000000000>'), prefix)
+			assert.ok(text.includes(`[${prefix} Siriel | 1](https://discord.com/users/100000000000000000) → [archive siriel 1](${archiveUrl})`), prefix)
 			assert.ok(!text.includes('Некорректный никнейм'), prefix)
 		}
 	}
@@ -70,7 +74,7 @@ test('archive lookup accepts hash prefixes even when absent from dashboard setti
 
 test('archive sections omit repeated statuses and split large roles without losing members', async t => {
 	t.mock.method(store, 'getSetting', (key: string) => key === 'AUTO_ROLE' ? 'auto' : '')
-	for (const [count, roleCount] of [[3, 1], [900, 1], [60, 60], [180, 3]]) {
+	for (const [count, roleCount] of [[3, 1], [900, 1], [60, 60], [45, 3]]) {
 		const f = fixture(count, roleCount)
 		t.mock.method(store, 'roleIds', (key: string) => key === 'ARCHIVE_GROUP_ROLES' ? [...f.roles.keys()] : [])
 		const result = await getArchivesLists(f.guild)
@@ -78,20 +82,21 @@ test('archive sections omit repeated statuses and split large roles without losi
 		const texts = result.parts.flatMap(part => part.toJSON().components.flatMap(component =>
 			component.type === 10 ? [component.content] : []))
 		const text = texts.join('\n')
-		assert.match(text, /### Архивы\n1\. <@100000000000000000> → <#100000000000000000>/)
-		assert.match(text, /### Нет архива\n1\. <@100000000000000001>/)
-		assert.match(text, /### Некорректный никнейм\n1\. <@100000000000000002>/)
+		assert.ok(text.includes(`### Архивы\n1. [Siriel | 1](https://discord.com/users/100000000000000000) → [archive siriel 1](${archiveUrl})`))
+		assert.match(text, /### Нет архива\n1\. \[Siriel \| 2\]\(https:\/\/discord\.com\/users\/100000000000000001\)/)
+		assert.match(text, /### Некорректный никнейм\n1\. \[Daler\]\(https:\/\/discord\.com\/users\/100000000000000002\)/)
 		assert.doesNotMatch(text, /→ (нет архива|некорректный никнейм)|часть/)
-		for (const id of f.members.keys()) assert.equal(text.split(`<@${id}>`).length - 1, 1)
+		for (const id of f.members.keys()) assert.equal(text.split(`/users/${id})`).length - 1, 1)
 		for (const part of result.parts) {
 			const components = part.toJSON().components
 			const partText = components.flatMap(component => component.type === 10 ? [component.content] : []).join('\n')
 			for (const id of f.roles.keys()) assert.ok(partText.split(`<@&${id}>`).length - 1 <= 1)
 			assert.ok(components.length + 1 <= 40)
 			assert.ok(components.reduce((sum, component) => sum + (component.type === 10 ? component.content.length : 0), 0) <= 4000)
+			assert.ok(components.slice(1).reduce((sum, component) => sum + (component.type === 10 ? component.content.length : 0), 0) <= 1800)
 		}
 		if (count === 900) assert.ok(result.count > 1)
-		if (count === 180) {
+		if (count === 45) {
 			assert.ok(result.count > 1)
 			for (const roleId of f.roles.keys()) {
 				const roleTexts = texts.filter(text => text.includes(`<@&${roleId}>`))

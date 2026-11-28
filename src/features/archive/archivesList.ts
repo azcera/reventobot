@@ -3,7 +3,10 @@ import {
 	GuildChannel,
 	GuildMember,
 	SeparatorBuilder,
-	TextDisplayBuilder
+	TextDisplayBuilder,
+	channelLink,
+	escapeMarkdown,
+	hyperlink
 } from 'discord.js'
 import { store as dashboard } from '../../dashboard/store'
 import { loadDiscordMembers } from '../../services/discordMembers'
@@ -12,6 +15,10 @@ import { parseDisplayName } from '../../utils/parseDisplayName'
 import { fetchArchiveThreads } from './unusedArchives'
 
 require('dotenv').config()
+
+function archiveListLabel(value: string) {
+	return escapeMarkdown(value.replace(/\s+/g, ' ')).replace(/[<\[\]]/g, '\\$&')
+}
 
 /**
  * Создает сообщение со списком всех участников и их архивов
@@ -108,7 +115,8 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 
 	const MAX_TOTAL_TEXT = 3800
 	const title = dashboard.text('archives.1')
-	const maxBlockLength = MAX_TOTAL_TEXT - title.length
+	// Keep long lists of Discord links readable across clients.
+	const maxBlockLength = Math.min(1800, MAX_TOTAL_TEXT - title.length)
 	const blocks = []
 
 	for (const key of Object.keys(groupings)) {
@@ -155,9 +163,9 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 			const heading = `### ${section.title}`
 			const lines = section.items.map(
 				(item, index) =>
-					`${index + 1}. <@${item.member.id}>` +
+					`${index + 1}. ${hyperlink(archiveListLabel(item.member.displayName), `https://discord.com/users/${item.member.id}`)}` +
 					(item.archiveChannel && !item.isInvalidNick
-						? ` → <#${item.archiveChannel.id}>`
+						? ` → ${hyperlink(archiveListLabel(item.archiveChannel.name), channelLink(item.archiveChannel.id, guild.id))}`
 						: '')
 			)
 			const sectionText = `${heading}\n${lines.join('\n')}`
@@ -189,7 +197,7 @@ async function getArchivesLists(guild: import('discord.js').Guild) {
 
 	for (const block of blocks) {
 		if (
-			currentLength + block.length > MAX_TOTAL_TEXT ||
+			currentLength + block.length > title.length + maxBlockLength ||
 			currentContainer.components.length >= 36
 		) {
 			parts.push(currentContainer)
